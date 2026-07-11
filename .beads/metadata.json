@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "Hasenbau",
+  "project_id": "ad982eca-3b3c-4d91-9357-e58b411aa521"
+}
