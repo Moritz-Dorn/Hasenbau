@@ -87,6 +87,17 @@ XDG_DATA_HOME   = geerbt vom Nutzer        # → auth.json wird geteilt
 Damit teilt der Bau die Provider-Credentials mit dem täglichen opencode,
 aber sonst nichts. Die Automation-Config ist explizit und versioniert.
 
+**Befund aus dem Smoke-Test (2026-07-12):** auth.json teilt nur die
+Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der
+KIT-Provider `scc`) sind Config — ohne sie in der Bau-eigenen
+`opencode.json` quittiert der Server Prompts mit 500. Ein Bau muss den
+`provider:`-Block (und `enabled_providers`) also selbst mitbringen;
+`hasenbau init` sollte dafür ein Gerüst anlegen. Gegen die Drift zur
+Alltags-Config: `hasenbau provider sync` übernimmt die Definitionen
+explizit auf Zuruf (Diff anzeigen, dann schreiben) — **nie automatisch**
+beim Server-Start, sonst wäre die Isolation still unterlaufen. Keys
+kopiert der Sync nicht; die teilt auth.json ohnehin.
+
 > ✅ **Verifiziert (2026-07-11, opencode 1.15.13):** opencode folgt
 > `XDG_CONFIG_HOME` strikt. Test: Server mit umgebogenem
 > `XDG_CONFIG_HOME` gestartet; `GET /config` zeigt `plugin: []` und
@@ -462,10 +473,25 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
 1. ~~Folgt opencode strikt `XDG_CONFIG_HOME`?~~ **Ja, verifiziert
    2026-07-11 (opencode 1.15.13), siehe §3.** Config-Pfad ist
    `$XDG_CONFIG_HOME/opencode/opencode.json`.
-2. Exakte SDK-Signaturen: Session-Erstellung, Prompt mit Agent-Auswahl,
-   Event-Stream. → `pkg.go.dev` und `<server>/doc`
+2. ~~Exakte SDK-Signaturen?~~ **Verifiziert 2026-07-12** (SDK v0.19.2
+   gegen opencode 1.15.13, Code im Modul-Cache + live `/doc`):
+   - Client: `opencode.NewClient(option.WithBaseURL(supervisor.BaseURL()))`
+   - Session: `client.Session.New(ctx, SessionNewParams{Title: F(…)})` → `*Session`
+   - Prompt: `client.Session.Prompt(ctx, id, SessionPromptParams{Parts:
+     F([]SessionPromptParamsPartUnion{TextPartInputParam{Type: F(TextPartInputTypeText),
+     Text: F(…)}}), Agent: F("archivar"), Model: F(SessionPromptParamsModel{
+     ProviderID, ModelID})})` → `SessionPromptResponse{Info AssistantMessage, Parts []Part}`
+   - **Agent-Auswahl hängt am Prompt-Call** (`agent` im Body), nicht an
+     der Session. `AssistantMessage` liefert `Cost` und `Tokens` direkt →
+     füllt `laeufe.tokens_*`/`kosten_cent`.
+   - Event-Stream: `client.Event.ListStreaming(ctx, EventListParams{})` →
+     `ssestream.Stream[EventListResponse]` (SSE auf `GET /event`); Typen
+     u.a. `message.part.updated`, `session.idle`, `session.error`.
 3. Wie kommt man aus einer Session an den vollständigen Tool-Call-Trace?
-   (Blockiert Phase 2.)
+   (Blockiert Phase 2.) — *Vorbefund aus §11.2:* `Session.Messages(ctx, id, …)`
+   → `[]SessionMessagesResponse{Info, Parts}`; Tool-Parts tragen
+   `ToolPartState{Status, Input, Output, Error}`. Noch gegen eine echte
+   Session mit Tool-Calls zu verifizieren.
 4. ~~Verhält sich `opencode serve` mit `--port 0` sinnvoll?~~ **Verifiziert
    2026-07-11:** `--port 0` heißt „auto" — bevorzugt 4096 (Default), bei
    Belegung ein freier ephemerer Port. Der zugewiesene Port steht auf
