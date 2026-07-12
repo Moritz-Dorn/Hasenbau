@@ -1,27 +1,56 @@
-# Agent Instructions
+# Hasenbau — Agent-Instruktionen
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+Ein Go-Daemon, der `opencode` headless orchestriert: zeitgesteuerte und
+dateigetriggerte Aufträge, deterministische Vorverarbeitung (Gänge) vor
+dem LLM-Schritt (Hase). Lokal, eine Maschine — kein Remote, keine Web-UI.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+**`PLAN.md` ist der Spec.** Bei Design-Fragen zuerst dort nachsehen:
+Architektur §2, Isolation §3, Layout §4, Datenmodell §5, Auftragsformat §6,
+Phasen §8, offene Punkte §11. Beads (`bd ready`, `bd show`) trägt den
+Arbeitsstand und die Befund-Notizen; PLAN.md trägt das Warum. Beides lesen,
+bevor gebaut wird. Spike-Ergebnisse werden in PLAN.md §11 eingepflegt.
 
-## Quick Reference
+## Build & Test
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
+go build ./...
+go vet ./...
+go test ./...        # Integrationstests skippen sich ohne opencode im PATH
 ```
+
+`-race` braucht cgo und gcc (fehlt derzeit im Nix-Profil).
+
+## Vokabular (verbindlich, PLAN.md §1)
+
+| Begriff | Bedeutung |
+|---|---|
+| **Bau** | Root-Verzeichnis des Systems (Config, Räume, State) |
+| **Raum** | Benanntes Verzeichnis im Materialfluss |
+| **Hase** | opencode-Agent + Working Directory + Permissions |
+| **Gang** | Deterministisches Skript, läuft vor dem Hasen. Kein LLM |
+| **Auftrag** | Trigger + Gänge + Hase + Räume (Job-Definition) |
+| **Lauf** | Eine Ausführung eines Auftrags |
+| **Baumeister** | Sonder-Hase, verdichtet Traces zu Gängen (Phase 2) |
+
+Domänen-Ebene deutsch, Infrastruktur englisch (`Store`, `Scheduler`,
+`Watcher`, `Client`, `Runner`, `Supervisor`). Keine Mischformen, kein
+`Job` statt `Auftrag`.
+
+## ⚠️ AGENTS.md-Leckage (PLAN.md §3)
+
+Dieses Repo baut ein System, das selbst opencode-Agents startet — und
+diese lesen `AGENTS.md`. Deshalb zwei harte Regeln:
+
+- Test-Baue liegen **immer außerhalb des Repos**. Vereinbarter Pfad:
+  `~/SRC/meinHasenbau`. Nie unter `testdata/`.
+- Das CWD eines gespawnten opencode-Servers liegt **immer im Bau**,
+  nie im Projekt-Root. Sonst liest der Hase diese Datei und fängt an,
+  Beads-Issues zu filen, statt PDFs einzusortieren.
+
+## Zwei Datenbanken — nicht verwechseln (PLAN.md §9)
+
+Beads trackt, wie der Hasenbau *gebaut* wird. Die SQLite unter
+`state/hasenbau.db` (PLAN.md §5) trackt, was der Hasenbau *tut*.
 
 ## Non-Interactive Shell Commands
 
