@@ -85,6 +85,15 @@ func New(cfg Config) (*Supervisor, error) {
 	if _, err := os.Stat(confJSON); err != nil {
 		return nil, fmt.Errorf("supervisor: isolierte Config fehlt (%s): %w", confJSON, err)
 	}
+	// AGENTS.md-Leckage (§3): Liegt eine Agent-Instruktionsdatei im
+	// BauDir, ist das ein Code-Repo, kein Bau — der Server liefe mit
+	// CWD neben den Entwickler-Instruktionen, und die Hasen läsen sie.
+	// `hasenbau init` legt solche Dateien nie an.
+	for _, marker := range []string{"AGENTS.md", "CLAUDE.md"} {
+		if _, err := os.Stat(filepath.Join(cfg.BauDir, marker)); err == nil {
+			return nil, fmt.Errorf("supervisor: BauDir %q enthält %s — das ist ein Code-Repo, kein Bau (PLAN.md §3)", cfg.BauDir, marker)
+		}
+	}
 	if cfg.Binary == "" {
 		cfg.Binary = "opencode"
 	}

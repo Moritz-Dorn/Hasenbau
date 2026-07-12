@@ -51,6 +51,22 @@ func TestNewValidiertBau(t *testing.T) {
 	}
 }
 
+func TestNewLehntCodeRepoAlsBauAb(t *testing.T) {
+	// CWD-Invariante / AGENTS.md-Leckage (§3): Ein Verzeichnis mit
+	// Agent-Instruktionsdateien ist ein Code-Repo, kein Bau — selbst
+	// wenn das restliche Layout stimmt (der Verstoß-Fall wäre der
+	// Projekt-Root dieses Repos).
+	for _, marker := range []string{"AGENTS.md", "CLAUDE.md"} {
+		bau := tempBau(t)
+		if err := os.WriteFile(filepath.Join(bau, marker), []byte("# dev"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := New(Config{BauDir: bau}); err == nil {
+			t.Errorf("New mit %s im BauDir muss fehlschlagen", marker)
+		}
+	}
+}
+
 func TestStartHealthIsolationStop(t *testing.T) {
 	requireOpencode(t)
 	bau := tempBau(t)

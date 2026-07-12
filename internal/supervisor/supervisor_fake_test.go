@@ -99,6 +99,14 @@ func TestFakeStartStopUndDoppelstart(t *testing.T) {
 		t.Error("zweiter Start muss fehlschlagen, solange der Server läuft")
 	}
 
+	// CWD-Invariante (§3): der Serverprozess startet immer im Bau.
+	s.mu.Lock()
+	dir := s.proc.cmd.Dir
+	s.mu.Unlock()
+	if dir != s.cfg.BauDir {
+		t.Errorf("Server-CWD %q ist nicht der Bau %q", dir, s.cfg.BauDir)
+	}
+
 	if err := s.Stop(); err != nil {
 		t.Errorf("Stop: %v", err)
 	}
