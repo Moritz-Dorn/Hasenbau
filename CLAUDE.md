@@ -7,5 +7,5 @@
   werden gerne aus dem Gedächtnis geraten. Nachschlagen: `pkg.go.dev/
   github.com/sst/opencode-sdk-go` und die OpenAPI-Spec unter `<server>/doc`
   (PLAN.md §11.2).
-- Konservatives Git-Profil: committen und pushen nur auf ausdrückliche
-  Aufforderung.
+- Git: Bead geschlossen ⇒ zugehörige Commits gehören dazu (siehe
+  Git-Workflow in AGENTS.md). Pushen nur auf ausdrückliche Aufforderung.

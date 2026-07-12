@@ -20,6 +20,17 @@ go test ./...        # Integrationstests skippen sich ohne opencode im PATH
 
 `-race` braucht cgo und gcc (fehlt derzeit im Nix-Profil).
 
+## Git-Workflow
+
+Wer einen Bead schließt, committet auch die zugehörigen Änderungen —
+im selben Arbeitsgang, nicht „später":
+
+- Ein Commit pro logischer Einheit (Implementierung, Tests, Doku/PLAN.md,
+  Beads-Export dürfen getrennte Commits sein). Bead-ID in die
+  Commit-Message, wenn der Commit einen Bead abschließt.
+- Vorher Quality-Gates: `go vet ./...` und `go test ./...`.
+- **Push weiterhin nur auf ausdrückliche Aufforderung.**
+
 ## Vokabular (verbindlich, PLAN.md §1)
 
 | Begriff | Bedeutung |
