@@ -20,6 +20,17 @@ go test ./...        # Integrationstests skippen sich ohne opencode im PATH
 
 `-race` braucht cgo und gcc (fehlt derzeit im Nix-Profil).
 
+Der End-zu-End-Smoke-Test kostet einen echten LLM-Call und ist deshalb
+doppelt gegated:
+
+```bash
+HASENBAU_SMOKE=1 HASENBAU_SMOKE_MODEL=scc/kit.glm-5.2-753b \
+  go test ./internal/opencode/ -run TestSmokePromptRoundtrip -v
+```
+
+Test-Bau für manuelle Experimente: `~/SRC/meinHasenbau` (außerhalb des
+Repos, siehe Leckage-Abschnitt).
+
 ## Git-Workflow
 
 Wer einen Bead schließt, committet auch die zugehörigen Änderungen —
@@ -30,6 +41,10 @@ im selben Arbeitsgang, nicht „später":
   Commit-Message, wenn der Commit einen Bead abschließt.
 - Vorher Quality-Gates: `go vet ./...` und `go test ./...`.
 - **Push weiterhin nur auf ausdrückliche Aufforderung.**
+- Eigenheit: Der Beads-pre-commit-Hook exportiert `.beads/issues.jsonl`
+  *während* des Commits — bleibt die Datei danach modified, gehört sie
+  per `git add .beads/ && git commit --amend --no-edit` in den letzten
+  Commit gefaltet.
 
 ## Vokabular (verbindlich, PLAN.md §1)
 

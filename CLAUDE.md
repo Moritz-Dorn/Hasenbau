@@ -2,10 +2,10 @@
 
 ## Claude Code
 
-- Plan-Mode für Änderungen an SDK-Aufrufen (`internal/opencode/`, sobald
-  es existiert) — die Signaturen des Go-SDK sind Stainless-generiert und
-  werden gerne aus dem Gedächtnis geraten. Nachschlagen: `pkg.go.dev/
-  github.com/sst/opencode-sdk-go` und die OpenAPI-Spec unter `<server>/doc`
-  (PLAN.md §11.2).
+- SDK-Aufrufe (`internal/opencode/`) nie aus dem Gedächtnis erweitern —
+  die Signaturen sind Stainless-generiert. Verifizierter Stand in
+  PLAN.md §11.2; bei Neuem im Modul-Cache nachlesen
+  (`go env GOMODCACHE`/github.com/sst/opencode-sdk-go@…) oder die
+  OpenAPI-Spec unter `<server>/doc` ziehen.
 - Git: Bead geschlossen ⇒ zugehörige Commits gehören dazu (siehe
   Git-Workflow in AGENTS.md). Pushen nur auf ausdrückliche Aufforderung.
