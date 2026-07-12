@@ -87,12 +87,14 @@ XDG_DATA_HOME   = geerbt vom Nutzer        # → auth.json wird geteilt
 Damit teilt der Bau die Provider-Credentials mit dem täglichen opencode,
 aber sonst nichts. Die Automation-Config ist explizit und versioniert.
 
-> ⚠️ **Zu verifizieren (Phase 0, erste Aufgabe):** Ob opencode strikt
-> XDG folgt oder irgendwo `$HOME/.config` hardcodet, ist ungeprüft.
-> Test: Server mit gesetztem `XDG_CONFIG_HOME` starten, `GET /config`
-> abfragen, prüfen ob `plugin` leer ist. Falls XDG nicht greift:
-> Fallback auf `OPENCODE_CONFIG_CONTENT` plus dokumentierte Warnung,
-> dass globale Plugins mitlaufen.
+> ✅ **Verifiziert (2026-07-11, opencode 1.15.13):** opencode folgt
+> `XDG_CONFIG_HOME` strikt. Test: Server mit umgebogenem
+> `XDG_CONFIG_HOME` gestartet; `GET /config` zeigt `plugin: []` und
+> den Marker aus der isolierten Config, Schlüssel der Alltags-Config
+> (`model`, `enabled_providers`) und deren Agents fehlen. Kein
+> Fallback nötig. **Pfad-Detail:** Die Config liegt unter
+> `$XDG_CONFIG_HOME/opencode/opencode.json` — der Bau braucht also
+> ein `opencode/`-Unterverzeichnis in `.opencode-home/` (§4).
 
 ### Die zweite Leckage: AGENTS.md
 
@@ -122,11 +124,12 @@ Der Bau ist selbst-enthaltend. Alles, was das System ausmacht, liegt darin.
 bau/
 ├── hasenbau.yaml            # Daemon-Config: Defaults, Sinks, Log-Level
 ├── .opencode-home/          # XDG_CONFIG_HOME des Servers
-│   ├── opencode.json        #   minimal, explizit, plugin: []
-│   ├── agents/              #   die Hasen
-│   │   ├── archivar.md
-│   │   └── baumeister.md
-│   └── skills/
+│   └── opencode/            #   opencode erwartet dieses Unterverzeichnis
+│       ├── opencode.json    #   minimal, explizit, plugin: []
+│       ├── agents/          #   die Hasen
+│       │   ├── archivar.md
+│       │   └── baumeister.md
+│       └── skills/
 ├── auftraege/               # Auftrags-Definitionen (Markdown + YAML-Frontmatter)
 │   └── pdf-einlagern.md
 ├── gaenge/                  # deterministische Skripte
@@ -456,13 +459,21 @@ Explizit, damit sie nicht durch die Hintertür reinkriechen:
 
 Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
 
-1. Folgt opencode strikt `XDG_CONFIG_HOME`? (§3, blockiert das Design)
+1. ~~Folgt opencode strikt `XDG_CONFIG_HOME`?~~ **Ja, verifiziert
+   2026-07-11 (opencode 1.15.13), siehe §3.** Config-Pfad ist
+   `$XDG_CONFIG_HOME/opencode/opencode.json`.
 2. Exakte SDK-Signaturen: Session-Erstellung, Prompt mit Agent-Auswahl,
    Event-Stream. → `pkg.go.dev` und `<server>/doc`
 3. Wie kommt man aus einer Session an den vollständigen Tool-Call-Trace?
    (Blockiert Phase 2.)
-4. Verhält sich `opencode serve` mit `--port 0` sinnvoll, oder muss der
-   Daemon selbst einen freien Port suchen und übergeben?
+4. ~~Verhält sich `opencode serve` mit `--port 0` sinnvoll?~~ **Verifiziert
+   2026-07-11:** `--port 0` heißt „auto" — bevorzugt 4096 (Default), bei
+   Belegung ein freier ephemerer Port. Der zugewiesene Port steht auf
+   stdout (`opencode server listening on http://127.0.0.1:<port>`) und
+   ist dort zu parsen; der Supervisor darf **nie** 4096 annehmen (das
+   interaktive opencode des Nutzers kann dort sitzen). Ohne
+   `OPENCODE_SERVER_PASSWORD` warnt der Server („unsecured") — für den
+   Supervisor ein Passwort setzen oder die Warnung bewusst dokumentieren.
 5. Permissions: Wie verhindert man zuverlässig, dass ein Hase außerhalb
    seiner Räume schreibt? (Agent-Frontmatter? `permission`-Config?
    Oder braucht es einen Sandbox-Layer?)
