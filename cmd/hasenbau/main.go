@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 	"github.com/Moritz-Dorn/Hasenbau/internal/supervisor"
 )
@@ -21,6 +22,7 @@ import (
 const usage = `hasenbau — Daemon, der opencode headless orchestriert.
 
 Befehle:
+  init <pfad>      leeren Bau anlegen (nicht-destruktiv, idempotent)
   daemon           Daemon starten (hält den opencode-Server am Leben)
   lauf <auftrag>   Auftrag manuell triggern (kommt mit Phase 1)
   laeufe [-n N]    letzte Läufe zeigen
@@ -54,6 +56,12 @@ func run(args []string, out, errw io.Writer) int {
 	}
 
 	switch rest[0] {
+	case "init":
+		if len(rest) != 2 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau init <pfad>")
+			return 2
+		}
+		return cmdInit(rest[1], out, errw)
 	case "daemon":
 		return cmdDaemon(bau, errw)
 	case "lauf":
@@ -71,6 +79,23 @@ func run(args []string, out, errw io.Writer) int {
 		fmt.Fprintf(errw, "hasenbau: unbekannter Befehl %q\n\n%s", rest[0], usage)
 		return 2
 	}
+}
+
+func cmdInit(pfad string, out, errw io.Writer) int {
+	created, err := bau.Init(pfad)
+	for _, c := range created {
+		fmt.Fprintf(out, "angelegt: %s\n", c)
+	}
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(created) == 0 {
+		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
+	} else {
+		fmt.Fprintln(out, "Hinweis: custom Provider brauchen ihre Definition im provider:-Block von .opencode-home/opencode/opencode.json — auth.json teilt nur Credentials (PLAN.md §3).")
+	}
+	return 0
 }
 
 // dbPath ist die Konvention aus PLAN.md §4: state/hasenbau.db im Bau.
