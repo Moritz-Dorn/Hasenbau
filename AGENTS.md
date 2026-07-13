@@ -52,7 +52,7 @@ im selben Arbeitsgang, nicht „später":
 |---|---|
 | **Bau** | Root-Verzeichnis des Systems (Config, Räume, State) |
 | **Raum** | Benanntes Verzeichnis im Materialfluss |
-| **Hase** | opencode-Agent + Working Directory + Permissions |
+| **Hase** | Template in `hasen/`; der Daemon generiert daraus den opencode-Agenten pro Auftrag×Hase, Permissions aus den Räumen des Auftrags (PLAN.md §6) |
 | **Gang** | Deterministisches Skript, läuft vor dem Hasen. Kein LLM |
 | **Auftrag** | Trigger + Gänge + Hase + Räume (Job-Definition) |
 | **Lauf** | Eine Ausführung eines Auftrags |

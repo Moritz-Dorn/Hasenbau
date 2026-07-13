@@ -22,7 +22,7 @@ Keine Mischformen wie `HasenStore`.
 |---|---|
 | **Bau** | Root-Verzeichnis. Das gesamte System, inkl. Config, Räume, State. |
 | **Raum** | Benanntes Verzeichnis mit einer Rolle im Materialfluss. Kein Typsystem — nur Name und Pfad. |
-| **Hase** | Ein opencode-Agent (Markdown + Frontmatter) plus Working Directory und Permissions. Der probabilistische Teil. |
+| **Hase** | Ein Template in `hasen/` (Markdown + Frontmatter, opencode-Feldvokabular): Prompt, Modell, optionale Zusatz-Einschränkungen. Der probabilistische Teil. Daraus generiert der Daemon pro Auftrag×Hase einen opencode-Agenten — Permissions kommen aus den Räumen des Auftrags, nie aus dem Template. |
 | **Gang** | Deterministisches Skript. Transformiert Material, bevor ein Hase es sieht. Kein LLM. |
 | **Auftrag** | Trigger + Gänge + Hase + Räume. Die Job-Definition. |
 | **Lauf** | Eine Ausführung eines Auftrags. Hat Status, Dauer, Output, Summary. |
@@ -137,10 +137,12 @@ bau/
 ├── .opencode-home/          # XDG_CONFIG_HOME des Servers
 │   └── opencode/            #   opencode erwartet dieses Unterverzeichnis
 │       ├── opencode.json    #   minimal, explizit, plugin: []
-│       ├── agents/          #   die Hasen
-│       │   ├── archivar.md
-│       │   └── baumeister.md
+│       ├── agents/          #   GENERIERT pro Auftrag×Hase — nie von Hand pflegen
+│       │   └── pdf-einlagern__archivar.md
 │       └── skills/
+├── hasen/                   # Hasen-Templates (Quelle der Wahrheit, Nutzer pflegt hier)
+│   ├── archivar.md
+│   └── baumeister.md
 ├── auftraege/               # Auftrags-Definitionen (Markdown + YAML-Frontmatter)
 │   └── pdf-einlagern.md
 ├── gaenge/                  # deterministische Skripte
@@ -233,7 +235,7 @@ gaenge:                            # deterministisch, läuft VOR dem Hasen
     run: gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
     timeout: 120s
 
-hase: archivar                     # → .opencode-home/agents/archivar.md
+hase: archivar                     # → Template hasen/archivar.md
 cwd: raeume/laderampe/
 
 raeume:
@@ -256,6 +258,41 @@ Dateiname: `YYYY-MM-DD-<slug>.md`
 ```
 
 Der Hase sieht das PDF nie — er kriegt Markdown. Das ist der Punkt.
+
+### Hasen-Templates und generierte Agenten
+
+Die Dateien in `hasen/` sind Templates, keine opencode-Agents. Der Daemon
+generiert daraus pro **Auftrag × Hase** einen Agenten unter
+`.opencode-home/opencode/agents/<auftrag>__<hase>.md` (z. B.
+`pdf-einlagern__archivar.md`); der Runner promptet mit diesem Namen.
+Warum generieren statt direkt benutzen:
+
+1. **Permissions pro Auftrag statt pro Agent.** Ein statischer Agent, den
+   zwei Aufträge mit verschiedenen Räumen nutzen, hätte in beiden Läufen
+   die Vereinigung seiner Rechte. Generiert bekommt jeder Lauf exakt die
+   Räume seines Auftrags.
+2. **Portabilität.** Die Hasen-Definition gehört Hasenbau, nicht opencode.
+   Perspektivisch sind andere Coding-Agents als Backend denkbar; das
+   Template-Format bleibt stabil, nur der Generator wechselt.
+3. **Injektionspunkt.** Die Generierung ist die Stelle, an der das
+   Framework später allen Hasen Prompts oder Tools mitgeben kann (z. B.
+   Telemetrie an den Supervisor, Phase ≥ 2). Capability offenhalten,
+   jetzt nicht ausgestalten.
+
+Generierungsregel (deterministisch):
+
+1. Basis aus dem Auftrag: `edit: {"*": deny}`, dann `allow` für dessen
+   Schreib-Räume (`work`, `out` — nicht `done`, das `nachher: move`
+   erledigt der Runner); `bash`, `webfetch`, `websearch`,
+   `external_directory`: `deny`.
+2. Template-Frontmatter wird durchgereicht (`description`, `model`,
+   `temperature`); ein `permission`-Block im Template darf **nur `deny`**
+   enthalten und wird *hinter* die Basis gehängt — wegen
+   Last-Match-Semantik (§11.5) kann das Template Rechte nur weiter
+   einschränken, nie aufweiten. `allow`/`ask` im Template ⇒ Ladefehler.
+3. Generiert wird beim Laden der Definitionen, nicht pro Lauf. Danach
+   `POST /instance/dispose` (§11.6) — vom Runner gegen aktive Läufe
+   serialisiert, denn dispose cancelt laufende Sessions.
 
 ### Variablen im Auftrag
 
@@ -559,3 +596,18 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
      verweigert (`DeniedError` geht als Tool-Fehler an den Hasen, der
      Lauf bricht nicht ab); `bash` fehlte im Toolset. Keine
      Escape-Datei entstand.
+6. ~~Agent-Reload: Wie werden generierte Agenten wirksam, ohne den Server
+   neu zu starten?~~ **Verifiziert 2026-07-13 (opencode 1.15.13,
+   Test-Bau + Quellcode):** Agent-Definitionen werden pro Instanz
+   gecached (`InstanceState`; das `agents/**/*.md`-Glob läuft beim
+   Config-Laden). **`POST /instance/dispose`** verwirft die Caches, der
+   nächste Request lädt neu — praktisch bestätigt: Dateiänderung ohne
+   dispose unsichtbar (Negativprobe), nach dispose sofort in `GET /agent`
+   sichtbar, kein Restart. opencode nutzt denselben Mechanismus intern
+   nach `PATCH /config`. **Aber: dispose ist nicht lauf-sicher.** Der
+   `SessionRunState`-Finalizer cancelt alle aktiven Session-Runner
+   (`session/run-state.ts`), pending Permission-Asks werden rejected.
+   Der Runner muss dispose deshalb gegen aktive Läufe serialisieren
+   (kein Lauf aktiv ⇒ dispose; neue Läufe warten solange). Da Agenten
+   beim Laden der Definitionen generiert werden (§6), nicht pro Lauf,
+   ist dispose ohnehin selten.
