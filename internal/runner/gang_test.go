@@ -1,0 +1,168 @@
+package runner
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
+	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
+)
+
+func testAuftrag(gaenge ...auftrag.Gang) *auftrag.Auftrag {
+	return &auftrag.Auftrag{
+		Name:    "test",
+		Hase:    "archivar",
+		Trigger: auftrag.Trigger{Watch: "raeume/eingang/*.txt"},
+		Gaenge:  gaenge,
+		Raeume: map[string]string{
+			"input":       "raeume/eingang/",
+			"work":        "raeume/work/",
+			"quarantaene": "raeume/quarantaene/",
+		},
+	}
+}
+
+func testUmgebung(t *testing.T, a *auftrag.Auftrag) *lauf.Umgebung {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "raeume/eingang"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	input := "raeume/eingang/doc.txt"
+	if err := os.WriteFile(filepath.Join(root, input), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	u, err := lauf.Neue(root, a, "lauf-001", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+func TestGaengeSequenziellMitLogs(t *testing.T) {
+	a := testAuftrag(
+		auftrag.Gang{Name: "eins", Run: `echo "sehe $INPUT"`},
+		auftrag.Gang{Name: "zwei", Run: `cat $INPUT > $WORK/kopie.txt`},
+	)
+	u := testUmgebung(t, a)
+
+	logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("logs = %v", logs)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(u.Bau, logs[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "sehe raeume/eingang/doc.txt") {
+		t.Errorf("log eins = %q", raw)
+	}
+	kopie, err := os.ReadFile(filepath.Join(u.Bau, u.Work, "kopie.txt"))
+	if err != nil || string(kopie) != "material" {
+		t.Errorf("Gang zwei lief nicht mit CWD=Bau: %q, %v", kopie, err)
+	}
+}
+
+func TestGangFehlerBrichtAbUndQuarantaene(t *testing.T) {
+	a := testAuftrag(
+		auftrag.Gang{Name: "kaputt", Run: `echo "au weia" >&2; exit 3`},
+		auftrag.Gang{Name: "nie", Run: `touch $WORK/nie.txt`},
+	)
+	u := testUmgebung(t, a)
+
+	logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	var gf *GangFehler
+	if !errors.As(err, &gf) {
+		t.Fatalf("erwartete GangFehler, bekam %v", err)
+	}
+	if gf.Gang != "kaputt" || gf.Grund != "exit 3" {
+		t.Errorf("GangFehler = %+v", gf)
+	}
+
+	// stderr steht im Log, auch im Fehlerfall.
+	raw, _ := os.ReadFile(filepath.Join(u.Bau, logs[0]))
+	if !strings.Contains(string(raw), "au weia") {
+		t.Errorf("stderr fehlt im Log: %q", raw)
+	}
+	// Der zweite Gang lief nie.
+	if _, err := os.Stat(filepath.Join(u.Bau, u.Work, "nie.txt")); err == nil {
+		t.Error("Gang nach Fehler wurde trotzdem ausgeführt")
+	}
+	// Input in quarantaene/, nicht am Ursprung, nirgendwo ein archiv/.
+	if gf.Quarantaene == "" || !strings.HasPrefix(gf.Quarantaene, "raeume/quarantaene/") {
+		t.Errorf("Quarantaene = %q", gf.Quarantaene)
+	}
+	if _, err := os.Stat(filepath.Join(u.Bau, gf.Quarantaene)); err != nil {
+		t.Errorf("Input nicht in Quarantäne: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err == nil {
+		t.Error("Input liegt noch am Ursprung, obwohl verschoben gemeldet")
+	}
+}
+
+func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
+	a := testAuftrag(auftrag.Gang{Name: "kaputt", Run: "exit 1"})
+	delete(a.Raeume, "quarantaene")
+	u := testUmgebung(t, a)
+
+	_, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	var gf *GangFehler
+	if !errors.As(err, &gf) {
+		t.Fatalf("erwartete GangFehler, bekam %v", err)
+	}
+	if gf.Quarantaene != "" {
+		t.Errorf("Quarantaene = %q ohne quarantaene-Raum", gf.Quarantaene)
+	}
+	// §7: Der Input bleibt dann am Ursprung — niemals weg.
+	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err != nil {
+		t.Errorf("Input verschwunden: %v", err)
+	}
+}
+
+func TestGangTimeoutKilltProzessgruppe(t *testing.T) {
+	a := testAuftrag(auftrag.Gang{Name: "schlaefer", Run: "sleep 30", Timeout: 200 * time.Millisecond})
+	u := testUmgebung(t, a)
+
+	start := time.Now()
+	_, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	dauer := time.Since(start)
+
+	var gf *GangFehler
+	if !errors.As(err, &gf) {
+		t.Fatalf("erwartete GangFehler, bekam %v", err)
+	}
+	if !strings.Contains(gf.Grund, "timeout nach") {
+		t.Errorf("Grund = %q", gf.Grund)
+	}
+	if dauer > 5*time.Second {
+		t.Errorf("Timeout griff nicht: Lauf dauerte %v", dauer)
+	}
+}
+
+func TestGaengeOhneWorkRaum(t *testing.T) {
+	a := testAuftrag(auftrag.Gang{Name: "eins", Run: "true"})
+	delete(a.Raeume, "work")
+	u := testUmgebung(t, a)
+
+	if _, err := FuehreGaengeAus(context.Background(), u, a, time.Minute); err == nil || !strings.Contains(err.Error(), "Rolle work") {
+		t.Errorf("ohne work-Raum: %v", err)
+	}
+}
+
+func TestKeineGaengeKeinWork(t *testing.T) {
+	a := testAuftrag()
+	delete(a.Raeume, "work")
+	u := testUmgebung(t, a)
+	if logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute); err != nil || logs != nil {
+		t.Errorf("ohne Gänge: logs=%v err=%v", logs, err)
+	}
+}
