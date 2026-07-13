@@ -126,6 +126,31 @@ func TestLetzteSummaries(t *testing.T) {
 	}
 }
 
+func TestGesehenBackstop(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if ok, err := s.IstGesehen("pdf-einlagern", "abc123"); err != nil || ok {
+		t.Errorf("frisch: ok=%v err=%v", ok, err)
+	}
+	if err := s.MerkeGesehen("pdf-einlagern", "abc123"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MerkeGesehen("pdf-einlagern", "abc123"); err != nil {
+		t.Errorf("MerkeGesehen nicht idempotent: %v", err)
+	}
+	if ok, err := s.IstGesehen("pdf-einlagern", "abc123"); err != nil || !ok {
+		t.Errorf("nach Merken: ok=%v err=%v", ok, err)
+	}
+	// Hash ist pro Auftrag — ein anderer Auftrag darf denselben Input sehen.
+	if ok, err := s.IstGesehen("anderer", "abc123"); err != nil || ok {
+		t.Errorf("fremder Auftrag: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestOpenLehntNeuereDBAb(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hasenbau.db")
 	s, err := Open(path)
