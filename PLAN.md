@@ -159,6 +159,11 @@ bau/
 Räume sind nicht hartkodiert. Der Auftrag benennt sie; der Daemon legt
 fehlende an. `laderampe/`, `lager/` usw. sind Konvention, kein Vertrag.
 
+Der Bau ist außerdem ein **Git-Repo mit mindestens einem Commit** — nicht
+zur Versionierung, sondern weil opencode daran Projekt-Identität und
+`worktree` festmacht; ohne Git greifen die Raum-Permissions der Hasen
+nicht (§11.5). `hasenbau init` legt das an.
+
 ---
 
 ## 5. Datenmodell
@@ -500,6 +505,57 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
    interaktive opencode des Nutzers kann dort sitzen). Ohne
    `OPENCODE_SERVER_PASSWORD` warnt der Server („unsecured") — für den
    Supervisor ein Passwort setzen oder die Warnung bewusst dokumentieren.
-5. Permissions: Wie verhindert man zuverlässig, dass ein Hase außerhalb
+5. ~~Permissions: Wie verhindert man zuverlässig, dass ein Hase außerhalb
    seiner Räume schreibt? (Agent-Frontmatter? `permission`-Config?
-   Oder braucht es einen Sandbox-Layer?)
+   Oder braucht es einen Sandbox-Layer?)~~ **Verifiziert 2026-07-13
+   (opencode 1.15.13, Test-Bau, echter Lauf: 1 legaler + 4
+   Flucht-Schreibversuche): Agent-Frontmatter-`permission` reicht,
+   kein Sandbox-Layer nötig.** Rezept für einen Raum-beschränkten Hasen:
+
+   ```yaml
+   permission:
+     edit: { "*": deny, "raeume/archiv/**": allow }
+     bash: deny
+     webfetch: deny
+     websearch: deny
+     external_directory: deny
+   ```
+
+   Mechanik (nachgelesen in `packages/core/src/permission.ts` u. a.,
+   Tag v1.15.13):
+
+   - `write`/`edit`/`apply_patch` laufen alle unter der `edit`-Permission.
+     Die **letzte** matchende Regel gewinnt (`findLast`). `*` matcht auch
+     über `/`-Grenzen hinweg (`**` ist äquivalent zu `*`), Patterns sind
+     mit `^…$` verankert.
+   - Edit-Patterns matchen gegen `path.relative(worktree, datei)`.
+     **Falle:** In einem Verzeichnis ohne Git ist das opencode-Projekt
+     „global" und `worktree = "/"` — relative Patterns matchen dann nie
+     (praktisch bestätigt: sogar der legale Write wurde verweigert).
+     ⇒ **Ein Bau muss ein Git-Repo mit mindestens einem Commit sein.**
+     Dann ist `worktree` der Bau-Root und das Projekt bekommt eine
+     eigene ID (Hash des Root-Commits). `hasenbau init` muss `git init`
+     + Initial-Commit erledigen.
+   - Zweiter Grund für den Git-Bau: „always"-Approvals landen in einer
+     Permission-Tabelle **pro Projekt-ID** (unter XDG_DATA_HOME — mit dem
+     Alltags-opencode geteilt, §3) und werden *nach* dem Agent-Ruleset
+     ausgewertet — sie können dessen Deny überstimmen. Alle
+     Nicht-Git-Verzeichnisse teilen sich die ID „global"; interaktive
+     Approvals des Nutzers würden in die Hasen-Läufe lecken.
+   - `bash: deny` (Pauschal-Deny mit Pattern `*`) entfernt das Tool
+     komplett aus dem Toolset — der Hase sieht es gar nicht erst.
+     `edit` mit Pattern-Ausnahme bleibt sichtbar und wird pro Aufruf
+     geprüft. Pfade außerhalb des Worktree fängt zusätzlich
+     `external_directory` ab (Default „ask" — explizit auf `deny`
+     setzen). opencode hängt eigene Allows hinten an (u. a.
+     `/tmp/opencode/*` und sein tool-output-Verzeichnis); akzeptiert.
+   - **„ask" hängt im Headless-Betrieb:** Der Tool-Call publiziert
+     `permission.asked` (SSE) und wartet auf
+     `POST /permission/{requestID}/reply` (`once|always|reject`);
+     pending Requests via `GET /permission`. Für Hasen deshalb alles
+     explizit `allow`/`deny`, nie `ask`.
+   - Testlauf-Ergebnis: Write in den erlaubten Raum OK; Write in einen
+     fremden Raum, nach `/tmp` und per `../` aus dem Worktree hinaus
+     verweigert (`DeniedError` geht als Tool-Fehler an den Hasen, der
+     Lauf bricht nicht ab); `bash` fehlte im Toolset. Keine
+     Escape-Datei entstand.
