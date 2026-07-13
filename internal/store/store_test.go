@@ -86,6 +86,46 @@ func TestTriggerSpalteIstBenutzbar(t *testing.T) {
 	}
 }
 
+func TestLetzteSummaries(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	basis := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	einfuegen := func(auftrag, summary string, minuten int) {
+		t.Helper()
+		if _, err := s.db.Exec(
+			`INSERT INTO laeufe (auftrag, "trigger", gestartet, status, summary) VALUES (?, ?, ?, ?, ?)`,
+			auftrag, "watch", basis.Add(time.Duration(minuten)*time.Minute), "ok", summary,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	einfuegen("pdf-einlagern", "erster", 0)
+	einfuegen("pdf-einlagern", "", 1) // leere Summary zählt nicht
+	einfuegen("anderer", "fremd", 2)  // anderer Auftrag zählt nicht
+	einfuegen("pdf-einlagern", "zweiter", 3)
+	einfuegen("pdf-einlagern", "dritter", 4)
+
+	got, err := s.LetzteSummaries("pdf-einlagern", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Die jüngsten 2, chronologisch (älteste zuerst) für den Prompt.
+	if len(got) != 2 || got[0] != "zweiter" || got[1] != "dritter" {
+		t.Errorf("LetzteSummaries = %v", got)
+	}
+
+	if got, err := s.LetzteSummaries("pdf-einlagern", 0); err != nil || got != nil {
+		t.Errorf("n=0: %v, %v", got, err)
+	}
+	if got, err := s.LetzteSummaries("unbekannt", 3); err != nil || len(got) != 0 {
+		t.Errorf("unbekannter Auftrag: %v, %v", got, err)
+	}
+}
+
 func TestOpenLehntNeuereDBAb(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hasenbau.db")
 	s, err := Open(path)

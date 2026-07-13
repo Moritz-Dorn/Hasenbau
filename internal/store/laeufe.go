@@ -52,6 +52,39 @@ func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
 	return out, rows.Err()
 }
 
+// LetzteSummaries liefert die jüngsten nicht-leeren Summaries eines
+// Auftrags in chronologischer Reihenfolge (älteste zuerst) — so wandern
+// sie direkt in den Prompt (§6, Kontext-Schicht).
+func (s *Store) LetzteSummaries(auftrag string, n int) ([]string, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	rows, err := s.db.Query(`
+		SELECT summary FROM laeufe
+		WHERE auftrag = ? AND summary IS NOT NULL AND summary != ''
+		ORDER BY gestartet DESC, id DESC LIMIT ?`, auftrag, n)
+	if err != nil {
+		return nil, fmt.Errorf("store: Summaries lesen: %w", err)
+	}
+	defer rows.Close()
+
+	var neueste []string
+	for rows.Next() {
+		var summary string
+		if err := rows.Scan(&summary); err != nil {
+			return nil, fmt.Errorf("store: Summary scannen: %w", err)
+		}
+		neueste = append(neueste, summary)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(neueste)-1; i < j; i, j = i+1, j-1 {
+		neueste[i], neueste[j] = neueste[j], neueste[i]
+	}
+	return neueste, nil
+}
+
 // StatusZaehler liefert die Anzahl Läufe je Status.
 func (s *Store) StatusZaehler() (map[string]int, error) {
 	rows, err := s.db.Query(`SELECT status, count(*) FROM laeufe GROUP BY status`)
