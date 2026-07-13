@@ -164,7 +164,16 @@ fehlende an. `laderampe/`, `lager/` usw. sind Konvention, kein Vertrag.
 Der Bau ist außerdem ein **Git-Repo mit mindestens einem Commit** — nicht
 zur Versionierung, sondern weil opencode daran Projekt-Identität und
 `worktree` festmacht; ohne Git greifen die Raum-Permissions der Hasen
-nicht (§11.5). `hasenbau init` legt das an.
+nicht (§11.5). `hasenbau init` legt das an. Versioniert werden nur
+Definitionen: `raeume/`, `state/` und die generierten Agenten stehen in
+der `.gitignore`.
+
+Räume dürfen ihrerseits **eigene Git-Repos** sein (Änderungen
+nachvollziehen, In-place-Transformationen) — fürs Bau-Repo unsichtbar
+und für die Permissions egal, solange Sessions am Server-CWD (= Bau-Root)
+hängen. Der Runner darf Sessions deshalb nie mit einem Verzeichnis
+innerhalb eines Raums anlegen, sonst verschöbe sich der Worktree-Anker
+auf das Raum-Repo (Notiz an Hasenbau-q4y).
 
 ---
 
