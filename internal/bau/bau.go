@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // opencodeJSON ist die minimale, explizite Server-Config (§3): keine
@@ -26,6 +28,13 @@ const hasenbauYAML = `# Hasenbau — Daemon-Config (PLAN.md §4).
 log_level: info
 `
 
+// gitIgnore: Der Bau versioniert Definitionen (Aufträge, Hasen, Gänge,
+// Config), nicht Laufzeit-Material und nicht generierte Agenten.
+const gitIgnore = `state/
+raeume/
+.opencode-home/opencode/agents/
+`
+
 // dirs sind die Verzeichnisse eines frischen Baus. raeume/ bleibt leer:
 // Räume benennt der Auftrag, der Daemon legt fehlende an (§4).
 var dirs = []string{
@@ -42,6 +51,7 @@ var dirs = []string{
 // nie überschrieben — Init ist idempotent und nicht-destruktiv.
 var files = map[string]string{
 	"hasenbau.yaml": hasenbauYAML,
+	".gitignore":    gitIgnore,
 	".opencode-home/opencode/opencode.json": opencodeJSON,
 }
 
@@ -80,5 +90,59 @@ func Init(root string) ([]string, error) {
 		}
 		created = append(created, rel)
 	}
+
+	initialisiert, err := gitSicherstellen(root)
+	if err != nil {
+		return created, err
+	}
+	if initialisiert {
+		created = append(created, ".git/")
+	}
 	return created, nil
+}
+
+// gitSicherstellen macht den Bau zu einem Git-Repo mit mindestens einem
+// Commit (PLAN.md §11.5): ohne Git ist das opencode-Projekt „global" mit
+// worktree=/ — Raum-Permissions der Hasen matchen nie, und
+// „always"-Approvals des Alltags-opencode lecken über die geteilte
+// Projekt-ID in die Läufe.
+func gitSicherstellen(root string) (bool, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return false, fmt.Errorf("bau: git nicht gefunden — ein Bau muss ein Git-Repo sein (PLAN.md §11.5)")
+	}
+
+	// Auf root/.git prüfen, nicht per rev-parse: das würde bei einem Bau
+	// innerhalb eines fremden Repos dessen Parent finden und Init überspringen.
+	var initialisiert bool
+	if _, err := os.Stat(filepath.Join(root, ".git")); errors.Is(err, fs.ErrNotExist) {
+		if err := gitLauf(root, "init", "-q"); err != nil {
+			return false, err
+		}
+		initialisiert = true
+	}
+
+	// Mindestens ein Commit: erst damit bekommt der Bau bei opencode eine
+	// eigene Projekt-ID (Hash des Root-Commits).
+	if gitLauf(root, "rev-parse", "--verify", "-q", "HEAD") == nil {
+		return initialisiert, nil
+	}
+	if err := gitLauf(root, "add", "-A"); err != nil {
+		return initialisiert, err
+	}
+	if err := gitLauf(root,
+		"-c", "user.name=hasenbau", "-c", "user.email=hasenbau@localhost",
+		"-c", "commit.gpgsign=false",
+		"commit", "-q", "-m", "hasenbau init"); err != nil {
+		return initialisiert, err
+	}
+	return true, nil
+}
+
+func gitLauf(root string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("bau: git %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

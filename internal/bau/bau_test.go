@@ -2,6 +2,7 @@ package bau
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,17 +10,41 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/supervisor"
 )
 
+// TestInitInFremdemRepoLegtEigenesAn: Ein Bau innerhalb eines fremden
+// Git-Repos braucht trotzdem sein eigenes — sonst wäre die Projekt-ID
+// (und damit die Permission-Isolation, §11.5) die des Parent-Repos.
+func TestInitInFremdemRepoLegtEigenesAn(t *testing.T) {
+	parent := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "parent"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", parent}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+
+	root := filepath.Join(parent, "bau")
+	if _, err := Init(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		t.Errorf("Bau im fremden Repo bekam kein eigenes .git: %v", err)
+	}
+}
+
 func TestInitLegtLayoutAn(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "neuer-bau")
 	created, err := Init(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(created) != len(dirs)+len(files) {
+	if len(created) != len(dirs)+len(files)+1 { // +1: .git/
 		t.Errorf("created = %v", created)
 	}
 	for _, p := range []string{
 		"hasenbau.yaml",
+		".gitignore",
 		".opencode-home/opencode/opencode.json",
 		".opencode-home/opencode/agents",
 		"auftraege", "gaenge", "hasen", "raeume", "state",
@@ -27,6 +52,12 @@ func TestInitLegtLayoutAn(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, p)); err != nil {
 			t.Errorf("%s fehlt: %v", p, err)
 		}
+	}
+
+	// Der Bau muss ein Git-Repo mit mindestens einem Commit sein —
+	// sonst greifen die Raum-Permissions der Hasen nicht (§11.5).
+	if err := exec.Command("git", "-C", root, "rev-parse", "--verify", "-q", "HEAD").Run(); err != nil {
+		t.Errorf("Bau hat keinen Git-Commit: %v", err)
 	}
 
 	// Der frische Bau muss die Supervisor-Validierung bestehen —
