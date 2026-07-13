@@ -33,6 +33,7 @@ var dirs = []string{
 	".opencode-home/opencode/skills",
 	"auftraege",
 	"gaenge",
+	"hasen",
 	"raeume",
 	"state",
 }

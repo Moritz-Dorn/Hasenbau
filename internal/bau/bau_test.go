@@ -22,7 +22,7 @@ func TestInitLegtLayoutAn(t *testing.T) {
 		"hasenbau.yaml",
 		".opencode-home/opencode/opencode.json",
 		".opencode-home/opencode/agents",
-		"auftraege", "gaenge", "raeume", "state",
+		"auftraege", "gaenge", "hasen", "raeume", "state",
 	} {
 		if _, err := os.Stat(filepath.Join(root, p)); err != nil {
 			t.Errorf("%s fehlt: %v", p, err)
