@@ -161,7 +161,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("debounce gilt nur für watch-Trigger")
 		}
 	default:
-		if err := bauRelativ(a.Trigger.Watch); err != nil {
+		if err := BauRelativ(a.Trigger.Watch); err != nil {
 			return nil, fehler("trigger.watch: %v", err)
 		}
 	}
@@ -175,7 +175,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	}
 
 	if a.CWD != "" {
-		if err := bauRelativ(a.CWD); err != nil {
+		if err := BauRelativ(a.CWD); err != nil {
 			return nil, fehler("cwd: %v", err)
 		}
 	}
@@ -184,7 +184,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		if rolle == "" || pfad == "" {
 			return nil, fehler("raeume: Rolle und Pfad dürfen nicht leer sein")
 		}
-		if err := bauRelativ(pfad); err != nil {
+		if err := BauRelativ(pfad); err != nil {
 			return nil, fehler("raum %s: %v", rolle, err)
 		}
 	}
@@ -289,9 +289,9 @@ func parseNachher(schritt map[string]string) (Nachher, error) {
 	return Nachher{}, fmt.Errorf("leerer Schritt")
 }
 
-// bauRelativ erzwingt die Isolations-Invariante aus §3: Pfade in
+// BauRelativ erzwingt die Isolations-Invariante aus §3: Pfade in
 // Aufträgen bleiben im Bau — relativ, ohne Ausbruch nach oben.
-func bauRelativ(p string) error {
+func BauRelativ(p string) error {
 	if filepath.IsAbs(p) {
 		return fmt.Errorf("pfad %q muss Bau-relativ sein, nicht absolut", p)
 	}
