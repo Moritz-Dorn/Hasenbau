@@ -5,6 +5,8 @@
 package opencode
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	sdk "github.com/sst/opencode-sdk-go"
@@ -15,6 +17,23 @@ import (
 // typischerweise supervisor.BaseURL().
 func New(baseURL string) *sdk.Client {
 	return sdk.NewClient(option.WithBaseURL(baseURL))
+}
+
+// DisposeInstance verwirft die Instanz-Caches des Servers — nach dem
+// (Re-)Generieren von Agenten nötig, damit der nächste Request sie neu
+// lädt (PLAN.md §11.6). Achtung: cancelt laufende Sessions; der
+// Aufrufer serialisiert gegen aktive Läufe. SDK v0.19.2 kennt keinen
+// Instance-Service; Client.Post ist der dokumentierte Weg für solche
+// Endpoints ("useful for hitting undocumented endpoints").
+func DisposeInstance(ctx context.Context, client *sdk.Client) error {
+	var ok bool
+	if err := client.Post(ctx, "instance/dispose", nil, &ok); err != nil {
+		return fmt.Errorf("instance/dispose: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("instance/dispose: Server meldet false")
+	}
+	return nil
 }
 
 // TextPart baut den Text-Part für einen Prompt.

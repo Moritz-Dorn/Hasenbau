@@ -5,7 +5,9 @@ package auftrag
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/frontmatter"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
@@ -82,9 +85,9 @@ func (d *dauer) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// frontmatter spiegelt das YAML aus §6. Pointer-Felder unterscheiden
-// „fehlt" von „leer"; unbekannte Felder lehnt der Decoder ab.
-type frontmatter struct {
+// kopfdaten spiegelt das Frontmatter-YAML aus §6. Pointer-Felder
+// unterscheiden „fehlt" von „leer"; Unbekanntes lehnt der Decoder ab.
+type kopfdaten struct {
 	Trigger *struct {
 		Watch    string `yaml:"watch"`
 		Cron     string `yaml:"cron"`
@@ -116,15 +119,15 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		return nil, fehler("ungültiger Name (erlaubt: Buchstaben, Ziffern, . _ -)")
 	}
 
-	kopf, body, err := trenneFrontmatter(src)
+	kopf, body, err := frontmatter.Split(src)
 	if err != nil {
 		return nil, fehler("%v", err)
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(kopf))
 	dec.KnownFields(true)
-	var fm frontmatter
-	if err := dec.Decode(&fm); err != nil {
+	var fm kopfdaten
+	if err := dec.Decode(&fm); err != nil && !errors.Is(err, io.EOF) { // EOF = leer; die Pflichtfeld-Prüfungen melden das präziser
 		return nil, fehler("frontmatter: %v", err)
 	}
 
@@ -257,23 +260,6 @@ func Load(root string) ([]*Auftrag, error) {
 		auftraege = append(auftraege, a)
 	}
 	return auftraege, nil
-}
-
-// trenneFrontmatter erwartet "---" als erste Zeile und liefert den
-// YAML-Block sowie den restlichen Body.
-func trenneFrontmatter(src []byte) (kopf []byte, body string, err error) {
-	const marke = "---"
-	text := strings.ReplaceAll(string(src), "\r\n", "\n")
-	zeilen := strings.SplitAfter(text, "\n")
-	if len(zeilen) == 0 || strings.TrimRight(zeilen[0], "\n") != marke {
-		return nil, "", fmt.Errorf("kein Frontmatter: Datei muss mit %q beginnen", marke)
-	}
-	for i := 1; i < len(zeilen); i++ {
-		if strings.TrimRight(zeilen[i], "\n") == marke {
-			return []byte(strings.Join(zeilen[1:i], "")), strings.Join(zeilen[i+1:], ""), nil
-		}
-	}
-	return nil, "", fmt.Errorf("frontmatter nicht geschlossen: schließendes %q fehlt", marke)
 }
 
 // parseNachher zerlegt einen Schritt wie {move: "$INPUT -> raeume/archiv/"}.
