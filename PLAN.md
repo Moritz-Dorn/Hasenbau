@@ -366,20 +366,20 @@ Material lautlos.
 Ziel: Der Daemon startet, hält einen opencode-Server am Leben, und kann
 einen Prompt schicken.
 
-- [ ] **XDG-Isolation verifizieren** (siehe §3). Erst danach weiterbauen —
+- [x] **XDG-Isolation verifizieren** (siehe §3). Erst danach weiterbauen —
       wenn das nicht geht, ändert sich das Design.
-- [ ] Supervisor: `opencode serve` als Child spawnen, auf `127.0.0.1`,
+- [x] Supervisor: `opencode serve` als Child spawnen, auf `127.0.0.1`,
       freier Port. Health-Check per Polling auf `/app` oder `/config`.
       Restart bei Crash, Backoff. Sauberer Shutdown (SIGTERM ans Kind,
       keine Zombies).
-- [ ] SDK-Client gegen den Server verbinden. Session anlegen, Prompt
+- [x] SDK-Client gegen den Server verbinden. Session anlegen, Prompt
       schicken, Antwort holen. Ein Smoke-Test, mehr nicht.
-- [ ] SQLite anlegen, Migrationen.
-- [ ] CLI-Grundgerüst: `hasenbau daemon`, `hasenbau lauf <auftrag>` (manuell
+- [x] SQLite anlegen, Migrationen.
+- [x] CLI-Grundgerüst: `hasenbau daemon`, `hasenbau lauf <auftrag>` (manuell
       triggern), `hasenbau laeufe` (Historie), `hasenbau status`.
-- [ ] `hasenbau init <pfad>` — legt einen leeren Bau an. Test-Bau damit
+- [x] `hasenbau init <pfad>` — legt einen leeren Bau an. Test-Bau damit
       **außerhalb des Repos** erzeugen (siehe §3, AGENTS.md-Leckage).
-- [ ] Invariante durchsetzen und testen: CWD des Servers liegt immer im Bau.
+- [x] Invariante durchsetzen und testen: CWD des Servers liegt immer im Bau.
 
 > ⚠️ **Zu verifizieren:** Die exakten Struct- und Feldnamen des Go-SDK
 > (`opencode.SessionNewParams`, `SessionPromptParams`, Part-Unions) gegen
@@ -394,15 +394,15 @@ einen Prompt schicken.
 
 Ziel: Der PDF-Auftrag läuft Ende-zu-Ende.
 
-- [ ] Auftrags-Parser (Frontmatter + Body), Validierung mit klaren Fehlern
-- [ ] Räume anlegen/auflösen, Variablen-Substitution
-- [ ] Scheduler (cron) mit Lock pro Auftrag
-- [ ] Watcher (fsnotify) mit Debounce und Größenstabilität
-- [ ] Gang-Runner: Subprocess, Timeout, Exit-Code, stdout/stderr in den Lauf
-- [ ] Prompt-Bau: Body + Kontext-Dateien + letzte N Summaries
-- [ ] Hase ausführen, Event-Stream mitlesen (Tool-Calls loggen), Ergebnis persistieren
-- [ ] `nachher:`-Schritte (move, copy, delete)
-- [ ] Referenz-Auftrag `pdf-einlagern` + Hase `archivar` + Gang `pdf_to_md.py`
+- [x] Auftrags-Parser (Frontmatter + Body), Validierung mit klaren Fehlern
+- [x] Räume anlegen/auflösen, Variablen-Substitution
+- [x] Scheduler (cron) mit Lock pro Auftrag
+- [x] Watcher (fsnotify) mit Debounce und Größenstabilität
+- [x] Gang-Runner: Subprocess, Timeout, Exit-Code, stdout/stderr in den Lauf
+- [x] Prompt-Bau: Body + Kontext-Dateien + letzte N Summaries
+- [x] Hase ausführen, Event-Stream mitlesen (Tool-Calls loggen), Ergebnis persistieren
+- [x] `nachher:`-Schritte (move, copy, delete)
+- [x] Referenz-Auftrag `pdf-einlagern` + Hase `archivar` + Gang `pdf_to_md.py`
 
 Output-Sink in dieser Phase: **Dateien in `lager/`**. Kein Telegram, kein
 Matrix, keine Desktop-Notifications. Erst herausfinden, ob die Aufträge

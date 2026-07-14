@@ -1,0 +1,38 @@
+---
+trigger:
+  watch: raeume/laderampe/sources/*.pdf
+  debounce: 5s
+
+gaenge:
+  - name: pdf-zu-markdown
+    run: python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
+    timeout: 120s
+
+hase: archivar
+
+raeume:
+  input: raeume/laderampe/sources/
+  work:  raeume/laderampe/work/
+  out:   raeume/lager/
+  done:  raeume/archiv/
+  quarantaene: raeume/quarantaene/
+
+kontext:
+  - datei: $WORK/extrakt.md
+  - letzte_summaries: 3
+
+nachher:
+  - move: $INPUT -> raeume/archiv/
+---
+
+Der extrahierte Text eines PDFs liegt im Kontext unten (aus
+`$WORK/extrakt.md`). Fasse ihn zusammen, vergib Tags, und lege ihn
+strukturiert in `raeume/lager/` ab.
+
+Dateiname: `YYYY-MM-DD-<slug>.md` — das Datum steht als „Extrahiert
+am:" im Kopf des Extrakts.
+
+Aufbau der Datei: Titelzeile, dann eine Zeile `Tags: tag1, tag2, …`,
+dann eine kurze Zusammenfassung, dann der Volltext.
+
+Antworte am Ende mit genau einer Zeile: was du wo abgelegt hast.
