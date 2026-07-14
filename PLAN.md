@@ -87,6 +87,12 @@ XDG_DATA_HOME   = geerbt vom Nutzer        # → auth.json wird geteilt
 Damit teilt der Bau die Provider-Credentials mit dem täglichen opencode,
 aber sonst nichts. Die Automation-Config ist explizit und versioniert.
 
+`plugin: []` richtet sich dabei gegen die **geerbten** Plugins der
+Alltags-Instanz, nicht gegen Plugins an sich: Eigene, im Bau
+versionierte Plugins bleiben eine Option (z. B. später Echtzeit-Hooks
+wie `tool.execute.before` oder Telemetrie) — sie wären dann Teil der
+expliziten Automation-Config, kein stilles Erbe.
+
 **Befund aus dem Smoke-Test (2026-07-12):** auth.json teilt nur die
 Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der
 KIT-Provider `scc`) sind Config — ohne sie in der Bau-eigenen
@@ -553,11 +559,36 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
    - Event-Stream: `client.Event.ListStreaming(ctx, EventListParams{})` →
      `ssestream.Stream[EventListResponse]` (SSE auf `GET /event`); Typen
      u.a. `message.part.updated`, `session.idle`, `session.error`.
-3. Wie kommt man aus einer Session an den vollständigen Tool-Call-Trace?
-   (Blockiert Phase 2.) — *Vorbefund aus §11.2:* `Session.Messages(ctx, id, …)`
-   → `[]SessionMessagesResponse{Info, Parts}`; Tool-Parts tragen
-   `ToolPartState{Status, Input, Output, Error}`. Noch gegen eine echte
-   Session mit Tool-Calls zu verifizieren.
+3. ~~Wie kommt man aus einer Session an den vollständigen
+   Tool-Call-Trace?~~ **Verifiziert 2026-07-14 (Hasenbau-c8c, gegen
+   echte Sessions der z0u/d6p-Läufe):** `Session.Messages(ctx, id, …)`
+   liefert den **kompletten Verlauf** — nicht nur Tool-Calls, sondern
+   auch `text`-, `reasoning`- (!) und `patch`-Parts. Für den
+   Baumeister heißt das: Absicht (reasoning) + Taten (tool) +
+   Korrekturen kommen strukturiert aus einer Quelle.
+
+   - **Tool-Parts:** `p.AsUnion().(sdk.ToolPart)` → `Tool`, `CallID`,
+     `State.Status` (`completed`/`error`), `State.Input` (volle
+     Argumente als JSON), `State.Output`, `State.Error`. Ein
+     abgewehrter Schreibversuch (d6p-Session) kommt als
+     `status=error` mit der Permission-Begründung in `State.Error` —
+     Fehlversuche sind also trivial filterbar.
+   - **Reihenfolge:** Parts liegen in Ausführungsreihenfolge im
+     Array; `State.Time` trägt zusätzlich `start`/`end` (Unix-ms)
+     für exakte Ordnung über Messages hinweg.
+   - **Persistenz:** Der Server speichert alles in einer SQLite unter
+     XDG_DATA_HOME (`opencode.db`, Tabellen `session`/`message`/
+     `part`), getrennt nach `project_id` (Hash des Bau-Root-Commits,
+     §11.5). Ein **frisch gestarteter** Server liefert die Sessions
+     längst toter Server-Instanzen — `hasenbau graben` funktioniert
+     also post-hoc, Tage später. Die DB ist mit dem Alltags-opencode
+     geteilt (§3), die Sessions sind es wegen der project_id nicht.
+   - **Verworfene Wege:** Kein Writeback-Tool (Selbstauskunft des
+     Modells wäre redundant, teuer, lückenhaft — MCP bleibt für
+     notiz()/summary(), Dinge, die nur das Modell weiß), kein Plugin
+     nötig (Post-hoc-Lesen braucht keins), kein Direktzugriff auf
+     `opencode.db` (internes, Drizzle-migriertes Schema — nur
+     Notausgang, nicht drauf bauen).
 4. ~~Verhält sich `opencode serve` mit `--port 0` sinnvoll?~~ **Verifiziert
    2026-07-11:** `--port 0` heißt „auto" — bevorzugt 4096 (Default), bei
    Belegung ein freier ephemerer Port. Der zugewiesene Port steht auf
