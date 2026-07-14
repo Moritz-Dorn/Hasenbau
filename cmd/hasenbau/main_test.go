@@ -35,6 +35,47 @@ func TestLaufUnbekannterAuftrag(t *testing.T) {
 	}
 }
 
+func TestGrabenFehlerpfade(t *testing.T) {
+	bau := t.TempDir()
+
+	// Unbekannter Lauf: klarer Fehler, bevor irgendein Server startet.
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "graben", "7"}, &out, &errw); code != 1 {
+		t.Errorf("unbekannter Lauf: exit %d, erwartet 1", code)
+	}
+	if !strings.Contains(errw.String(), "kein Lauf mit ID 7") {
+		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
+	}
+
+	// Lauf ohne Session (Gang scheiterte vor dem Hasen): klarer Fehler.
+	st, err := store.Open(filepath.Join(bau, "state", "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.LaufBeginne("pdf-einlagern", "watch", "kaputt.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.LaufBeende(id, store.LaufErgebnis{Status: "fehler", Fehler: "gang kaputt"}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "graben", "1"}, &out, &errw); code != 1 {
+		t.Errorf("Lauf ohne Session: exit %d, erwartet 1", code)
+	}
+	if !strings.Contains(errw.String(), "hat keine Session") {
+		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
+	}
+
+	// Kaputte Lauf-ID.
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "graben", "vier"}, &out, &errw); code != 2 {
+		t.Errorf("ungültige ID: exit %d, erwartet 2", code)
+	}
+}
+
 func TestLaeufeUndStatus(t *testing.T) {
 	bau := t.TempDir()
 

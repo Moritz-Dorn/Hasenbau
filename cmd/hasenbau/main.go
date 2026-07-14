@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -34,6 +36,7 @@ Befehle:
   lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
                         auslösende Datei (Bau-relativ, nur watch)
   laeufe [-n N]         letzte Läufe zeigen
+  graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
   status                Zustand des Baus zeigen
 
 Globale Flags (vor dem Befehl):
@@ -84,6 +87,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdLauf(bau, rest[1], input, errw)
 	case "laeufe":
 		return cmdLaeufe(bau, rest[1:], out, errw)
+	case "graben":
+		return cmdGraben(bau, rest[1:], out, errw)
 	case "status":
 		return cmdStatus(bau, out, errw)
 	default:
@@ -227,6 +232,78 @@ func cmdDaemon(root string, errw io.Writer) int {
 	}
 	logger.Printf("hasenbau daemon: %v", err)
 	return 1
+}
+
+// cmdGraben zieht den Trace eines Laufs über dessen session_id
+// (§8 Phase 2, Zugriffsweg §11.3) und druckt ihn als Baumeister-Input
+// (Markdown) oder mit -json strukturiert. Die Session liegt im
+// Storage des Servers — ein frisch gestarteter Server reicht.
+func cmdGraben(root string, args []string, out, errw io.Writer) int {
+	fs := flag.NewFlagSet("graben", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	alsJSON := fs.Bool("json", false, "Trace als JSON statt Markdown")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau graben [-json] <lauf-id>")
+		return 2
+	}
+	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau graben: ungültige Lauf-ID %q\n", fs.Arg(0))
+		return 2
+	}
+
+	logger := log.New(errw, "", log.LstdFlags)
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	defer st.Close()
+
+	l, err := st.LaufNachID(id)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau graben: %v\n", err)
+		return 1
+	}
+	if l.SessionID == "" {
+		fmt.Fprintf(errw, "hasenbau graben: Lauf %d (%s, %s) hat keine Session — der Lauf scheiterte vor dem Hasen (Gänge? Prompt?).\n",
+			l.ID, l.Auftrag, l.Status)
+		return 1
+	}
+
+	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := sup.Start(ctx); err != nil {
+		logger.Print(err)
+		return 1
+	}
+	defer sup.Stop()
+
+	trace, err := opencode.ZieheTrace(ctx, opencode.New(sup.BaseURL()), l.SessionID)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	if *alsJSON {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(trace); err != nil {
+			logger.Print(err)
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(out, "# Trace Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
+	fmt.Fprint(out, trace.Markdown())
+	return 0
 }
 
 // cmdLauf triggert einen Auftrag manuell: eigener Server hoch, Lauf

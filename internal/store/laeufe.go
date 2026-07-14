@@ -119,6 +119,33 @@ func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
 	return nil
 }
 
+// LaufNachID liefert einen einzelnen Lauf — z.B. für graben, das über
+// die session_id an den Trace kommt (§8 Phase 2).
+func (s *Store) LaufNachID(id int64) (*Lauf, error) {
+	var l Lauf
+	var beendet sql.NullTime
+	err := s.db.QueryRow(`
+		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
+		       beendet, status, COALESCE(session_id,''), COALESCE(summary,''),
+		       COALESCE(fehler,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
+		       COALESCE(kosten_cent,0)
+		FROM laeufe WHERE id = ?`, id).Scan(
+		&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser, &l.Gestartet, &beendet,
+		&l.Status, &l.SessionID, &l.Summary, &l.Fehler, &l.TokensIn,
+		&l.TokensOut, &l.KostenCent)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("store: kein Lauf mit ID %d", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: Lauf %d lesen: %w", id, err)
+	}
+	if beendet.Valid {
+		t := beendet.Time
+		l.Beendet = &t
+	}
+	return &l, nil
+}
+
 // LetzteLaeufe liefert die jüngsten Läufe, neueste zuerst.
 func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
 	rows, err := s.db.Query(`
