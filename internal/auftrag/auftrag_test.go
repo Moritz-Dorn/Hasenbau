@@ -20,7 +20,6 @@ gaenge:
     timeout: 120s
 
 hase: archivar
-cwd: raeume/laderampe/
 
 raeume:
   input: raeume/laderampe/sources/
@@ -63,8 +62,8 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	if g.Name != "pdf-zu-markdown" || g.Timeout != 120*time.Second || !strings.Contains(g.Run, "pdf_to_md.py") {
 		t.Errorf("Gang = %+v", g)
 	}
-	if a.Hase != "archivar" || a.CWD != "raeume/laderampe/" {
-		t.Errorf("Hase/CWD = %q/%q", a.Hase, a.CWD)
+	if a.Hase != "archivar" {
+		t.Errorf("Hase = %q", a.Hase)
 	}
 	if len(a.Raeume) != 4 || a.Raeume["out"] != "raeume/lager/" {
 		t.Errorf("Raeume = %+v", a.Raeume)
@@ -121,7 +120,7 @@ func TestParseFehler(t *testing.T) {
 		{"hase fehlt", ersetze(t, "hase: archivar\n", ""), "hase fehlt"},
 		{"unbekanntes Feld", ersetze(t, "hase: archivar", "hase: archivar\nfarbe: braun"), "farbe"},
 		{"body fehlt", beispiel[:strings.LastIndex(beispiel, "---")+4], "body fehlt"},
-		{"cwd absolut", ersetze(t, "cwd: raeume/laderampe/", "cwd: /etc"), "nicht absolut"},
+		{"cwd abgelehnt", ersetze(t, "hase: archivar", "hase: archivar\ncwd: raeume/laderampe/"), "cwd wird nicht unterstützt"},
 		{"raum verlässt Bau", ersetze(t, "out:   raeume/lager/", "out:   ../draussen/"), "darf den Bau nicht verlassen"},
 		{"watch absolut", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "watch: /tmp/*.pdf"), "nicht absolut"},
 		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$INPUT\" --out \"$WORK/extrakt.md\"\n", ""), "run fehlt"},

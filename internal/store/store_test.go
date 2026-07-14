@@ -151,6 +151,94 @@ func TestGesehenBackstop(t *testing.T) {
 	}
 }
 
+func TestLaufBeginneUndBeende(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	id, err := s.LaufBeginne("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	laeufe, err := s.LetzteLaeufe(10)
+	if err != nil || len(laeufe) != 1 {
+		t.Fatalf("nach Beginne: %v, %v", laeufe, err)
+	}
+	l := laeufe[0]
+	if l.ID != id || l.Status != "laeuft" || l.Beendet != nil || l.Ausloeser != "raeume/laderampe/sources/a.pdf" {
+		t.Errorf("Lauf = %+v", l)
+	}
+	states, err := s.AuftragStates()
+	if err != nil || len(states) != 1 || states[0].LetzterLauf == nil || states[0].LetzterOk != nil {
+		t.Errorf("nach Beginne: states=%+v err=%v", states, err)
+	}
+
+	if err := s.LaufBeende(id, LaufErgebnis{
+		Status: "ok", SessionID: "ses_1", Summary: "einsortiert",
+		TokensIn: 100, TokensOut: 20, KostenCent: 3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	laeufe, _ = s.LetzteLaeufe(10)
+	l = laeufe[0]
+	if l.Status != "ok" || l.Beendet == nil || l.SessionID != "ses_1" ||
+		l.Summary != "einsortiert" || l.TokensIn != 100 || l.TokensOut != 20 || l.KostenCent != 3 {
+		t.Errorf("Lauf nach Beende = %+v", l)
+	}
+	states, _ = s.AuftragStates()
+	if states[0].LetzterOk == nil || states[0].FehlerSerie != 0 {
+		t.Errorf("nach ok: state=%+v", states[0])
+	}
+
+	// Zwei Fehlläufe zählen die Serie hoch; ein ok setzt sie zurück.
+	for i := 0; i < 2; i++ {
+		id, err := s.LaufBeginne("pdf-einlagern", "cron", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.LaufBeende(id, LaufErgebnis{Status: "fehler", Fehler: "gang kaputt"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	states, _ = s.AuftragStates()
+	if states[0].FehlerSerie != 2 {
+		t.Errorf("FehlerSerie = %d, erwartet 2", states[0].FehlerSerie)
+	}
+	id, _ = s.LaufBeginne("pdf-einlagern", "manuell", "")
+	if err := s.LaufBeende(id, LaufErgebnis{Status: "ok"}); err != nil {
+		t.Fatal(err)
+	}
+	states, _ = s.AuftragStates()
+	if states[0].FehlerSerie != 0 {
+		t.Errorf("FehlerSerie nach ok = %d", states[0].FehlerSerie)
+	}
+}
+
+func TestLaufValidiert(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if _, err := s.LaufBeginne("x", "gedanke", ""); err == nil {
+		t.Error("unbekannter Trigger muss fehlschlagen")
+	}
+	id, err := s.LaufBeginne("x", "cron", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LaufBeende(id, LaufErgebnis{Status: "laeuft"}); err == nil {
+		t.Error("'laeuft' ist kein Endstatus")
+	}
+	if err := s.LaufBeende(999, LaufErgebnis{Status: "ok"}); err == nil {
+		t.Error("unbekannte Lauf-ID muss fehlschlagen")
+	}
+}
+
 func TestOpenLehntNeuereDBAb(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hasenbau.db")
 	s, err := Open(path)

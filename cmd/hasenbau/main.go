@@ -14,19 +14,27 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
+	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
+	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
+	"github.com/Moritz-Dorn/Hasenbau/internal/opencode"
+	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
+	"github.com/Moritz-Dorn/Hasenbau/internal/scheduler"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 	"github.com/Moritz-Dorn/Hasenbau/internal/supervisor"
+	"github.com/Moritz-Dorn/Hasenbau/internal/watcher"
 )
 
 const usage = `hasenbau — Daemon, der opencode headless orchestriert.
 
 Befehle:
-  init <pfad>      leeren Bau anlegen (nicht-destruktiv, idempotent)
-  daemon           Daemon starten (hält den opencode-Server am Leben)
-  lauf <auftrag>   Auftrag manuell triggern (kommt mit Phase 1)
-  laeufe [-n N]    letzte Läufe zeigen
-  status           Zustand des Baus zeigen
+  init <pfad>           leeren Bau anlegen (nicht-destruktiv, idempotent)
+  daemon                Daemon starten (Trigger + opencode-Server)
+  lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
+                        auslösende Datei (Bau-relativ, nur watch)
+  laeufe [-n N]         letzte Läufe zeigen
+  status                Zustand des Baus zeigen
 
 Globale Flags (vor dem Befehl):
   -bau <pfad>      Root des Baus (Default: .)
@@ -65,12 +73,15 @@ func run(args []string, out, errw io.Writer) int {
 	case "daemon":
 		return cmdDaemon(bau, errw)
 	case "lauf":
-		if len(rest) != 2 {
-			fmt.Fprintln(errw, "Aufruf: hasenbau lauf <auftrag>")
+		if len(rest) != 2 && len(rest) != 3 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau lauf <auftrag> [input]")
 			return 2
 		}
-		fmt.Fprintf(errw, "hasenbau lauf %q: noch nicht umgesetzt — kommt mit Phase 1 (Auftrags-Parser + Runner).\n", rest[1])
-		return 1
+		input := ""
+		if len(rest) == 3 {
+			input = rest[2]
+		}
+		return cmdLauf(bau, rest[1], input, errw)
 	case "laeufe":
 		return cmdLaeufe(bau, rest[1:], out, errw)
 	case "status":
@@ -103,17 +114,60 @@ func dbPath(bau string) string {
 	return filepath.Join(bau, "state", "hasenbau.db")
 }
 
-func cmdDaemon(bau string, errw io.Writer) int {
+// ladeUndGeneriere lädt die Aufträge und schreibt die generierten
+// Agenten (§6: beim Laden der Definitionen, nicht pro Lauf). Läuft vor
+// dem Server-Start — dispose braucht es hier deshalb nicht.
+func ladeUndGeneriere(root string) ([]*auftrag.Auftrag, error) {
+	auftraege, err := auftrag.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range auftraege {
+		t, err := hase.Lade(root, a.Hase)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := hase.SchreibeAgent(root, a, t); err != nil {
+			return nil, err
+		}
+	}
+	return auftraege, nil
+}
+
+// warteAufServer blockiert, bis der Supervisor eine BaseURL meldet —
+// Trigger werden erst danach scharf.
+func warteAufServer(ctx context.Context, sup *supervisor.Supervisor, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if sup.BaseURL() != "" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("hasenbau daemon: opencode-Server kam nicht hoch")
+}
+
+func cmdDaemon(root string, errw io.Writer) int {
 	logger := log.New(errw, "", log.LstdFlags)
 
-	st, err := store.Open(dbPath(bau))
+	st, err := store.Open(dbPath(root))
 	if err != nil {
 		logger.Print(err)
 		return 1
 	}
 	defer st.Close()
 
-	sup, err := supervisor.New(supervisor.Config{BauDir: bau, Logf: logger.Printf})
+	auftraege, err := ladeUndGeneriere(root)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+
+	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -122,14 +176,110 @@ func cmdDaemon(bau string, errw io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger.Printf("hasenbau daemon: Bau %s", bau)
-	err = sup.Run(ctx)
+	logger.Printf("hasenbau daemon: Bau %s, %d Aufträge", root, len(auftraege))
+	supFertig := make(chan error, 1)
+	go func() { supFertig <- sup.Run(ctx) }()
+
+	if err := warteAufServer(ctx, sup, 60*time.Second); err != nil {
+		logger.Print(err)
+		stop()
+		<-supFertig
+		return 1
+	}
+
+	funnel := opencode.NewFunnel(sup.BaseURL, logger.Printf)
+	funnel.Start(ctx)
+	r := &runner.Runner{Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf}
+	sperre := lauf.NeueSperre()
+
+	sched, err := scheduler.New(auftraege, sperre, func(a *auftrag.Auftrag) {
+		if err := r.FuehreAus(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
+			logger.Printf("scheduler: %v", err)
+		}
+	}, logger.Printf)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	w, err := watcher.New(root, auftraege, sperre, st, func(a *auftrag.Auftrag, input string) error {
+		return r.FuehreAus(ctx, a, "watch", input)
+	}, logger.Printf)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+
+	sched.Start()
+	if err := w.Start(ctx); err != nil {
+		logger.Print(err)
+		stop()
+		sched.Stop()
+		<-supFertig
+		return 1
+	}
+
+	err = <-supFertig
+	w.Stop()
+	sched.Stop()
 	if ctx.Err() != nil {
 		logger.Print("hasenbau daemon: sauber beendet")
 		return 0
 	}
 	logger.Printf("hasenbau daemon: %v", err)
 	return 1
+}
+
+// cmdLauf triggert einen Auftrag manuell: eigener Server hoch, Lauf
+// ausführen, Server runter. Kein Konflikt mit einem laufenden Daemon —
+// beide binden eigene Ports; die DB teilt SQLite im WAL-Modus.
+func cmdLauf(root, name, input string, errw io.Writer) int {
+	logger := log.New(errw, "", log.LstdFlags)
+
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	defer st.Close()
+
+	auftraege, err := ladeUndGeneriere(root)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	var ziel *auftrag.Auftrag
+	for _, a := range auftraege {
+		if a.Name == name {
+			ziel = a
+		}
+	}
+	if ziel == nil {
+		fmt.Fprintf(errw, "hasenbau lauf: unbekannter Auftrag %q\n", name)
+		return 1
+	}
+
+	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := sup.Start(ctx); err != nil {
+		logger.Print(err)
+		return 1
+	}
+	defer sup.Stop()
+
+	funnel := opencode.NewFunnel(sup.BaseURL, logger.Printf)
+	funnel.Start(ctx)
+	r := &runner.Runner{Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf}
+
+	if err := r.FuehreAus(ctx, ziel, "manuell", input); err != nil {
+		logger.Print(err)
+		return 1
+	}
+	return 0
 }
 
 func cmdLaeufe(bau string, args []string, out, errw io.Writer) int {

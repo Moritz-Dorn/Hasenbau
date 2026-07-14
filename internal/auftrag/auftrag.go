@@ -26,7 +26,6 @@ type Auftrag struct {
 	Trigger Trigger
 	Gaenge  []Gang
 	Hase    string            // Name des Templates in hasen/
-	CWD     string            // Bau-relativ; leer = Bau-Root
 	Raeume  map[string]string // Rolle → Bau-relativer Pfad
 	Kontext []Kontext
 	Nachher []Nachher
@@ -99,7 +98,7 @@ type kopfdaten struct {
 		Timeout dauer  `yaml:"timeout"`
 	} `yaml:"gaenge"`
 	Hase    string            `yaml:"hase"`
-	CWD     string            `yaml:"cwd"`
+	CWD     string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
 	Raeume  map[string]string `yaml:"raeume"`
 	Kontext []struct {
 		Datei           string `yaml:"datei"`
@@ -134,7 +133,6 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	a := &Auftrag{
 		Name:   name,
 		Hase:   fm.Hase,
-		CWD:    fm.CWD,
 		Raeume: fm.Raeume,
 		Body:   strings.TrimSpace(body),
 	}
@@ -174,10 +172,12 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		return nil, fehler("ungültiger Hasen-Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", a.Hase)
 	}
 
-	if a.CWD != "" {
-		if err := BauRelativ(a.CWD); err != nil {
-			return nil, fehler("cwd: %v", err)
-		}
+	// Sessions ankern immer am Bau-Root: Räume dürfen eigene Git-Repos
+	// sein, und ein CWD in einem Raum verschöbe den Worktree-Anker der
+	// Permissions dorthin (§4, §11.5). Deshalb ist cwd: kein stilles
+	// No-op, sondern ein Ladefehler.
+	if fm.CWD != "" {
+		return nil, fehler("cwd wird nicht unterstützt — Sessions ankern immer am Bau-Root (PLAN.md §4)")
 	}
 
 	for rolle, pfad := range a.Raeume {

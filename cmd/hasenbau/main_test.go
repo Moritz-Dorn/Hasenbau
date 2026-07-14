@@ -23,13 +23,15 @@ func TestUnbekannterBefehlUndUsage(t *testing.T) {
 	}
 }
 
-func TestLaufIstPhase1Stub(t *testing.T) {
+func TestLaufUnbekannterAuftrag(t *testing.T) {
+	// Leerer Bau: der Auftrag existiert nicht — sauberer Fehler, bevor
+	// irgendein Server gestartet wird.
 	var out, errw strings.Builder
-	if code := run([]string{"lauf", "pdf-einlagern"}, &out, &errw); code != 1 {
+	if code := run([]string{"-bau", t.TempDir(), "lauf", "pdf-einlagern"}, &out, &errw); code != 1 {
 		t.Errorf("exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "Phase 1") {
-		t.Errorf("Stub-Hinweis fehlt: %q", errw.String())
+	if !strings.Contains(errw.String(), "unbekannter Auftrag") {
+		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
 	}
 }
 
@@ -44,8 +46,7 @@ func TestLaeufeUndStatus(t *testing.T) {
 		t.Errorf("Leer-Ausgabe: %q", out.String())
 	}
 
-	// Einen Lauf direkt einfügen — die Schreib-API kommt mit dem
-	// Gang-/Hase-Runner (Phase 1), hier zählt nur der Lesepfad.
+	// Einen Lauf direkt einfügen — hier zählt nur der Lesepfad.
 	seed(t, filepath.Join(bau, "state", "hasenbau.db"))
 
 	out.Reset()
