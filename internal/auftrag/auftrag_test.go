@@ -26,6 +26,7 @@ raeume:
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
+  quarantaene: raeume/quarantaene/
 
 kontext:
   - datei: $WORK/extrakt.md
@@ -65,7 +66,7 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	if a.Hase != "archivar" {
 		t.Errorf("Hase = %q", a.Hase)
 	}
-	if len(a.Raeume) != 4 || a.Raeume["out"] != "raeume/lager/" {
+	if len(a.Raeume) != 5 || a.Raeume["out"] != "raeume/lager/" || a.Raeume["quarantaene"] != "raeume/quarantaene/" {
 		t.Errorf("Raeume = %+v", a.Raeume)
 	}
 	if len(a.Kontext) != 2 || a.Kontext[0].Datei != "$WORK/extrakt.md" || a.Kontext[1].LetzteSummaries != 3 {

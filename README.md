@@ -4,7 +4,10 @@ Ein Daemon, der [opencode](https://opencode.ai) headless orchestriert:
 zeitgesteuerte und dateigetriggerte Agenten-Aufträge mit deterministischer
 Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 
-**Status: frühe Entwicklung** (Phase 0 — Fundament). `PLAN.md` ist der Spec.
+**Status: Phase 0 (Fundament) und Phase 1 (Aufträge) sind fertig** —
+der Referenz-Auftrag `pdf-einlagern` läuft Ende-zu-Ende (siehe
+[`beispiele/`](beispiele/)). In Arbeit: Phase 2 (Verdichtung und
+Rückkanal); `hasenbau graben` existiert bereits. `PLAN.md` ist der Spec.
 
 ## Die Idee
 
@@ -42,9 +45,26 @@ Credentials (`auth.json` via `XDG_DATA_HOME`).
 | **Bau** | Root-Verzeichnis des Systems |
 | **Raum** | Verzeichnis im Materialfluss (`laderampe/`, `lager/`, `archiv/`, `quarantaene/`) |
 | **Gang** | Deterministisches Skript, läuft vor dem Hasen |
-| **Hase** | opencode-Agent + Working Directory + Permissions |
+| **Hase** | Template in `hasen/`; daraus generiert der Daemon pro Auftrag×Hase einen opencode-Agenten — Permissions kommen aus den Räumen des Auftrags |
 | **Auftrag** | Trigger + Gänge + Hase + Räume |
 | **Lauf** | Eine Ausführung eines Auftrags |
+
+Ein „Bau" ist eine mit `hasenbau init` erzeugte Instanz — nicht dieses
+Repo. Sessions ankern immer am Bau-Root; die Hasen sehen nur die Räume
+ihres Auftrags.
+
+## Benutzen
+
+```bash
+hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config)
+hasenbau daemon            # Trigger scharf schalten (cron + watch)
+hasenbau lauf <auftrag>    # Auftrag manuell triggern
+hasenbau laeufe            # Historie
+hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau status            # Zustand des Baus
+```
+
+Der Referenz-Auftrag zum Übernehmen liegt in [`beispiele/`](beispiele/).
 
 ## Build & Test
 

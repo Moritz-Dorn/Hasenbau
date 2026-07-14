@@ -259,6 +259,7 @@ raeume:
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
+  quarantaene: raeume/quarantaene/ # Gang-Fehler ⇒ Input landet hier (§7)
 
 kontext:                           # Push: was kommt in den Prompt
   - datei: $WORK/extrakt.md
@@ -424,10 +425,13 @@ kompiliert. Bezahlt in Tokens, Latenz und Nichtdeterminismus.
 
 **Der Mechanismus:**
 
-1. Tool-Calls werden ohnehin schon aus dem Event-Stream mitgeloggt (Phase 1)
+1. Tool-Calls werden ohnehin schon aus dem Event-Stream mitgeloggt
+   ✅ *(Phase 1, Hasenbau-q4y)*
 2. `hasenbau graben <lauf-id>` zieht den Trace der Session
    (`session.messages()` → Tool-Call-Parts mit Namen und Argumenten;
-   strukturiert, kein Log-Parsing)
+   strukturiert, kein Log-Parsing) ✅ *(2026-07-14, Hasenbau-2qy:
+   `graben [-json]`, Zugriffsweg §11.3 — der Trace enthält auch die
+   reasoning-Parts, also die Absicht des Hasen)*
 3. Der **Baumeister** (ein Hase mit Schreibrecht auf `gaenge/`) bekommt den
    Trace und schreibt daraus ein Skript
 4. Der Nutzer liest das Skript und trägt es selbst in den Auftrag ein
