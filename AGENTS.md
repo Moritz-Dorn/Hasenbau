@@ -62,6 +62,10 @@ Domänen-Ebene deutsch, Infrastruktur englisch (`Store`, `Scheduler`,
 `Watcher`, `Client`, `Runner`, `Supervisor`). Keine Mischformen, kein
 `Job` statt `Auftrag`.
 
+Sprachlich strikt trennen: **Hasenbau** ist dieses Projekt/Programm,
+ein **Bau** ist eine mit `hasenbau init` erzeugte Instanz (eigenes
+Git-Repo, ohne AGENTS.md/CLAUDE.md). „Der Hasenbau" meint nie einen Bau.
+
 ## ⚠️ AGENTS.md-Leckage (PLAN.md §3)
 
 Dieses Repo baut ein System, das selbst opencode-Agents startet — und

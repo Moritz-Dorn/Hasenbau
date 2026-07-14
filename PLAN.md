@@ -173,7 +173,9 @@ nachvollziehen, In-place-Transformationen) — fürs Bau-Repo unsichtbar
 und für die Permissions egal, solange Sessions am Server-CWD (= Bau-Root)
 hängen. Der Runner darf Sessions deshalb nie mit einem Verzeichnis
 innerhalb eines Raums anlegen, sonst verschöbe sich der Worktree-Anker
-auf das Raum-Repo (Notiz an Hasenbau-q4y).
+auf das Raum-Repo. **Entschieden (2026-07-14, Hasenbau-q4y):** Sessions
+ankern immer am Bau-Root; das Auftragsformat kennt kein `cwd:` — der
+Parser lehnt es mit klarer Meldung ab, kein stilles No-op.
 
 ---
 
@@ -245,7 +247,6 @@ gaenge:                            # deterministisch, läuft VOR dem Hasen
     timeout: 120s
 
 hase: archivar                     # → Template hasen/archivar.md
-cwd: raeume/laderampe/
 
 raeume:
   input: raeume/laderampe/sources/
@@ -321,6 +322,20 @@ Generierungsregel (deterministisch):
 5. opencode-Session anlegen, Hase als Agent, Prompt schicken, Event-Stream mitlesen
 6. `nachher:`-Schritte ausführen
 7. Lauf in DB schreiben, `$WORK` aufräumen (oder bei Fehler behalten)
+
+**Schritt 5 im Detail (entschieden 2026-07-14, Hasenbau-q4y):** Der
+Prompt läuft asynchron; die Wahrheitsquelle für das Lauf-Ende ist der
+Event-Stream — der Daemon hält *ein* SSE-Abo (`GET /event`, Funnel)
+und verteilt die Ereignisse pro Session an die Läufe. Fertig ist der
+Lauf bei `session.idle` oder wenn der synchrone Call sauber zurückkommt
+(was zuerst eintritt); der synchrone Call allein ist kein Endekriterium,
+er riss im Spike bei langen Läufen ab. Danach liefert `Session.Messages`
+Summary (letzte Assistant-Message, bis der MCP-Rückkanal sie ersetzt),
+Tokens und Kosten. Zwei Invarianten dazu: der Daemon weiß jederzeit,
+wie viele Läufe aktiv sind (Registry im Runner), und `instance/dispose`
+(Agent-Reload, §11.6) läuft nie parallel zu einem Lauf — neue Läufe
+warten, solange dispose läuft, und umgekehrt. So entstehen keine
+dangling Sessions durch weggeworfene Instanz-Caches.
 
 ---
 
