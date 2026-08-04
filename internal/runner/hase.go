@@ -12,7 +12,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -256,8 +255,10 @@ warten:
 }
 
 // werteAus zieht Summary, Tokens und Kosten aus den Session-Messages.
-// Die Summary ist der Text der letzten Assistant-Message — bis der
-// MCP-Rückkanal (Phase 2) sie strukturiert liefert (§5).
+// Die Summary hier ist nur der Fallback — der Text der letzten
+// Assistant-Message. Hat der Hase seine Summary über den Rückkanal
+// geschrieben, gewinnt sie (§5, §8 Phase 2). In eine Zeile presst sie
+// der Store, der die Invariante hält.
 func werteAus(msgs []sdk.SessionMessagesResponse) (summary string, tokensIn, tokensOut, kostenCent int64) {
 	var kosten float64
 	for _, m := range msgs {
@@ -269,19 +270,8 @@ func werteAus(msgs []sdk.SessionMessagesResponse) (summary string, tokensIn, tok
 		tokensOut += int64(am.Tokens.Output)
 		kosten += am.Cost
 		if text := opencode.AnswerText(m.Parts); text != "" {
-			summary = einzeilig(text)
+			summary = text
 		}
 	}
 	return summary, tokensIn, tokensOut, int64(math.Round(kosten * 100))
-}
-
-// einzeilig presst einen Text in eine Summary-Zeile (§5: „eine Zeile:
-// was ist passiert") und kappt Ausschweifungen.
-func einzeilig(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	const max = 500
-	if runen := []rune(s); len(runen) > max {
-		return string(runen[:max]) + "…"
-	}
-	return s
 }

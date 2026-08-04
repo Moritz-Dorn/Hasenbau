@@ -210,12 +210,28 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 		}
 	}
 	b.WriteString("---\n")
-	// Injektionspunkt: hier gibt das Framework später allen Hasen
-	// Prompts/Tools mit (Telemetrie an den Supervisor, Phase ≥ 2).
 	b.WriteString(t.Prompt)
 	b.WriteString("\n")
+	// Injektionspunkt: was das Framework jedem Hasen mitgibt,
+	// unabhängig vom Template. Bisher nur der Rückkanal.
+	b.WriteString(rueckkanalPrompt)
 	return []byte(b.String()), nil
 }
+
+// rueckkanalPrompt hängt an jeden generierten Agenten. Ohne diesen
+// Absatz ruft kein Hase die Werkzeuge auf, und die Summary bliebe für
+// immer die geratene letzte Assistant-Message (PLAN.md §5, §8 Phase 2).
+const rueckkanalPrompt = `
+## Rückkanal
+
+Melde am Ende deines Laufs mit ` + "`hasenbau_summary`" + ` in einer Zeile, was du
+getan hast. Der nächste Lauf desselben Auftrags bekommt diese Zeile als
+Kontext — schreib sie für dein künftiges Ich, nicht als Höflichkeit.
+Sie ersetzt keine Ausgabe in deinen Raum.
+
+Was dir unterwegs auffällt und später jemanden interessieren könnte,
+aber nicht in die eine Zeile passt, gehört in ` + "`hasenbau_notiz`" + `.
+`
 
 // SchreibeAgent generiert und schreibt den Agenten in den Bau.
 // Zurück kommt der Bau-relative Pfad der Datei.

@@ -1,7 +1,8 @@
 // Package store persistiert, was der Hasenbau tut: Läufe,
-// Auftrags-Zustand und den Idempotenz-Backstop (PLAN.md §5). SQLite im
-// WAL-Modus, pure Go (modernc.org/sqlite, kein cgo). Bewusst klein —
-// drei Tabellen, nicht dreißig. Nicht verwechseln mit Beads (§9):
+// Auftrags-Zustand, Notizen der Hasen und den Idempotenz-Backstop
+// (PLAN.md §5). SQLite im WAL-Modus, pure Go (modernc.org/sqlite,
+// kein cgo). Bewusst klein —
+// vier Tabellen, nicht dreißig. Nicht verwechseln mit Beads (§9):
 // Beads trackt, wie der Hasenbau gebaut wird.
 package store
 
@@ -52,6 +53,18 @@ var migrations = [][]string{
 			gesehen_am    TIMESTAMP NOT NULL,
 			PRIMARY KEY (auftrag, quelle_hash)
 		)`,
+	},
+	{
+		// Notizen des Hasen über den Rückkanal (§8, Phase 2). Anders als
+		// die Summary (eine Zeile pro Lauf, in laeufe) beliebig viele
+		// pro Lauf — deshalb eine eigene Tabelle statt einer Spalte.
+		`CREATE TABLE notizen (
+			id            INTEGER PRIMARY KEY,
+			lauf          INTEGER NOT NULL REFERENCES laeufe(id),
+			geschrieben   TIMESTAMP NOT NULL,
+			text          TEXT NOT NULL
+		)`,
+		`CREATE INDEX idx_notizen_lauf ON notizen(lauf, id)`,
 	},
 }
 

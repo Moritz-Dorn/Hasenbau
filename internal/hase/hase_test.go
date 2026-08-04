@@ -79,6 +79,10 @@ func TestLadeUndGeneriere(t *testing.T) {
 		"external_directory: deny",
 		`"*.env": deny`,
 		"Du bist der Archivar.",
+		// Der Rückkanal hängt hinter dem Template-Prompt (§8, Phase 2).
+		"## Rückkanal",
+		"`hasenbau_summary`",
+		"`hasenbau_notiz`",
 	}
 	pos := -1
 	for _, e := range erwartet {

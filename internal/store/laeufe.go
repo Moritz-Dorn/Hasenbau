@@ -76,6 +76,10 @@ type LaufErgebnis struct {
 // LaufBeende schreibt den Endzustand und pflegt auftrag_state:
 // ok setzt letzter_ok und die Fehlerserie zurück, alles andere zählt
 // sie hoch.
+//
+// e.Summary ist nur der Fallback (letzte Assistant-Message): hat der
+// Hase seine Summary schon über den Rückkanal geschrieben, bleibt sie
+// stehen (§5, §8 Phase 2).
 func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
 	switch e.Status {
 	case "ok", "fehler", "abgebrochen":
@@ -94,10 +98,11 @@ func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
 	}
 	now := time.Now().UTC()
 	if _, err := tx.Exec(
-		`UPDATE laeufe SET beendet = ?, status = ?, session_id = ?, summary = ?,
+		`UPDATE laeufe SET beendet = ?, status = ?, session_id = ?,
+		        summary = CASE WHEN summary IS NULL OR summary = '' THEN ? ELSE summary END,
 		        fehler = ?, tokens_in = ?, tokens_out = ?, kosten_cent = ?
 		 WHERE id = ?`,
-		now, e.Status, e.SessionID, e.Summary, e.Fehler,
+		now, e.Status, e.SessionID, SummaryZeile(e.Summary), e.Fehler,
 		e.TokensIn, e.TokensOut, e.KostenCent, id); err != nil {
 		return fmt.Errorf("store: Lauf %d beenden: %w", id, err)
 	}

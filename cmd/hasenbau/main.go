@@ -24,6 +24,7 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 	"github.com/Moritz-Dorn/Hasenbau/internal/opencode"
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
+	"github.com/Moritz-Dorn/Hasenbau/internal/rueckkanal"
 	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
 	"github.com/Moritz-Dorn/Hasenbau/internal/scheduler"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -42,6 +43,8 @@ Befehle:
   graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
+  mcp                   Rückkanal über stdio bedienen (startet opencode
+                        selbst; nicht von Hand aufrufen)
 
 Globale Flags (vor dem Befehl):
   -bau <pfad>      Root des Baus (Default: .)
@@ -97,6 +100,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":
 		return cmdStatus(bau, out, errw)
+	case "mcp":
+		return cmdMCP(bau, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau: unbekannter Befehl %q\n\n%s", rest[0], usage)
 		return 2
@@ -124,6 +129,46 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 // dbPath ist die Konvention aus PLAN.md §4: state/hasenbau.db im Bau.
 func dbPath(bau string) string {
 	return filepath.Join(bau, "state", "hasenbau.db")
+}
+
+// version meldet der Rückkanal seinen Clients. Der Hasenbau kennt noch
+// keine Releases — sobald es welche gibt, gehört sie hierher.
+const version = "dev"
+
+// cmdMCP bedient den Rückkanal über stdio (PLAN.md §8, Phase 2).
+// Aufrufer ist opencode, nicht der Mensch: stdout gehört dem Protokoll,
+// alles Erklärende geht nach stderr.
+func cmdMCP(root string, errw io.Writer) int {
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	defer st.Close()
+
+	if err := rueckkanal.Bediene(st, version); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	return 0
+}
+
+// rueckkanalEintragen hält den mcp:-Eintrag der Bau-Config auf dem
+// laufenden Binary. Muss vor dem Server-Start passieren — opencode
+// liest die Config beim Hochfahren.
+func rueckkanalEintragen(root string, logf func(string, ...any)) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("hasenbau: eigenen Pfad bestimmen: %w", err)
+	}
+	geschrieben, err := bau.MCPSicherstellen(root, exe)
+	if err != nil {
+		return err
+	}
+	if geschrieben {
+		logf("Rückkanal in %s eingetragen (%s)", bau.OpencodeConfig, exe)
+	}
+	return nil
 }
 
 // ladeUndGeneriere lädt die Aufträge und schreibt die generierten
@@ -175,6 +220,10 @@ func cmdDaemon(root string, errw io.Writer) int {
 
 	auftraege, err := ladeUndGeneriere(root)
 	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	if err := rueckkanalEintragen(root, logger.Printf); err != nil {
 		logger.Print(err)
 		return 1
 	}
@@ -309,6 +358,20 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 		return 0
 	}
 	fmt.Fprintf(out, "# Trace Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
+	// Notizen aus dem Rückkanal zuerst: was der Hase selbst für
+	// erwähnenswert hielt, ordnet den Trace darunter ein.
+	notizen, err := st.Notizen(l.ID)
+	if err != nil {
+		logger.Print(err)
+		return 1
+	}
+	if len(notizen) > 0 {
+		fmt.Fprint(out, "## Notizen des Hasen\n\n")
+		for _, n := range notizen {
+			fmt.Fprintf(out, "- %s — %s\n", n.Geschrieben.Local().Format("15:04:05"), n.Text)
+		}
+		fmt.Fprintln(out)
+	}
 	fmt.Fprint(out, trace.Markdown())
 	return 0
 }
@@ -409,6 +472,10 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 	}
 	if ziel == nil {
 		fmt.Fprintf(errw, "hasenbau lauf: unbekannter Auftrag %q\n", name)
+		return 1
+	}
+	if err := rueckkanalEintragen(root, logger.Printf); err != nil {
+		logger.Print(err)
 		return 1
 	}
 

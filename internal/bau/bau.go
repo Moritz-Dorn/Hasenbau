@@ -28,6 +28,12 @@ const opencodeJSON = `{
 }
 `
 
+// MCPEintrag ist der Schlüssel des Rückkanals im mcp:-Block der
+// Bau-Config (PLAN.md §8, Phase 2). opencode stellt ihn den Werkzeugen
+// voran — der Hase sieht `hasenbau_notiz` und `hasenbau_summary`
+// (verifiziert an einem echten Lauf, opencode 1.15.13).
+const MCPEintrag = "hasenbau"
+
 const hasenbauYAML = `# Hasenbau — Daemon-Config (PLAN.md §4).
 # Die Felder wachsen mit den Phasen; Unbekanntes wird abgelehnt.
 log_level: info
