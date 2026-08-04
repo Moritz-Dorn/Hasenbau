@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+// OpencodeConfig ist der Ort der Bau-eigenen Server-Config, Bau-relativ
+// (§3: XDG_CONFIG_HOME zeigt auf .opencode-home/, opencode sucht darin
+// sein opencode/-Unterverzeichnis).
+const OpencodeConfig = ".opencode-home/opencode/opencode.json"
+
 // opencodeJSON ist die minimale, explizite Server-Config (§3): keine
 // Plugins, kein Erbe der Alltags-Config. Der provider:-Block ist das
 // Gerüst für eigene Definitionen — auth.json teilt nur Credentials,
@@ -52,7 +57,7 @@ var dirs = []string{
 var files = map[string]string{
 	"hasenbau.yaml": hasenbauYAML,
 	".gitignore":    gitIgnore,
-	".opencode-home/opencode/opencode.json": opencodeJSON,
+	OpencodeConfig:  opencodeJSON,
 }
 
 // Init legt das Layout unter root an. Vorhandenes bleibt unangetastet;

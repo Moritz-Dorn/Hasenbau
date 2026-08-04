@@ -2,6 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,5 +136,104 @@ func seed(t *testing.T, dbFile string) {
 		INSERT INTO auftrag_state (auftrag, letzter_lauf, letzter_ok, fehler_serie)
 		VALUES ('pdf-einlagern', datetime('now'), datetime('now'), 0)`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// baueProviderBau legt einen Bau mit Gerüst-Config und eine geteilte
+// auth.json an; der Endpoint zeigt auf einen Test-Server.
+func baueProviderBau(t *testing.T, endpoint string) string {
+	t.Helper()
+	root := t.TempDir()
+	conf := filepath.Join(root, ".opencode-home", "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(conf), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inhalt := `{"plugin":[],"provider":{"scc":{"npm":"@ai-sdk/openai-compatible",` +
+		`"options":{"baseURL":"` + endpoint + `"},"models":{"alt":{"name":"Alt"}}}}}`
+	if err := os.WriteFile(conf, []byte(inhalt), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	daten := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", daten)
+	if err := os.MkdirAll(filepath.Join(daten, "opencode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(daten, "opencode", "auth.json"),
+		[]byte(`{"scc":{"type":"api","key":"k"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestProviderFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"neu","name":"Neu","connection_type":"local"}]}`))
+	}))
+	defer srv.Close()
+	root := baueProviderBau(t, srv.URL)
+	conf := filepath.Join(root, ".opencode-home", "opencode", "opencode.json")
+	vorher, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ohne Bestätigung wird nichts geschrieben.
+	var out, errw strings.Builder
+	if code := cmdProvider(root, []string{"fetch", "scc"}, strings.NewReader("n\n"), &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "+ neu") || !strings.Contains(out.String(), "- alt") {
+		t.Errorf("Diff fehlt: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "local") {
+		t.Errorf("connection_type gehört in den Diff: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "abgebrochen") {
+		t.Errorf("Abbruch nicht gemeldet: %q", out.String())
+	}
+	nachher, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(vorher) != string(nachher) {
+		t.Errorf("ohne Bestätigung geschrieben:\n%s", nachher)
+	}
+
+	// Mit -yes schreiben, danach ist der Bau auf Stand.
+	out.Reset()
+	if code := cmdProvider(root, []string{"fetch", "-yes", "scc"}, strings.NewReader(""), &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "geschrieben") {
+		t.Errorf("Schreiben nicht gemeldet: %q", out.String())
+	}
+	b, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"neu"`) || strings.Contains(string(b), `"alt"`) {
+		t.Errorf("models nicht gespiegelt:\n%s", b)
+	}
+
+	out.Reset()
+	if code := cmdProvider(root, []string{"fetch", "scc"}, strings.NewReader(""), &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "auf Stand") {
+		t.Errorf("zweiter Lauf ist nicht idempotent: %q", out.String())
+	}
+}
+
+func TestProviderAufrufFehler(t *testing.T) {
+	var out, errw strings.Builder
+	for _, args := range [][]string{nil, {"sync", "scc"}, {"fetch"}, {"fetch", "a", "b"}} {
+		errw.Reset()
+		if code := cmdProvider(t.TempDir(), args, strings.NewReader(""), &out, &errw); code != 2 {
+			t.Errorf("%v: exit %d, erwartet 2", args, code)
+		}
+		if !strings.Contains(errw.String(), "provider fetch") {
+			t.Errorf("%v: Aufruf-Hinweis fehlt: %q", args, errw.String())
+		}
 	}
 }

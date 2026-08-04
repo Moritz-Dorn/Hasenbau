@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 	"github.com/Moritz-Dorn/Hasenbau/internal/opencode"
+	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
 	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
 	"github.com/Moritz-Dorn/Hasenbau/internal/scheduler"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -37,6 +40,7 @@ Befehle:
                         auslösende Datei (Bau-relativ, nur watch)
   laeufe [-n N]         letzte Läufe zeigen
   graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
+  provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
 
 Globale Flags (vor dem Befehl):
@@ -89,6 +93,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdLaeufe(bau, rest[1:], out, errw)
 	case "graben":
 		return cmdGraben(bau, rest[1:], out, errw)
+	case "provider":
+		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":
 		return cmdStatus(bau, out, errw)
 	default:
@@ -109,7 +115,8 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	if len(created) == 0 {
 		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
 	} else {
-		fmt.Fprintln(out, "Hinweis: custom Provider brauchen ihre Definition im provider:-Block von .opencode-home/opencode/opencode.json — auth.json teilt nur Credentials (PLAN.md §3).")
+		fmt.Fprintln(out, "Hinweis: custom Provider brauchen ihr Gerüst (npm, options.baseURL) im provider:-Block von .opencode-home/opencode/opencode.json — auth.json teilt nur Credentials (PLAN.md §3).")
+		fmt.Fprintln(out, "Die Modell-Liste holt danach `hasenbau provider fetch <provider-id>`.")
 	}
 	return 0
 }
@@ -303,6 +310,76 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	}
 	fmt.Fprintf(out, "# Trace Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
 	fmt.Fprint(out, trace.Markdown())
+	return 0
+}
+
+// cmdProvider hält die Modell-Liste eines custom Providers aktuell
+// (PLAN.md §3, Hasenbau-op3.1). Nur auf Zuruf: der Daemon ruft das nie
+// von selbst, sonst wäre die Isolation still unterlaufen.
+func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) int {
+	if len(args) == 0 || args[0] != "fetch" {
+		fmt.Fprintln(errw, "Aufruf: hasenbau provider fetch [-yes] <provider-id>")
+		return 2
+	}
+	fs := flag.NewFlagSet("provider fetch", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	ja := fs.Bool("yes", false, "ohne Rückfrage schreiben")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau provider fetch [-yes] <provider-id>")
+		return 2
+	}
+	id := fs.Arg(0)
+
+	conf, err := provider.LadeConfig(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	baseURL, err := conf.BaseURL(id)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	key, err := provider.Schluessel(id)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	modelle, err := provider.Hole(ctx, baseURL, key)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+
+	fmt.Fprintf(out, "%s: %d Modelle von %s\n\n", id, len(modelle), baseURL)
+	ae := conf.Merge(id, modelle)
+	if ae.Leer() {
+		fmt.Fprintln(out, "Bau-Config ist auf Stand, nichts zu tun")
+		return 0
+	}
+	fmt.Fprint(out, ae.Bericht())
+
+	if !*ja {
+		fmt.Fprintf(out, "\n%s schreiben? [j/N] ", conf.Pfad)
+		antwort, _ := bufio.NewReader(in).ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(antwort)) {
+		case "j", "ja", "y", "yes":
+		default:
+			fmt.Fprintln(out, "abgebrochen, nichts geschrieben")
+			return 0
+		}
+	}
+	if err := conf.Schreibe(); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	fmt.Fprintf(out, "geschrieben: %s\n", conf.Pfad)
 	return 0
 }
 

@@ -1,0 +1,348 @@
+// Package provider hält die Modell-Liste eines custom Providers in der
+// Bau-Config aktuell (PLAN.md §3, Hasenbau-op3.1).
+//
+// Quelle ist der Provider selbst — sein OpenAI-kompatibler
+// /models-Endpoint —, nicht die Alltags-Config des Nutzers: die ist
+// ebenfalls nur ein handgepflegter Schnappschuss und driftet genauso.
+// Der Schlüssel kommt aus der geteilten auth.json und landet nie in der
+// Bau-Config.
+//
+// Arbeitsteilung: Das Gerüst (npm, name, options.baseURL) ist
+// handgepflegt und Voraussetzung — ohne baseURL kein Endpoint. Gefüllt
+// wird nur models:, ergänzt nur enabled_providers.
+package provider
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
+)
+
+// Modell ist ein Eintrag der Provider-Modell-Liste. Verbindung und
+// Notiz sind Zusatz des Endpoints — sie helfen beim Lesen des Diffs
+// (was kostet Budget?), landen aber nicht in der Config: geschrieben
+// wird nur, was opencode versteht.
+type Modell struct {
+	ID         string
+	Name       string
+	Verbindung string // connection_type, z.B. "local"/"external"; "" wenn nicht gemeldet
+	Notiz      string // erste Zeile aus info.meta.description
+}
+
+// Hole fragt <baseURL>/models mit Bearer-Auth ab. Akzeptiert sowohl das
+// OpenAI-Format {"data":[…]} als auch eine nackte Liste.
+func Hole(ctx context.Context, baseURL, key string) ([]Modell, error) {
+	url := strings.TrimSuffix(baseURL, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("provider: Anfrage an %s: %w", url, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("provider: %s nicht erreichbar: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("provider: Antwort von %s lesen: %w", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("provider: %s antwortet %s: %s", url, resp.Status, kurz(string(body)))
+	}
+
+	roh, err := entpackeListe(body)
+	if err != nil {
+		return nil, fmt.Errorf("provider: Antwort von %s: %w", url, err)
+	}
+	modelle := make([]Modell, 0, len(roh))
+	for _, e := range roh {
+		if m, ok := ausEintrag(e); ok {
+			modelle = append(modelle, m)
+		}
+	}
+	if len(modelle) == 0 {
+		return nil, fmt.Errorf("provider: %s liefert keine Modelle mit id", url)
+	}
+	sort.Slice(modelle, func(i, j int) bool { return modelle[i].ID < modelle[j].ID })
+	return modelle, nil
+}
+
+func entpackeListe(body []byte) ([]map[string]any, error) {
+	var umschlag struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(body, &umschlag); err == nil && umschlag.Data != nil {
+		return umschlag.Data, nil
+	}
+	var liste []map[string]any
+	if err := json.Unmarshal(body, &liste); err != nil {
+		return nil, fmt.Errorf("weder {\"data\":[…]} noch Liste: %s", kurz(string(body)))
+	}
+	return liste, nil
+}
+
+func ausEintrag(e map[string]any) (Modell, bool) {
+	id, _ := e["id"].(string)
+	if id == "" {
+		return Modell{}, false
+	}
+	m := Modell{ID: id, Name: id}
+	if s, _ := e["name"].(string); s != "" {
+		m.Name = s
+	}
+	m.Verbindung, _ = e["connection_type"].(string)
+	if info, ok := e["info"].(map[string]any); ok {
+		if meta, ok := info["meta"].(map[string]any); ok {
+			if d, _ := meta["description"].(string); d != "" {
+				m.Notiz, _, _ = strings.Cut(d, "\n")
+			}
+		}
+	}
+	return m, true
+}
+
+func kurz(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 200 {
+		return s[:200] + "…"
+	}
+	return s
+}
+
+// Schluessel liest den API-Key eines Providers aus der auth.json, die
+// sich Bau und Alltags-opencode über XDG_DATA_HOME teilen (§3).
+func Schluessel(id string) (string, error) {
+	pfad := AuthPfad()
+	b, err := os.ReadFile(pfad)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("provider: keine auth.json unter %s — erst im Alltags-opencode anmelden (`opencode auth login`)", pfad)
+	}
+	if err != nil {
+		return "", fmt.Errorf("provider: %s lesen: %w", pfad, err)
+	}
+	var auth map[string]struct {
+		Type string `json:"type"`
+		Key  string `json:"key"`
+	}
+	if err := json.Unmarshal(b, &auth); err != nil {
+		return "", fmt.Errorf("provider: %s parsen: %w", pfad, err)
+	}
+	eintrag, ok := auth[id]
+	if !ok {
+		return "", fmt.Errorf("provider: %s hat keinen Eintrag für %q — erst im Alltags-opencode anmelden (`opencode auth login`)", pfad, id)
+	}
+	if eintrag.Key == "" {
+		return "", fmt.Errorf("provider: Eintrag für %q in %s ist type=%q ohne key — fetch kann nur API-Keys nutzen", id, pfad, eintrag.Type)
+	}
+	return eintrag.Key, nil
+}
+
+// AuthPfad ist der Ort der geteilten auth.json — dieselbe XDG-Kaskade,
+// der auch der gespawnte Server folgt (§3: XDG_DATA_HOME bleibt geerbt).
+func AuthPfad() string {
+	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
+		return filepath.Join(d, "opencode", "auth.json")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".local", "share", "opencode", "auth.json")
+	}
+	return filepath.Join(home, ".local", "share", "opencode", "auth.json")
+}
+
+// Config ist die opencode.json des Baus. Sie wird roh gehalten
+// (map[string]any, Zahlen als json.Number), damit ein Fetch nur
+// models: und enabled_providers anfasst und alles andere unverändert
+// zurückschreibt.
+type Config struct {
+	Pfad string
+	roh  map[string]any
+}
+
+// LadeConfig liest die Bau-eigene opencode.json (§4).
+func LadeConfig(root string) (*Config, error) {
+	pfad := filepath.Join(root, bau.OpencodeConfig)
+	b, err := os.ReadFile(pfad)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("provider: keine Bau-Config unter %s — `hasenbau init` läuft lassen", pfad)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("provider: %s lesen: %w", pfad, err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber() // Zahlen unverfälscht durchreichen
+	roh := map[string]any{}
+	if err := dec.Decode(&roh); err != nil {
+		return nil, fmt.Errorf("provider: %s parsen: %w", pfad, err)
+	}
+	return &Config{Pfad: pfad, roh: roh}, nil
+}
+
+// BaseURL liest options.baseURL des Providers — den Endpoint, den der
+// Fetch fragt. Fehlt er, ist der Provider entweder eingebaut (die zieht
+// opencode aus models.dev, da ist nichts zu holen) oder das Gerüst ist
+// unvollständig.
+func (c *Config) BaseURL(id string) (string, error) {
+	p, ok := c.provider()[id].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("provider: %s kennt keinen Provider %q — das Gerüst (npm, name, options.baseURL) gehört handgepflegt in den provider:-Block", c.Pfad, id)
+	}
+	opts, _ := p["options"].(map[string]any)
+	url, _ := opts["baseURL"].(string)
+	if url == "" {
+		return "", fmt.Errorf("provider: %q hat keine options.baseURL in %s — ohne Endpoint kein Fetch (PLAN.md §3)", id, c.Pfad)
+	}
+	return url, nil
+}
+
+func (c *Config) provider() map[string]any {
+	p, ok := c.roh["provider"].(map[string]any)
+	if !ok {
+		p = map[string]any{}
+		c.roh["provider"] = p
+	}
+	return p
+}
+
+// Aenderung ist das Ergebnis eines Merge: was der Endpoint gegenüber
+// der Config neu hat, was er nicht mehr kennt, was umbenannt wurde.
+type Aenderung struct {
+	Neu             []Modell
+	Weg             []string
+	Umbenannt       []Umbenennung
+	Unveraendert    int
+	EnabledErgaenzt bool
+}
+
+// Umbenennung ist ein Modell, dessen Anzeigename sich geändert hat.
+type Umbenennung struct {
+	ID  string
+	Alt string
+	Neu string
+}
+
+// Leer meldet, ob der Fetch nichts zu schreiben hätte.
+func (a Aenderung) Leer() bool {
+	return len(a.Neu) == 0 && len(a.Weg) == 0 && len(a.Umbenannt) == 0 && !a.EnabledErgaenzt
+}
+
+// Merge zieht die Modell-Liste in die Config und meldet den Unterschied.
+// Bestehende Modell-Einträge behalten ihre Zusatzfelder (z.B. limit,
+// options) — überschrieben wird nur name. Modelle, die der Endpoint
+// nicht mehr kennt, fallen raus: sie sind ein 500 mit Anlauf.
+func (c *Config) Merge(id string, modelle []Modell) Aenderung {
+	prov, ok := c.provider()[id].(map[string]any)
+	if !ok {
+		prov = map[string]any{}
+		c.provider()[id] = prov
+	}
+	alt, _ := prov["models"].(map[string]any)
+	neu := map[string]any{}
+	var ae Aenderung
+
+	for _, m := range modelle {
+		eintrag, bestand := alt[m.ID].(map[string]any)
+		if !bestand {
+			neu[m.ID] = map[string]any{"name": m.Name}
+			ae.Neu = append(ae.Neu, m)
+			continue
+		}
+		altName, _ := eintrag["name"].(string)
+		switch {
+		case altName == m.Name:
+			ae.Unveraendert++
+		default:
+			ae.Umbenannt = append(ae.Umbenannt, Umbenennung{ID: m.ID, Alt: altName, Neu: m.Name})
+		}
+		eintrag["name"] = m.Name
+		neu[m.ID] = eintrag
+	}
+	for k := range alt {
+		if _, noch := neu[k]; !noch {
+			ae.Weg = append(ae.Weg, k)
+		}
+	}
+	sort.Strings(ae.Weg)
+	prov["models"] = neu
+
+	ae.EnabledErgaenzt = c.enabledSicherstellen(id)
+	return ae
+}
+
+// enabledSicherstellen ergänzt die Provider-ID in enabled_providers —
+// ohne sie ignoriert der Server die Definition.
+func (c *Config) enabledSicherstellen(id string) bool {
+	liste, _ := c.roh["enabled_providers"].([]any)
+	for _, e := range liste {
+		if s, _ := e.(string); s == id {
+			return false
+		}
+	}
+	c.roh["enabled_providers"] = append(liste, id)
+	return true
+}
+
+// Schreibe legt die Config zurück auf die Platte. Die Schlüssel stehen
+// danach sortiert — deterministisch, damit der Bau als Git-Repo saubere
+// Diffs bekommt.
+func (c *Config) Schreibe() error {
+	b, err := json.MarshalIndent(c.roh, "", "  ")
+	if err != nil {
+		return fmt.Errorf("provider: %s serialisieren: %w", c.Pfad, err)
+	}
+	b = append(b, '\n')
+	if err := os.WriteFile(c.Pfad, b, 0o644); err != nil {
+		return fmt.Errorf("provider: %s schreiben: %w", c.Pfad, err)
+	}
+	return nil
+}
+
+// Bericht formatiert die Änderung als lesbaren Diff.
+func (a Aenderung) Bericht() string {
+	var b strings.Builder
+	for _, m := range a.Neu {
+		fmt.Fprintf(&b, "  + %s  %s\n", m.ID, zusatz(m))
+	}
+	for _, u := range a.Umbenannt {
+		fmt.Fprintf(&b, "  ~ %s  %q → %q\n", u.ID, u.Alt, u.Neu)
+	}
+	for _, id := range a.Weg {
+		fmt.Fprintf(&b, "  - %s  (Endpoint kennt es nicht mehr)\n", id)
+	}
+	if a.EnabledErgaenzt {
+		fmt.Fprintln(&b, "  + enabled_providers")
+	}
+	fmt.Fprintf(&b, "\n%d neu, %d umbenannt, %d entfernt, %d unverändert\n",
+		len(a.Neu), len(a.Umbenannt), len(a.Weg), a.Unveraendert)
+	return b.String()
+}
+
+// zusatz zeigt, was der Endpoint über das Modell verrät — Orientierung
+// beim Lesen, nicht Teil der Config. Gefiltert wird bewusst nicht:
+// welches Modell ein Hase bekommt, entscheidet der Auftrag.
+func zusatz(m Modell) string {
+	teile := []string{fmt.Sprintf("%q", m.Name)}
+	if m.Verbindung != "" {
+		teile = append(teile, m.Verbindung)
+	}
+	if m.Notiz != "" {
+		teile = append(teile, m.Notiz)
+	}
+	return kurz(strings.Join(teile, " · "))
+}
