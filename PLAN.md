@@ -205,7 +205,7 @@ Parser lehnt es mit klarer Meldung ab, kein stilles No-op.
 
 ## 5. Datenmodell
 
-SQLite, WAL-Modus. Bewusst klein — drei Tabellen, nicht dreißig.
+SQLite, WAL-Modus. Bewusst klein — vier Tabellen, nicht dreißig.
 (DuckDB wäre hier falsch: OLAP-Engine für einen OLTP-Workload aus vielen
 kleinen Writes und Punkt-Reads. Falls später Analysen über viele Läufe
 gebraucht werden, kann DuckDB direkt auf diese SQLite-Datei querien.)
@@ -248,8 +248,26 @@ CREATE TABLE gesehen (
 
 `summary` ist der Kern der Kontext-Schicht: Der nächste Lauf desselben
 Auftrags bekommt die letzten N Summaries in den Prompt. Der Hase schreibt
-sie am Ende selbst (siehe Rückkanal, Phase 2) — bis dahin extrahiert der
-Runner sie aus der letzten Assistant-Message.
+sie am Ende selbst über den Rückkanal (§8, Phase 2); ruft er das Tool
+nicht auf, extrahiert der Runner sie als Fallback aus der letzten
+Assistant-Message. Die Ein-Zeilen-Invariante hält der Store, damit sie
+für beide Wege gilt.
+
+Dazu kommt eine vierte Tabelle für den Rückkanal — die Summary ist eine
+pro Lauf und steht deshalb in `laeufe`, Notizen sind beliebig viele:
+
+```sql
+CREATE TABLE notizen (
+  id            INTEGER PRIMARY KEY,
+  lauf          INTEGER NOT NULL REFERENCES laeufe(id),
+  geschrieben   TIMESTAMP NOT NULL,
+  text          TEXT NOT NULL
+);
+CREATE INDEX idx_notizen_lauf ON notizen(lauf, id);
+```
+
+Gelesen werden sie von `hasenbau graben`: was der Hase selbst für
+erwähnenswert hielt, steht dort über dem Trace.
 
 ---
 
@@ -471,7 +489,17 @@ ist selbst eine Modell-Aufgabe und geht regelmäßig daneben.
 **Rückkanal:** Ein kleiner MCP-Server (in Go, `mark3labs/mcp-go`), der den
 Hasen die Tools `notiz(text)` und `summary(text)` gibt und damit direkt in
 die SQLite schreibt. Strukturierte Writes statt stdout-Parsing — sonst
-entsteht in drei Wochen ein Regex-Friedhof.
+entsteht in drei Wochen ein Regex-Friedhof. ✅ *(2026-08-05,
+Hasenbau-ekm: `hasenbau mcp` über stdio, von opencode gestartet;
+Eintrag `mcp.hasenbau` in der Bau-Config, den der Daemon bei jedem
+Server-Start auf das laufende Binary setzt. Der generierte Agent bringt
+den Absatz mit, der die Werkzeuge erklärt — ohne ihn ruft sie kein Hase.
+Zur Lauf-Zuordnung §11.7)*
+
+Die Summary aus dem Rückkanal gewinnt gegen den Fallback: `LaufBeende`
+überschreibt eine schon gesetzte Summary nicht. Ruft ein Hase
+`summary()` nie auf, bleibt es bei der letzten Assistant-Message — der
+Rückkanal ist ein besserer Weg, kein Zwang.
 
 ### Phase 3 — Heartbeat
 
@@ -688,3 +716,31 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
    (kein Lauf aktiv ⇒ dispose; neue Läufe warten solange). Da Agenten
    beim Laden der Definitionen generiert werden (§6), nicht pro Lauf,
    ist dispose ohnehin selten.
+7. ~~Rückkanal: Woher weiß der MCP-Server, zu welchem Lauf ein
+   `summary()` gehört?~~ **Verifiziert 2026-08-05 (opencode 1.15.13,
+   Binary + echter Lauf, Hasenbau-ekm):** **Gar nicht — opencode reicht
+   an MCP-Tools keinen Session-Kontext durch.** Der Aufruf ist
+   `callTool({name, arguments})`, sonst nichts; lokale Server werden mit
+   `cwd` = Projektverzeichnis und `env` = Server-Env + statischem
+   `environment`-Block der Config gespawnt. Die Zuordnung muss also aus
+   dem Hasenbau kommen.
+   - **Entschieden:** ein MCP-Eintrag (`mcp.hasenbau`, stdio,
+     `hasenbau -bau <root> mcp`), Ziel ist der **eindeutige** Lauf mit
+     `status='laeuft'`. Bei keinem oder mehreren aktiven Läufen
+     schreibt der Rückkanal nichts und sagt dem Hasen warum — geraten
+     wird nie, sonst landet eine Summary am falschen Lauf. Die Summary
+     geht dabei nicht verloren: der Fallback (letzte Assistant-Message)
+     trägt sie beim Lauf-Ende ein.
+   - **Bekannte Grenze:** Laufen zwei Aufträge gleichzeitig (cron +
+     watch), ist der Rückkanal für beide vorübergehend zu. Dasselbe
+     gilt nach einem Daemon-Absturz, solange verwaiste
+     `laeuft`-Zeilen in der DB stehen (Hasenbau-c6i). Verworfene
+     Alternativen: ein MCP-Eintrag pro Auftrag (exakt, aber der Daemon
+     müsste die user-eigene `opencode.json` pro Auftrag pflegen, N
+     Subprozesse, N×2 Werkzeuge in jeder Werkzeugliste plus
+     `tools:`-Filter im generierten Agenten) und die Lauf-ID im Prompt
+     (das Modell müsste sie fehlerfrei abschreiben).
+   - **Werkzeugnamen:** opencode stellt den Server-Namen voran, der
+     Hase sieht `hasenbau_notiz` und `hasenbau_summary` (intern lautet
+     der Schlüssel `hasenbau:notiz`, am Modell kommt der Unterstrich
+     an — im echten Lauf bestätigt).

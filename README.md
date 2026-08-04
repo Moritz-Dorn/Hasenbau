@@ -7,7 +7,8 @@ Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 **Status: Phase 0 (Fundament) und Phase 1 (Aufträge) sind fertig** —
 der Referenz-Auftrag `pdf-einlagern` läuft Ende-zu-Ende (siehe
 [`beispiele/`](beispiele/)). In Arbeit: Phase 2 (Verdichtung und
-Rückkanal); `hasenbau graben` existiert bereits. `PLAN.md` ist der Spec.
+Rückkanal); `hasenbau graben` und der MCP-Rückkanal existieren bereits,
+es fehlt der Baumeister-Hase. `PLAN.md` ist der Spec.
 
 ## Die Idee
 
@@ -66,6 +67,13 @@ hasenbau status            # Zustand des Baus
 ```
 
 Der Referenz-Auftrag zum Übernehmen liegt in [`beispiele/`](beispiele/).
+
+Jeder Hase bekommt zwei Werkzeuge, mit denen er selbst in die Bau-
+Datenbank schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf
+getan hat (der nächste Lauf desselben Auftrags bekommt sie als Kontext),
+und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
+`hasenbau graben`. Dahinter steckt ein MCP-Server, den opencode als
+`hasenbau mcp` startet; eingetragen wird er beim Daemon-Start selbst.
 
 Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
 die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,
