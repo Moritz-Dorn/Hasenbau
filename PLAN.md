@@ -98,11 +98,29 @@ Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der
 KIT-Provider `scc`) sind Config — ohne sie in der Bau-eigenen
 `opencode.json` quittiert der Server Prompts mit 500. Ein Bau muss den
 `provider:`-Block (und `enabled_providers`) also selbst mitbringen;
-`hasenbau init` sollte dafür ein Gerüst anlegen. Gegen die Drift zur
-Alltags-Config: `hasenbau provider sync` übernimmt die Definitionen
-explizit auf Zuruf (Diff anzeigen, dann schreiben) — **nie automatisch**
-beim Server-Start, sonst wäre die Isolation still unterlaufen. Keys
-kopiert der Sync nicht; die teilt auth.json ohnehin.
+`hasenbau init` sollte dafür ein Gerüst anlegen.
+
+Gegen die Drift der Modell-Liste: `hasenbau provider fetch <id>` holt sie
+beim Provider selbst — `GET <baseURL>/models`, Schlüssel aus der
+geteilten auth.json — und schreibt die `models:`-Map neu (Diff anzeigen,
+dann schreiben). **Nie automatisch** beim Server-Start, sonst wäre die
+Isolation still unterlaufen. Keys landen nie in der Bau-Config; die
+teilt auth.json ohnehin.
+
+Bewusst *nicht* aus der Alltags-Config kopieren: die ist selbst nur ein
+handgepflegter Schnappschuss und driftet genauso. Belegt am 2026-08-04 —
+Bau-Config und Alltags-Config des `scc`-Providers wichen gegenseitig ab
+(`mokrates`/`oktobunny` nur im Bau, `kit.deepseek-v4-flash-0731` nur im
+Alltag), während der Endpoint 35 Modelle mit `id`, `name`,
+`connection_type` und Capabilities liefert. Ein Sync würde einen
+veralteten Stand in den nächsten kopieren; der Fetch fragt die Quelle.
+
+Arbeitsteilung: Das Gerüst (`npm`, `name`, `options.baseURL`) ist
+handgepflegt und Voraussetzung des Fetch — ohne `baseURL` kein Endpoint.
+Der Fetch füllt nur `models:` und ergänzt die ID in
+`enabled_providers`. Betroffen sind ausschließlich *custom* Provider;
+eingebaute (anthropic, openai …) zieht opencode aus models.dev, da
+genügen `enabled_providers` und auth.json.
 
 > ✅ **Verifiziert (2026-07-11, opencode 1.15.13):** opencode folgt
 > `XDG_CONFIG_HOME` strikt. Test: Server mit umgebogenem

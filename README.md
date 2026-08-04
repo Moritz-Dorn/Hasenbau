@@ -61,10 +61,18 @@ hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau laeufe            # Historie
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
 hasenbau status            # Zustand des Baus
 ```
 
 Der Referenz-Auftrag zum Übernehmen liegt in [`beispiele/`](beispiele/).
+
+Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
+die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,
+`options.baseURL`) gehört handgepflegt in
+`.opencode-home/opencode/opencode.json`; die Modell-Liste hält
+`hasenbau provider fetch` am Endpoint des Providers aktuell — Diff
+anzeigen, dann auf Zuruf schreiben, nie automatisch.
 
 ## Build & Test
 
