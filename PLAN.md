@@ -703,6 +703,16 @@ Eintrag `mcp.hasenbau` in der Bau-Config. Der generierte Agent bringt
 den Absatz mit, der die Werkzeuge erklärt — ohne ihn ruft sie kein Hase.
 Zur Lauf-Zuordnung §11.7)*
 
+**Der Hinweis steht zweimal im generierten Agenten**, kurz vor dem
+Template-Prompt und ausführlich dahinter. Grund: Ein Hase mit langem
+Template, dem Hasenbau-Wissen und einem großen Kontext hat die
+Anweisung sonst irgendwo in der Mitte stehen, und dort geht sie
+verloren. Beobachtet an zwei Läufen desselben Auftrags mit demselben
+Modell und nachweislich vorhandenen Werkzeugen: einer rief
+`hasenbau_summary` auf, der andere schrieb die Meldung als Fließtext in
+seine Antwort (Hasenbau-ifg). Beide Fassungen sagen deshalb denselben
+Satz — der Aufruf ist die Abschlusshandlung, kein Text ersetzt ihn.
+
 **Der Eintrag ist eine Selbstreferenz, kein Fremdprodukt.** `hasenbau
 mcp` ist der Hasenbau selbst über stdio; `command:` benennt also nicht
 „ein Werkzeug", sondern das Binary, das diesen Bau fährt — und das

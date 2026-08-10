@@ -275,6 +275,9 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 		}
 	}
 	b.WriteString("---\n")
+	// Der Rückkanal steht zweimal: kurz hier oben, ausführlich ganz
+	// unten. Siehe rueckkanalKopf.
+	b.WriteString(rueckkanalKopf)
 	b.WriteString(t.Prompt)
 	b.WriteString("\n")
 	// Beigelegtes Wissen nach der Role: erst wer der Hase ist und was
@@ -290,19 +293,41 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-// rueckkanalPrompt hängt an jeden generierten Agenten. Ohne diesen
-// Absatz ruft kein Hase die Werkzeuge auf, und die Summary bliebe für
-// immer die geratene letzte Assistant-Message (PLAN.md §5, §8 Phase 2).
+// rueckkanalKopf und rueckkanalPrompt sind dieselbe Anweisung, einmal
+// kurz am Anfang und einmal ausführlich am Ende des generierten
+// Agenten.
+//
+// Die Doppelung ist kein Versehen. Ein Hase mit langem Template, dem
+// Hasenbau-Wissen und einem großen Kontext hat die Anweisung sonst
+// irgendwo in der Mitte stehen — und genau dort geht sie verloren.
+// Beobachtet an zwei Läufen desselben Auftrags mit demselben Modell:
+// einer rief `hasenbau_summary` auf, der andere schrieb die Meldung
+// als Fließtext in seine Antwort (Hasenbau-ifg). Beide Fassungen sagen
+// deshalb dasselbe in einem Satz: der Aufruf ist die Abschlusshandlung,
+// kein Text ersetzt ihn.
+//
+// Ohne diesen Absatz ruft kein Hase die Werkzeuge auf, und die Summary
+// bliebe für immer die geratene letzte Assistant-Message (PLAN.md §5,
+// §8 Phase 2).
+const rueckkanalKopf = `**Dein Lauf endet mit einem Werkzeug-Aufruf, nicht mit einem Satz:**
+` + "`hasenbau_summary`" + ` meldet in einer Zeile, was du getan hast. Kein Text in
+deiner Antwort ersetzt ihn — was du nicht über das Werkzeug meldest,
+kommt nicht an. Das Genauere steht unten unter „Rückkanal".
+
+`
+
 const rueckkanalPrompt = `
 ## Rückkanal
 
-Melde am Ende deines Laufs mit ` + "`hasenbau_summary`" + ` in einer Zeile, was du
-getan hast. Der nächste Lauf desselben Auftrags bekommt diese Zeile als
-Kontext — schreib sie für dein künftiges Ich, nicht als Höflichkeit.
-Sie ersetzt keine Ausgabe in deinen Raum.
+Der Lauf gilt als abgeschlossen, wenn du ` + "`hasenbau_summary`" + ` aufgerufen
+hast — das Werkzeug, nicht eine Zeile Text darüber. Gemeldet wird in
+einer Zeile, was du getan hast. Der nächste Lauf desselben Auftrags
+bekommt diese Zeile als Kontext; schreib sie für dein künftiges Ich,
+nicht als Höflichkeit. Sie ersetzt keine Ausgabe in deinen Raum.
 
 Was dir unterwegs auffällt und später jemanden interessieren könnte,
 aber nicht in die eine Zeile passt, gehört in ` + "`hasenbau_notiz`" + `.
+Auch das ist ein Aufruf, keine Überschrift in deiner Antwort.
 `
 
 // SchreibeAgent generiert und schreibt den Agenten in den Bau.

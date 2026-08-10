@@ -78,10 +78,12 @@ func TestLadeUndGeneriere(t *testing.T) {
 		"websearch: deny",
 		"external_directory: deny",
 		`"*.env": deny`,
+		// Der Rückkanal steht zweimal: kurz VOR dem Template-Prompt,
+		// ausführlich dahinter. Sonst steht er in einem langen Agenten
+		// mitten im Text und geht verloren (§8 Phase 2, Hasenbau-ifg).
+		"**Dein Lauf endet mit einem Werkzeug-Aufruf",
 		"Du bist der Archivar.",
-		// Der Rückkanal hängt hinter dem Template-Prompt (§8, Phase 2).
 		"## Rückkanal",
-		"`hasenbau_summary`",
 		"`hasenbau_notiz`",
 	}
 	pos := -1
@@ -97,6 +99,9 @@ func TestLadeUndGeneriere(t *testing.T) {
 	}
 	if !strings.Contains(text, "mode: primary") {
 		t.Error("mode: primary fehlt")
+	}
+	if n := strings.Count(text, "hasenbau_summary"); n < 2 {
+		t.Errorf("hasenbau_summary steht %dx im Agenten, erwartet mindestens 2 (Anfang und Ende)", n)
 	}
 
 	// Deterministisch: gleicher Input ⇒ gleiche Bytes.
