@@ -223,3 +223,59 @@ func TestBaumeisterOhneConfigEintrag(t *testing.T) {
 		t.Errorf("Meldung: %q", errw.String())
 	}
 }
+
+// Hasenbau-0f4: Nach einem Abbruch darf der Bericht nicht wie ein
+// Erfolg aussehen. Der Status kommt aus laeufe, nicht aus dem Verlauf
+// des Befehls.
+func TestBerichteLaufNenntDenStatusAusDerDB(t *testing.T) {
+	st, err := store.Open(dbPath(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	id, err := st.StartLauf("baumeister", "manual", "10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.EndLauf(id, store.LaufResult{
+		Status: "aborted", SessionID: "ses_x", Error: "hase: context canceled",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	reportLauf(&out, st, id)
+	for _, teil := range []string{"aborted", "context canceled", "unfertig"} {
+		if !strings.Contains(out.String(), teil) {
+			t.Errorf("Bericht nennt %q nicht: %q", teil, out.String())
+		}
+	}
+
+	// Ein geglückter Lauf bekommt keine Warnung angehängt.
+	ok, _ := st.StartLauf("baumeister", "manual", "11")
+	if err := st.EndLauf(ok, store.LaufResult{Status: "ok", SessionID: "ses_y", Summary: "nichts geschrieben"}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	reportLauf(&out, st, ok)
+	if !strings.Contains(out.String(), "ok") || strings.Contains(out.String(), "unfertig") {
+		t.Errorf("geglückter Lauf: %q", out.String())
+	}
+}
+
+// Ohne Lauf-Zeile (StartLauf schon gescheitert) schweigt der Bericht —
+// der Grund steht dann bereits weiter oben.
+func TestBerichteLaufOhneZeile(t *testing.T) {
+	st, err := store.Open(dbPath(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	var out strings.Builder
+	reportLauf(&out, st, 0)
+	if out.String() != "" {
+		t.Errorf("erwartet leer, bekam %q", out.String())
+	}
+}

@@ -49,6 +49,16 @@ type fakeOpencode struct {
 	promptDa   chan struct{} // Prompt ist eingegangen
 	mu         sync.Mutex
 	promptBody map[string]any
+
+	// fertigNachEvents lässt die Session nach dem letzten Ereignis aus
+	// /session/status verschwinden — so sieht ein Lauf aus, dessen
+	// session.idle unterwegs verloren ging (Hasenbau-0f4). Die erste
+	// Abfrage meldet trotzdem noch busy: der Runner akzeptiert das Ende
+	// erst nach einem beobachteten Übergang.
+	fertigNachEvents bool
+	eventsGesendet   bool
+	busyGemeldet     bool
+	nichtMehrBusy    bool // hart: von Anfang an nichts im Status
 }
 
 func neuerFake(t *testing.T, ereignisse []string, nachrichten string) (*fakeOpencode, *httptest.Server) {
@@ -74,7 +84,24 @@ func neuerFake(t *testing.T, ereignisse []string, nachrichten string) (*fakeOpen
 			fmt.Fprintf(w, "data: %s\n\n", e)
 			w.(http.Flusher).Flush()
 		}
+		f.mu.Lock()
+		f.eventsGesendet = true
+		f.mu.Unlock()
 		<-r.Context().Done()
+	})
+	mux.HandleFunc("GET /session/status", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		weg := f.nichtMehrBusy || (f.fertigNachEvents && f.eventsGesendet && f.busyGemeldet)
+		if !weg {
+			f.busyGemeldet = true
+		}
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if weg {
+			fmt.Fprint(w, `{}`)
+			return
+		}
+		fmt.Fprint(w, `{"ses_1":{"type":"busy"}}`)
 	})
 	mux.HandleFunc("POST /session/ses_1/message", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -147,7 +174,7 @@ func TestFuehreAusEndeUeberEventStream(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: logf,
 	}
-	if err := r.Execute(ctx, a, "manual", ""); err != nil {
+	if _, err := r.Execute(ctx, a, "manual", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +244,7 @@ func TestFuehreAusSessionError(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: t.Logf,
 	}
-	err := r.Execute(ctx, a, "manual", "")
+	_, err := r.Execute(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "UnknownError") {
 		t.Fatalf("erwartete session.error, bekam %v", err)
 	}
@@ -271,7 +298,7 @@ func TestFuehreAusPromptAbgelehnt(t *testing.T) {
 		HaseTimeout: time.Minute, Logf: t.Logf,
 	}
 	anfang := time.Now()
-	err := r.Execute(ctx, a, "manual", "")
+	_, err := r.Execute(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "prompt") {
 		t.Fatalf("erwartete Prompt-Fehler, bekam %v", err)
 	}
@@ -281,5 +308,92 @@ func TestFuehreAusPromptAbgelehnt(t *testing.T) {
 	laeufe, _ := st.RecentLaeufe(1)
 	if laeufe[0].Status != "failed" {
 		t.Errorf("Status = %q", laeufe[0].Status)
+	}
+}
+
+// Hasenbau-0f4: Der Hase ist fertig, aber session.idle ist unterwegs
+// verloren gegangen und der Prompt-Call antwortet nie. Ohne dritten
+// Zeugen hinge der Lauf bis zum HaseTimeout — hier muss ihn die
+// Statusabfrage beenden.
+func TestFuehreAusEndeUeberStatusabfrage(t *testing.T) {
+	f, srv := neuerFake(t, []string{
+		`{"type":"message.part.updated","properties":{"part":{"id":"prt_1","messageID":"msg_1","sessionID":"ses_1","type":"tool","callID":"call_1","tool":"write","state":{"status":"completed","input":{},"output":"ok","title":"write","time":{"start":1,"end":2}}}}}`,
+	}, nachrichtenOK)
+	f.fertigNachEvents = true // kein session.idle, Session verschwindet aus dem Status
+	root, a, st := bauMitAuftrag(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	var logZeilen []string
+	logf := func(format string, args ...any) {
+		mu.Lock()
+		logZeilen = append(logZeilen, fmt.Sprintf(format, args...))
+		mu.Unlock()
+	}
+
+	funnel := opencode.NewFunnel(func() string { return srv.URL }, logf)
+	funnel.Start(ctx)
+	<-f.streamDa
+
+	r := &Runner{
+		Root: root, BaseURL: func() string { return srv.URL },
+		Store: st, Funnel: funnel,
+		StatusInterval: 50 * time.Millisecond,
+		// Deutlich kürzer als der Vorgabe-Timeout: schlägt der dritte
+		// Zeuge fehl, scheitert der Test schnell statt nach 30 Minuten.
+		HaseTimeout: 15 * time.Second, Logf: logf,
+	}
+	if _, err := r.Execute(ctx, a, "manual", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	laeufe, err := st.RecentLaeufe(1)
+	if err != nil || len(laeufe) != 1 {
+		t.Fatalf("laeufe: %v, %v", laeufe, err)
+	}
+	if l := laeufe[0]; l.Status != "ok" || l.Summary != "Alles einsortiert. Fertig." {
+		t.Errorf("Lauf = %+v", l)
+	}
+
+	// Und es steht im Log, welcher Zeuge den Lauf beendet hat.
+	mu.Lock()
+	defer mu.Unlock()
+	gefunden := false
+	for _, z := range logZeilen {
+		if strings.Contains(z, "Statusabfrage") && strings.Contains(z, "fertig") {
+			gefunden = true
+		}
+	}
+	if !gefunden {
+		t.Errorf("kein Hinweis auf die Statusabfrage in %q", logZeilen)
+	}
+}
+
+// Umgekehrt darf eine Session, die noch gar nicht angelaufen ist, nicht
+// als fertig gelten: ohne beobachtetes busy zählt „nicht busy" nicht.
+func TestStatusabfrageBeendetKeinenLaufOhneBusy(t *testing.T) {
+	f, srv := neuerFake(t, nil, nachrichtenOK)
+	f.mu.Lock()
+	f.nichtMehrBusy = true // von Anfang an nichts im Status
+	f.mu.Unlock()
+	root, a, st := bauMitAuftrag(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	funnel := opencode.NewFunnel(func() string { return srv.URL }, t.Logf)
+	funnel.Start(ctx)
+	<-f.streamDa
+
+	r := &Runner{
+		Root: root, BaseURL: func() string { return srv.URL },
+		Store: st, Funnel: funnel,
+		StatusInterval: 20 * time.Millisecond,
+		HaseTimeout:    600 * time.Millisecond, Logf: t.Logf,
+	}
+	_, err := r.Execute(ctx, a, "manual", "")
+	if err == nil || !strings.Contains(err.Error(), "Zeitlimit") {
+		t.Fatalf("erwartet: Lauf läuft in den Timeout statt sich fertig zu glauben, bekam %v", err)
 	}
 }

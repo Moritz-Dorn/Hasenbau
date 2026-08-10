@@ -492,7 +492,23 @@ Event-Stream — der Daemon hält *ein* SSE-Abo (`GET /event`, Funnel)
 und verteilt die Ereignisse pro Session an die Läufe. Fertig ist der
 Lauf bei `session.idle` oder wenn der synchrone Call sauber zurückkommt
 (was zuerst eintritt); der synchrone Call allein ist kein Endekriterium,
-er riss im Spike bei langen Läufen ab. Danach liefert `Session.Messages`
+er riss im Spike bei langen Läufen ab.
+
+**Ein dritter Zeuge, weil Ereignisse verloren gehen (Hasenbau-0f4):**
+Beide bisherigen Kriterien sind flüchtig. Reißt der Stream im falschen
+Moment ab — der Funnel verbindet dann mit Backoff neu —, ist das eine
+`session.idle` für immer weg; ist zusätzlich der Prompt-Call
+abgerissen, wartet der Lauf bis zum `HaseTimeout` von 30 Minuten auf
+etwas, das längst passiert ist. Von außen sieht das aus wie ein
+Befehl, der sich nicht beenden will. Deshalb fragt der Runner
+zusätzlich `GET /session/status` im 15-Sekunden-Takt: ein *Zustand*
+lässt sich nachfragen, ein Ereignis nicht. Akzeptiert wird das Ende
+erst nach einem beobachteten Übergang `busy` → nicht mehr `busy` —
+sonst gälte eine Session, die noch gar nicht angelaufen ist, sofort
+als fertig. Welcher der drei Zeugen den Lauf beendet hat, steht im
+Log; ohne diese Zeile ist ein hängender Lauf nicht diagnostizierbar.
+
+Danach liefert `Session.Messages`
 Summary (letzte Assistant-Message, bis der MCP-Rückkanal sie ersetzt),
 Tokens und Kosten. Zwei Invarianten dazu: der Daemon weiß jederzeit,
 wie viele Läufe aktiv sind (Registry im Runner), und `instance/dispose`

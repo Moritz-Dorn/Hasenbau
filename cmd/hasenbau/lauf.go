@@ -129,7 +129,7 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
-	if err := k.Runner.Execute(k.Ctx, ziel, "manual", input); err != nil {
+	if _, err := k.Runner.Execute(k.Ctx, ziel, "manual", input); err != nil {
 		logger.Print(err)
 		return 1
 	}

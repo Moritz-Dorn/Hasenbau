@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -92,7 +93,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
+	laufID, laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
 	if laufFehler != nil {
 		logger.Print(laufFehler)
 	}
@@ -104,6 +105,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
+	reportLauf(out, k.Store, laufID)
 	neu := reportDrafts(out, raum, vorher, nachher)
 	for _, meldung := range checkDrafts(root, neu) {
 		fmt.Fprintf(out, "  %s\n", meldung)
@@ -119,6 +121,36 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// reportLauf sagt, was in laeufe steht — nicht, was hier gerade
+// durchgelaufen ist.
+//
+// Ohne das liest sich der Entwurfs-Bericht nach einem Abbruch wie ein
+// Erfolg: der Fehler steht auf stderr und weiter oben, die
+// freundlichen Zeilen über den out-Raum stehen darunter und kommen
+// zuletzt. Genau so hat ein abgebrochener Lauf ausgesehen, der in der
+// Datenbank als 'aborted' geführt wurde (Hasenbau-0f4).
+func reportLauf(w io.Writer, st *store.Store, laufID int64) {
+	if laufID == 0 {
+		return // die Zeile kam nie zustande; der Fehler steht schon oben
+	}
+	l, err := st.LaufByID(laufID)
+	if err != nil {
+		fmt.Fprintf(w, "\nLauf %d: Status nicht lesbar — %v\n", laufID, err)
+		return
+	}
+	dauer := ""
+	if l.Ended != nil {
+		dauer = fmt.Sprintf(", %s", l.Ended.Sub(l.Started).Round(time.Second))
+	}
+	fmt.Fprintf(w, "\nLauf %d: %s%s\n", l.ID, l.Status, dauer)
+	if l.Error != "" {
+		fmt.Fprintf(w, "  %s\n", l.Error)
+	}
+	if l.Status != "ok" {
+		fmt.Fprintf(w, "  Was unten steht, ist deshalb womöglich unfertig.\n")
+	}
 }
 
 // targetLauf löst das Argument auf: reine Ziffern sind eine Lauf-ID,

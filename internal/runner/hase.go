@@ -9,6 +9,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -35,6 +36,19 @@ type LaufStore interface {
 	WriteTrace(lauf int64, sessionID string, roh []byte) error
 }
 
+// statusInterval ist der Vorgabe-Takt, in dem der Runner den Zustand
+// der Session nachfragt, während er auf das Lauf-Ende wartet. Kurz
+// genug, dass ein verlorenes idle Sekunden statt einer halben Stunde
+// kostet; lang genug, dass die Abfrage neben einem LLM-Call nicht ins
+// Gewicht fällt (Hasenbau-0f4).
+const statusInterval = 15 * time.Second
+
+// progressInterval ist der Abstand, in dem ein Lauf meldet, dass er
+// noch arbeitet. Lang genug, um das Log nicht zu fluten; kurz genug,
+// dass niemand die Denkpause eines Hasen für einen hängenden Prozess
+// hält.
+const progressInterval = 2 * time.Minute
+
 // traceMax ist die Kappungsgrenze pro Feld für den abgelegten Trace.
 // Ein einzelnes read-Tool kann Megabytes ausgeben; für die Verdichtung
 // zählen Werkzeug, Argumente und Status, nicht der Volltext.
@@ -49,6 +63,9 @@ type Runner struct {
 
 	// GangTimeout greift für Gänge ohne eigenes timeout; 0 = unbegrenzt.
 	GangTimeout time.Duration
+	// StatusInterval ist der Takt der Statusabfrage während eines
+	// Laufs; 0 = statusInterval. Nur Tests setzen das.
+	StatusInterval time.Duration
 	// HaseTimeout begrenzt den LLM-Schritt. 0 = 30m — ein Lauf darf
 	// lange dauern, aber nie für immer hängen (Backstop gegen verlorene
 	// idle-Events und hängende Sessions).
@@ -81,9 +98,14 @@ func (r *Runner) Dispose(ctx context.Context) error {
 // Execute ist die ExecFunc für Scheduler, Watcher und manuelle
 // Trigger. Die Overlap-Sperre hält der Aufrufer; trigger ist 'cron',
 // 'watch' oder 'manuell', input der Bau-relative Pfad der auslösenden
-// Datei (nur watch). Rückgabe nil ⇒ Lauf ok (der Watcher merkt den
+// Datei (nur watch). Fehler nil ⇒ Lauf ok (der Watcher merkt den
 // Input dann als gesehen).
-func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input string) error {
+//
+// Zurück kommt außerdem die ID der Zeile in laeufe — 0 nur, wenn schon
+// das Anlegen scheiterte. Damit kann der Aufrufer hinterher berichten,
+// was wirklich in der Datenbank steht, statt aus dem eigenen Verlauf zu
+// raten (Hasenbau-0f4).
+func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input string) (int64, error) {
 	r.laufMu.RLock()
 	defer r.laufMu.RUnlock()
 	r.aktiv.Add(1)
@@ -95,7 +117,7 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 
 	id, err := r.Store.StartLauf(a.Name, trigger, input)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	laufID := fmt.Sprintf("%s-%d", time.Now().UTC().Format("20060102-150405"), id)
 	logf("lauf %s: auftrag %s (%s) beginnt", laufID, a.Name, trigger)
@@ -120,22 +142,22 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 
 	u, err := lauf.Neue(r.Root, a, laufID, input)
 	if err != nil {
-		return scheitere(haseResult{}, err)
+		return id, scheitere(haseResult{}, err)
 	}
 	if _, err := RunGaenge(ctx, u, a, r.GangTimeout); err != nil {
-		return scheitere(haseResult{}, err)
+		return id, scheitere(haseResult{}, err)
 	}
 	prompt, err := BuildPrompt(u, a, r.Store)
 	if err != nil {
-		return scheitere(haseResult{}, err)
+		return id, scheitere(haseResult{}, err)
 	}
 
 	erg, err := r.runHase(ctx, a, laufID, prompt, logf)
 	if err != nil {
-		return scheitere(erg, err)
+		return id, scheitere(erg, err)
 	}
 	if err := RunAfter(u, a); err != nil {
-		return scheitere(erg, err)
+		return id, scheitere(erg, err)
 	}
 
 	if u.Work != "" {
@@ -146,10 +168,10 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 	erg.Status = "ok"
 	r.storeTrace(id, erg, logf)
 	if err := r.Store.EndLauf(id, erg.alsErgebnis()); err != nil {
-		return err
+		return id, err
 	}
 	logf("lauf %s: ok — %s", laufID, erg.Summary)
-	return nil
+	return id, nil
 }
 
 // haseResult sammelt, was der LLM-Schritt über sich weiß.
@@ -176,14 +198,20 @@ func (h haseResult) alsErgebnis() store.LaufResult {
 
 // runHase macht den LLM-Schritt: Session anlegen, Prompt
 // asynchron an den generierten Agenten, Event-Stream mitlesen
-// (Tool-Calls loggen), auf session.idle warten, dann die Session
-// auswerten. Fertig ist der Lauf, wenn der Stream idle meldet ODER der
-// synchrone Call sauber zurückkommt — was zuerst eintritt.
+// (Tool-Calls loggen), auf das Ende warten, dann die Session auswerten.
+//
+// Fertig ist der Lauf, wenn einer von drei Zeugen es sagt — was zuerst
+// eintritt: der Stream meldet session.idle, der synchrone Prompt-Call
+// kommt sauber zurück, oder die Statusabfrage sieht die Session nicht
+// mehr als busy. Der dritte ist der einzige, der sich nachfragen lässt
+// statt abgewartet werden zu müssen, und deshalb der einzige, der ein
+// verlorenes Ereignis überlebt (Hasenbau-0f4).
 func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt string, logf func(string, ...any)) (haseResult, error) {
 	timeout := r.HaseTimeout
 	if timeout == 0 {
 		timeout = 30 * time.Minute
 	}
+	oben := ctx // ohne Zeitlimit: unterscheidet Timeout von Strg-C
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -214,7 +242,24 @@ func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt
 		promptFehler <- err
 	}()
 
+	// Dritter Zeuge: der abfragbare Zustand der Session. Der Stream
+	// meldet das Ende nur einmal — wer den Moment verpasst, wartet
+	// sonst bis zum Timeout auf etwas, das längst passiert ist
+	// (Hasenbau-0f4). Akzeptiert wird das Urteil erst nach einem
+	// beobachteten Übergang busy → nicht mehr busy; sonst gälte eine
+	// Session, die noch gar nicht angelaufen ist, als fertig.
+	takt := r.StatusInterval
+	if takt == 0 {
+		takt = statusInterval
+	}
+	nachfragen := time.NewTicker(takt)
+	defer nachfragen.Stop()
+	warBusy := false
+	begonnen := time.Now()
+	letzteMeldung := begonnen
+
 	gesehen := false // schon Stream-Ereignisse für diese Session?
+	grund := "session.idle"
 warten:
 	for {
 		select {
@@ -232,10 +277,11 @@ warten:
 				}
 				logf("%s", zeile)
 			case ev.Reconnected:
-				logf("lauf %s: Event-Stream neu verbunden — falls idle verloren ging, fängt der Prompt-Call oder der Timeout den Lauf", laufID)
+				logf("lauf %s: Event-Stream neu verbunden — ein verlorenes idle fängt die Statusabfrage", laufID)
 			}
 		case err := <-promptFehler:
 			if err == nil {
+				grund = "den Prompt-Call"
 				break warten // synchroner Call kam sauber zurück
 			}
 			if !gesehen {
@@ -247,10 +293,44 @@ warten:
 			// bleibt die Wahrheitsquelle, der Timeout der Backstop.
 			logf("lauf %s: prompt-Call riss ab (%v) — warte auf session.idle", laufID, err)
 			promptFehler = nil
+		case <-nachfragen.C:
+			busy, err := opencode.SessionBusy(ctx, client, sess.ID)
+			if err != nil {
+				// Server gerade weg oder im Neustart: der Supervisor
+				// kümmert sich, hier bleibt der Timeout der Backstop.
+				continue
+			}
+			if busy {
+				warBusy = true
+				// Ein Hase kann minutenlang denken, ohne ein Werkzeug
+				// anzufassen — nach dem letzten Tool-Log passiert dann
+				// sichtbar nichts mehr. Wer das für einen hängenden
+				// Prozess hält, drückt Strg-C und bricht einen Lauf ab,
+				// der gerade arbeitet (Hasenbau-0f4).
+				if time.Since(letzteMeldung) >= progressInterval {
+					letzteMeldung = time.Now()
+					logf("lauf %s: der Hase arbeitet noch (seit %s)", laufID,
+						time.Since(begonnen).Round(time.Second))
+				}
+				continue
+			}
+			if warBusy {
+				grund = "die Statusabfrage (session.idle kam nie an)"
+				break warten
+			}
 		case <-ctx.Done():
+			// „context deadline exceeded" sagt niemandem, was zu tun
+			// ist. Gemessen: ein Baumeister auf einem großen Trace
+			// braucht zwischen 3 und über 30 Minuten — dasselbe
+			// Material, dasselbe Modell (Hasenbau-0f4).
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) && oben.Err() == nil {
+				return erg, fmt.Errorf("hase: nach %s abgebrochen — das Zeitlimit für den LLM-Schritt ist %s (Session %s lief noch)",
+					time.Since(begonnen).Round(time.Second), timeout, sess.ID)
+			}
 			return erg, fmt.Errorf("hase: %w", ctx.Err())
 		}
 	}
+	logf("lauf %s: der Hase ist fertig — beendet durch %s", laufID, grund)
 
 	// Auswertung auch dann, wenn ctx gleich abläuft: eigener kurzer
 	// Kontext, die Daten liegen ja schon beim Server.

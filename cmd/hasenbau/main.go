@@ -336,7 +336,7 @@ func cmdDaemon(root string, errw io.Writer) int {
 	lock := lauf.NewLock()
 
 	sched, err := scheduler.New(auftraege, lock, func(a *auftrag.Auftrag) {
-		if err := r.Execute(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
+		if _, err := r.Execute(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
 			logger.Printf("scheduler: %v", err)
 		}
 	}, logger.Printf)
@@ -345,7 +345,8 @@ func cmdDaemon(root string, errw io.Writer) int {
 		return 1
 	}
 	w, err := watcher.New(root, auftraege, lock, st, func(a *auftrag.Auftrag, input string) error {
-		return r.Execute(ctx, a, "watch", input)
+		_, err := r.Execute(ctx, a, "watch", input)
+		return err
 	}, logger.Printf)
 	if err != nil {
 		logger.Print(err)
