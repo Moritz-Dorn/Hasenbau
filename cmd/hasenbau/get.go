@@ -24,6 +24,7 @@ const getUsage = `Aufruf: hasenbau get <ressource>
 Ressourcen:
   auftraege       die Aufträge des Baus
   hasen           die Hasen-Templates
+  gaenge          die Gang-Skripte und wer sie benutzt
   laeufe [-n N]   die letzten Läufe
   lauf <id>       ein Lauf (Details: hasenbau describe lauf <id>)
   provider        Provider der Bau-Config: Endpoint, Modelle, Schlüssel
@@ -45,6 +46,8 @@ func cmdGet(root string, args []string, out, errw io.Writer) int {
 		return getAuftraege(root, args[1:], out, errw)
 	case "hasen", "hase":
 		return getHasen(root, args[1:], out, errw)
+	case "gaenge", "gang":
+		return getGaenge(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau get: unbekannte Ressource %q\n\n%s", args[0], getUsage)
 		return 2
@@ -337,6 +340,49 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 			benutzt = "—"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", name, modell, temp, len(t.Denies), benutzt)
+	}
+	w.Flush()
+	if ladefehler != nil {
+		fmt.Fprintf(out, "\nSpalte BENUTZT VON unvollständig: %v\n", ladefehler)
+	}
+	return 0
+}
+
+func getGaenge(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get gaenge")
+		return 2
+	}
+	auftraege, ladefehler := ladeDefinitionen(root)
+	gaenge, err := sammleGaenge(root, auftraege)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(gaenge) == 0 {
+		fmt.Fprintln(out, "keine Gänge unter gaenge/")
+		return 0
+	}
+
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "DATEI\tGRÖSSE\tBENUTZT VON")
+	for _, g := range gaenge {
+		var von []string
+		for _, b := range g.Benutzungen {
+			von = append(von, b.Auftrag+"/"+b.Gang)
+		}
+		benutzt := strings.Join(von, ", ")
+		groesse := fmt.Sprintf("%d B", g.Groesse)
+		switch {
+		case len(g.Benutzungen) == 0 && g.Entwurf:
+			benutzt = "—  (Entwurf, nicht eingetragen)"
+		case len(g.Benutzungen) == 0:
+			benutzt = "—"
+		}
+		if g.Groesse == 0 && len(g.Benutzungen) > 0 && !existiert(root, g.Pfad) {
+			groesse = "FEHLT"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", g.Pfad, groesse, benutzt)
 	}
 	w.Flush()
 	if ladefehler != nil {

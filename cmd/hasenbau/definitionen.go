@@ -10,10 +10,12 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
@@ -114,4 +116,115 @@ func effektivePermissions(root string, a *auftrag.Auftrag, t *hase.Template) ([]
 		}
 	}
 	return zeilen, nil
+}
+
+// gangDatei ist eine Skriptdatei unter gaenge/ samt ihrer Benutzungen.
+type gangDatei struct {
+	Pfad        string // Bau-relativ
+	Groesse     int64
+	Ausfuehrbar bool
+	Entwurf     bool // liegt unter gaenge/entwurf/ — vom Baumeister, nicht eingetragen
+	Benutzungen []gangBenutzung
+}
+
+// gangBenutzung ist ein Auftrag, der diese Datei in einer run-Zeile ruft.
+type gangBenutzung struct {
+	Auftrag string
+	Gang    string
+	Run     string
+	Timeout time.Duration
+}
+
+// entwurfVerzeichnis ist der Ablageort des Baumeisters (§8).
+const entwurfVerzeichnis = gangVerzeichnis + "entwurf/"
+
+// sammleGaenge listet die Dateien unter gaenge/ und hängt jeder die
+// Aufträge an, die sie benutzen. Die Beziehung wird abgeleitet, nicht
+// gepflegt: die Wahrheit steht in den run-Zeilen.
+func sammleGaenge(root string, auftraege []*auftrag.Auftrag) ([]gangDatei, error) {
+	benutzung := map[string][]gangBenutzung{}
+	for _, a := range auftraege {
+		for _, g := range a.Gaenge {
+			for _, datei := range gangDateien(g.Run) {
+				benutzung[datei] = append(benutzung[datei], gangBenutzung{
+					Auftrag: a.Name, Gang: g.Name, Run: g.Run, Timeout: g.Timeout,
+				})
+			}
+		}
+	}
+
+	var out []gangDatei
+	gesehen := map[string]bool{}
+	wurzel := filepath.Join(root, gangVerzeichnis)
+	err := filepath.WalkDir(wurzel, func(pfad string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) && pfad == wurzel {
+				return nil // gaenge/ gibt es erst nach init
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, pfad)
+		if err != nil {
+			return err
+		}
+		gesehen[rel] = true
+		out = append(out, gangDatei{
+			Pfad:        rel,
+			Groesse:     info.Size(),
+			Ausfuehrbar: info.Mode()&0o111 != 0,
+			Entwurf:     strings.HasPrefix(rel, entwurfVerzeichnis),
+			Benutzungen: benutzung[rel],
+		})
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("gaenge lesen: %w", err)
+	}
+
+	// Referenzen ins Leere gehören mit in die Liste — sonst fällt der
+	// häufigste Fehler (Datei umbenannt, Auftrag nicht) niemandem auf.
+	for datei, b := range benutzung {
+		if !gesehen[datei] {
+			out = append(out, gangDatei{Pfad: datei, Benutzungen: b})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Pfad < out[j].Pfad })
+	return out, nil
+}
+
+// zweck zieht die erste erklärende Zeile aus einem Skript: den Anfang
+// des Python-Docstrings oder den ersten Kommentar nach dem Shebang.
+func zweck(root, rel string) string {
+	roh, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		return ""
+	}
+	zeilen := strings.Split(string(roh), "\n")
+	if len(zeilen) > 30 {
+		zeilen = zeilen[:30]
+	}
+	for _, z := range zeilen {
+		z = strings.TrimSpace(z)
+		switch {
+		case z == "" || strings.HasPrefix(z, "#!"):
+			continue
+		case strings.HasPrefix(z, `"""`), strings.HasPrefix(z, "'''"):
+			z = strings.TrimLeft(z, `"'`)
+		case strings.HasPrefix(z, "#"):
+			z = strings.TrimLeft(z, "# ")
+		default:
+			return "" // Code vor Doku: dann gibt es hier nichts zu holen
+		}
+		if z = strings.TrimSpace(z); z != "" {
+			return z
+		}
+	}
+	return ""
 }

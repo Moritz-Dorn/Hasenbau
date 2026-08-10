@@ -230,3 +230,74 @@ func zeileMit(text, s string) string {
 	}
 	return ""
 }
+
+func TestGetUndDescribeGang(t *testing.T) {
+	root := baueDefinitionsBau(t)
+	// Ein Entwurf des Baumeisters, den kein Auftrag einträgt.
+	if err := os.MkdirAll(filepath.Join(root, "gaenge", "entwurf"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "gaenge", "entwurf", "lager_index.py"),
+		[]byte("#!/usr/bin/env python3\n\"\"\"lager_index.py --lager <raum>\n\nStellt einen Index.\n\"\"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "get", "gaenge"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "gaenge/pdf_to_md.py") || !strings.Contains(got, "pdf-einlagern/pdf-zu-markdown") {
+		t.Errorf("Benutzung fehlt:\n%s", got)
+	}
+	if !strings.Contains(got, "Entwurf, nicht eingetragen") {
+		t.Errorf("Entwurf nicht als solcher markiert:\n%s", got)
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", root, "describe", "gang", "pdf_to_md.py"}, &out, &errw); code != 0 {
+		t.Fatalf("describe: exit %d, stderr %q", code, errw.String())
+	}
+	got = out.String()
+	for _, muss := range []string{"gaenge/pdf_to_md.py", "Benutzt von", "pdf-einlagern / pdf-zu-markdown", "2m0s"} {
+		if !strings.Contains(got, muss) {
+			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
+		}
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", root, "describe", "gang", "gaenge/entwurf/lager_index.py"}, &out, &errw); code != 0 {
+		t.Fatalf("describe Entwurf: exit %d", code)
+	}
+	got = out.String()
+	if !strings.Contains(got, "Stellt einen Index.") && !strings.Contains(got, "lager_index.py --lager") {
+		t.Errorf("Zweck aus dem Docstring fehlt:\n%s", got)
+	}
+	if !strings.Contains(got, "trag den Gang selbst ein") {
+		t.Errorf("Hinweis auf den Einbau fehlt:\n%s", got)
+	}
+}
+
+// TestGetGaengeToteReferenz: die Datei ist weg, der Auftrag ruft sie
+// weiter — der häufigste Fehler beim Umbenennen.
+func TestGetGaengeToteReferenz(t *testing.T) {
+	root := baueDefinitionsBau(t)
+	if err := os.Remove(filepath.Join(root, "gaenge", "pdf_to_md.py")); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "get", "gaenge"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(out.String(), "FEHLT") {
+		t.Errorf("tote Referenz nicht gemeldet:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", root, "describe", "gang", "gaenge/pdf_to_md.py"}, &out, &errw); code != 0 {
+		t.Fatalf("describe: exit %d", code)
+	}
+	if !strings.Contains(out.String(), "FEHLT") {
+		t.Errorf("describe meldet die fehlende Datei nicht:\n%s", out.String())
+	}
+}

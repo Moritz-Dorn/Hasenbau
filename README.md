@@ -64,9 +64,11 @@ hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
+hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
 hasenbau get laeufe        # Historie
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
 hasenbau describe hase <name>     # effektive Permissions je Auftrag
+hasenbau describe gang <datei>    # Zweck und alle Aufträge, die ihn rufen
 hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen

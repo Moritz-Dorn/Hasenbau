@@ -40,8 +40,8 @@ Befehle:
   lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
                         auslösende Datei (Bau-relativ, nur watch)
   get <ressource>       zeigen, was der Bau kennt (auftraege, hasen,
-                        laeufe, lauf, provider)
-  describe <res> <name> ein Objekt im Detail (auftrag, hase, lauf)
+                        gaenge, laeufe, lauf, provider)
+  describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
   graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein

@@ -24,6 +24,7 @@ const describeUsage = `Aufruf: hasenbau describe <ressource> <name>
 
 Ressourcen:
   auftrag <name>   Trigger, Gänge, Räume, Schreibrechte, letzte Läufe
+  gang <datei>     ein Gang-Skript und alle Aufträge, die es rufen
   hase <name>      Template und die effektiven Permissions je Auftrag
   lauf <id>        ein Lauf mit Notizen, Fehlern, Tokens und Kosten
 `
@@ -40,6 +41,8 @@ func cmdDescribe(root string, args []string, out, errw io.Writer) int {
 		return describeAuftrag(root, args[1:], out, errw)
 	case "hase":
 		return describeHase(root, args[1:], out, errw)
+	case "gang":
+		return describeGang(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau describe: unbekannte Ressource %q\n\n%s", args[0], describeUsage)
 		return 2
@@ -323,4 +326,74 @@ func sortiert(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func describeGang(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau describe gang <datei>")
+		return 2
+	}
+	auftraege, ladefehler := ladeDefinitionen(root)
+	gaenge, err := sammleGaenge(root, auftraege)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	// Bequemlichkeit: `describe gang pdf_to_md.py` findet auch
+	// `gaenge/pdf_to_md.py`.
+	gesucht := args[0]
+	var g *gangDatei
+	for i := range gaenge {
+		if gaenge[i].Pfad == gesucht || filepath.Base(gaenge[i].Pfad) == gesucht {
+			g = &gaenge[i]
+			break
+		}
+	}
+	if g == nil {
+		fmt.Fprintf(errw, "hasenbau: kein Gang %q unter gaenge/\n", gesucht)
+		return 1
+	}
+
+	ab := neuerAbschnitt(out)
+	ab.feld("Gang", "%s", g.Pfad)
+	if !existiert(root, g.Pfad) {
+		ab.feld("Datei", "FEHLT — ein Auftrag ruft sie, aber es gibt sie nicht")
+	} else {
+		ab.feld("Größe", "%d Bytes%s", g.Groesse, wennAusfuehrbar(g.Ausfuehrbar))
+	}
+	if g.Entwurf {
+		ab.feld("Entwurf", "vom Baumeister geschrieben, nicht aktiviert (PLAN.md §8)")
+	}
+	if z := zweck(root, g.Pfad); z != "" {
+		ab.feld("Zweck", "%s", z)
+	}
+	ab.fertig()
+
+	if len(g.Benutzungen) == 0 {
+		if g.Entwurf {
+			fmt.Fprintln(out, "\nKein Auftrag trägt ihn ein — lies ihn und trag den Gang selbst ein.")
+		} else {
+			fmt.Fprintln(out, "\nKein Auftrag benutzt ihn.")
+		}
+	} else {
+		fmt.Fprint(out, "\nBenutzt von\n")
+		for _, b := range g.Benutzungen {
+			timeout := "kein Timeout"
+			if b.Timeout > 0 {
+				timeout = b.Timeout.String()
+			}
+			fmt.Fprintf(out, "  %s / %s  (%s)\n    %s\n", b.Auftrag, b.Gang, timeout, b.Run)
+		}
+	}
+	if ladefehler != nil {
+		fmt.Fprintf(errw, "hasenbau: Aufträge nicht vollständig lesbar: %v\n", ladefehler)
+	}
+	return 0
+}
+
+func wennAusfuehrbar(b bool) string {
+	if b {
+		return ", ausführbar"
+	}
+	return ", nicht ausführbar"
 }
