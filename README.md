@@ -65,6 +65,7 @@ hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau laeufe            # Historie
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
+hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
 hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
 hasenbau status            # Zustand des Baus
 ```
@@ -95,6 +96,11 @@ Stirbt der Daemon mitten in einem Lauf, bleibt dessen Zeile auf
 beim Start die Läufe ab, deren Prozess nicht mehr lebt — sie werden als
 `abgebrochen` mit Grund geschlossen. Ein gleichzeitig laufender zweiter
 Hasenbau-Prozess bleibt unangetastet; im Zweifel wird nichts abgeräumt.
+
+`get` ist das lesende Verb (nach dem Vorbild von `kubectl`): es zeigt,
+was der Bau kennt, und ändert nichts. Bisher gibt es `get provider`;
+weitere Ressourcen kommen dazu. Die Verben zum Auslösen — `lauf`,
+`baumeister`, `daemon` — bleiben davon unberührt.
 
 Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
 die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,

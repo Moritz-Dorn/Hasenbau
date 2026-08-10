@@ -44,6 +44,7 @@ Befehle:
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
                         Auftrag (dann dessen letzter Lauf)
+  get <ressource>       zeigen, was der Bau kennt (bisher: provider)
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
@@ -101,6 +102,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdGraben(bau, rest[1:], out, errw)
 	case "baumeister":
 		return cmdBaumeister(bau, rest[1:], out, errw)
+	case "get":
+		return cmdGet(bau, rest[1:], out, errw)
 	case "provider":
 		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":

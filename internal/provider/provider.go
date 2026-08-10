@@ -153,6 +153,32 @@ func Schluessel(id string) (string, error) {
 	return eintrag.Key, nil
 }
 
+// SchluesselIDs meldet, für welche Provider die geteilte auth.json
+// einen benutzbaren API-Key hat — ohne den Key selbst herauszugeben.
+// Fehlt die Datei, kommt eine leere Menge und kein Fehler: das ist ein
+// Zustand, kein Unfall.
+func SchluesselIDs() (map[string]bool, error) {
+	b, err := os.ReadFile(AuthPfad())
+	if errors.Is(err, fs.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("provider: %s lesen: %w", AuthPfad(), err)
+	}
+	var auth map[string]struct {
+		Type string `json:"type"`
+		Key  string `json:"key"`
+	}
+	if err := json.Unmarshal(b, &auth); err != nil {
+		return nil, fmt.Errorf("provider: %s parsen: %w", AuthPfad(), err)
+	}
+	da := map[string]bool{}
+	for id, e := range auth {
+		da[id] = e.Key != ""
+	}
+	return da, nil
+}
+
 // AuthPfad ist der Ort der geteilten auth.json — dieselbe XDG-Kaskade,
 // der auch der gespawnte Server folgt (§3: XDG_DATA_HOME bleibt geerbt).
 func AuthPfad() string {
@@ -209,6 +235,53 @@ func (c *Config) BaseURL(id string) (string, error) {
 		return "", fmt.Errorf("provider: %q hat keine options.baseURL in %s — ohne Endpoint kein Fetch (PLAN.md §3)", id, c.Pfad)
 	}
 	return url, nil
+}
+
+// Eintrag ist ein Provider, wie ihn die Bau-Config kennt.
+type Eintrag struct {
+	ID      string
+	BaseURL string // leer: eingebaut (Modelle kommen aus models.dev) oder Gerüst unvollständig
+	Modelle int
+	Aktiv   bool // steht in enabled_providers — ohne das ignoriert der Server die Definition
+}
+
+// Liste zählt auf, was im Bau definiert ist. Enthalten sind auch IDs,
+// die nur in enabled_providers stehen: ein Tippfehler dort ist sonst
+// unsichtbar, obwohl er den Provider still abschaltet.
+func (c *Config) Liste() []Eintrag {
+	aktiv := map[string]bool{}
+	liste, _ := c.roh["enabled_providers"].([]any)
+	for _, e := range liste {
+		if s, _ := e.(string); s != "" {
+			aktiv[s] = true
+		}
+	}
+
+	eintraege := map[string]*Eintrag{}
+	for id, roh := range c.provider() {
+		e := &Eintrag{ID: id, Aktiv: aktiv[id]}
+		if p, ok := roh.(map[string]any); ok {
+			if opts, ok := p["options"].(map[string]any); ok {
+				e.BaseURL, _ = opts["baseURL"].(string)
+			}
+			if m, ok := p["models"].(map[string]any); ok {
+				e.Modelle = len(m)
+			}
+		}
+		eintraege[id] = e
+	}
+	for id := range aktiv {
+		if _, da := eintraege[id]; !da {
+			eintraege[id] = &Eintrag{ID: id, Aktiv: true}
+		}
+	}
+
+	out := make([]Eintrag, 0, len(eintraege))
+	for _, e := range eintraege {
+		out = append(out, *e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 func (c *Config) provider() map[string]any {

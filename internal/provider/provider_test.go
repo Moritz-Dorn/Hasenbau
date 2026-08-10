@@ -314,3 +314,74 @@ func TestSchluesselAusGeteilterAuthJSON(t *testing.T) {
 		t.Errorf("unbrauchbarer Fehler: %v", err)
 	}
 }
+
+func TestListe(t *testing.T) {
+	root := schreibeConfig(t, `{
+  "provider": {
+    "scc": {"options": {"baseURL": "https://beispiel.invalid/api/v1"},
+            "models": {"a": {"name": "A"}, "b": {"name": "B"}}},
+    "eingebaut": {"npm": "x"}
+  },
+  "enabled_providers": ["scc", "nur-in-enabled"]
+}`)
+	conf, err := LadeConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	liste := conf.Liste()
+	// Sortiert, und die ID aus enabled_providers ohne Definition ist
+	// dabei — sonst bliebe ein Tippfehler dort unsichtbar.
+	var ids []string
+	for _, e := range liste {
+		ids = append(ids, e.ID)
+	}
+	if strings.Join(ids, ",") != "eingebaut,nur-in-enabled,scc" {
+		t.Fatalf("IDs = %v", ids)
+	}
+
+	nach := map[string]Eintrag{}
+	for _, e := range liste {
+		nach[e.ID] = e
+	}
+	if e := nach["scc"]; e.BaseURL != "https://beispiel.invalid/api/v1" || e.Modelle != 2 || !e.Aktiv {
+		t.Errorf("scc = %+v", e)
+	}
+	// Eingebaut: kein Endpoint, keine Modelle, nicht in enabled.
+	if e := nach["eingebaut"]; e.BaseURL != "" || e.Modelle != 0 || e.Aktiv {
+		t.Errorf("eingebaut = %+v", e)
+	}
+	if e := nach["nur-in-enabled"]; e.BaseURL != "" || !e.Aktiv {
+		t.Errorf("nur-in-enabled = %+v", e)
+	}
+}
+
+func TestSchluesselIDs(t *testing.T) {
+	daten := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", daten)
+
+	// Ohne auth.json: leere Menge, kein Fehler — das ist ein Zustand.
+	da, err := SchluesselIDs()
+	if err != nil || len(da) != 0 {
+		t.Fatalf("ohne auth.json: %v, %v", da, err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(daten, "opencode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(daten, "opencode", "auth.json"),
+		[]byte(`{"scc":{"type":"api","key":"geheim"},"oauth-nur":{"type":"oauth"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	da, err = SchluesselIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !da["scc"] {
+		t.Error("scc hat einen Key, wird aber nicht gemeldet")
+	}
+	// type=oauth ohne key: fetch kann damit nichts anfangen.
+	if da["oauth-nur"] {
+		t.Error("Eintrag ohne key gilt als Schlüssel")
+	}
+}
