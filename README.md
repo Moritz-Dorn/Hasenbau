@@ -60,6 +60,8 @@ ihres Auftrags.
 
 ```bash
 hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config)
+hasenbau new hase <name>   # Template-Gerüst anlegen, kommentiert
+hasenbau new auftrag <name> -hase <hase>   # Auftrags-Gerüst anlegen
 hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau get auftraege     # was der Bau kennt

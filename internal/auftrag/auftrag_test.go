@@ -179,7 +179,7 @@ func TestParseFehler(t *testing.T) {
 		{"summaries null", ersetze(t, "last_summaries: 3", "last_summaries: 0"), "muss > 0 sein"},
 		{"nachher ohne Pfeil", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- move: $INPUT raeume/archiv/"), "VON -> NACH"},
 		{"nachher unbekannt", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- verbrenne: $INPUT"), "unbekannte Aktion"},
-		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "ungültiger Hasen-Name"},
+		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "hase: ungültiger Name"},
 		{"hase_timeout null", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 0s"), "0 ist kein Zeitlimit"},
 		{"hase_timeout negativ", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: -5m"), "negative Dauer"},
 		{"hase_timeout kaputt", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: eine Stunde"), "ungültige Dauer"},

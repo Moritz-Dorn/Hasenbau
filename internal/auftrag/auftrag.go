@@ -96,6 +96,17 @@ type After struct {
 // Dateinamen des generierten Agenten (<auftrag>__<hase>.md, §6).
 var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
+// ValidName prüft einen Auftrags- oder Hasen-Namen. Beide landen im
+// Dateinamen des generierten Agenten (<auftrag>__<hase>.md, §6),
+// deshalb dieselbe Regel — und deshalb exportiert: `hasenbau new`
+// prüft, bevor es eine Datei anlegt.
+func ValidName(name string) error {
+	if !namePattern.MatchString(name) {
+		return fmt.Errorf("ungültiger Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", name)
+	}
+	return nil
+}
+
 // dauer parst YAML-Strings wie "5s" oder "120s" nach time.Duration.
 type duration time.Duration
 
@@ -147,8 +158,8 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		return fmt.Errorf("auftrag %s: %s", name, fmt.Sprintf(format, args...))
 	}
 
-	if !namePattern.MatchString(name) {
-		return nil, fehler("ungültiger Name (erlaubt: Buchstaben, Ziffern, . _ -)")
+	if err := ValidName(name); err != nil {
+		return nil, fehler("%v", err)
 	}
 
 	kopf, body, err := frontmatter.Split(src)
@@ -212,8 +223,8 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	if a.Hase == "" {
 		return nil, fehler("hase fehlt")
 	}
-	if !namePattern.MatchString(a.Hase) {
-		return nil, fehler("ungültiger Hasen-Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", a.Hase)
+	if err := ValidName(a.Hase); err != nil {
+		return nil, fehler("hase: %v", err)
 	}
 	// „kein Zeitlimit" gibt es nicht: ein Lauf darf lange dauern, aber
 	// nie für immer hängen. Wer 0s schreibt, meint vermutlich genau das

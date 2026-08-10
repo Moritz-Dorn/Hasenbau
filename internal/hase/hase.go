@@ -89,7 +89,7 @@ func Lade(root, name string) (*Template, error) {
 	dec.KnownFields(true)
 	var fm tplFrontmatter
 	if err := dec.Decode(&fm); err != nil && !errors.Is(err, io.EOF) { // EOF = leeres Frontmatter, alles optional
-		return nil, fehler("frontmatter: %v (erlaubt: description, model, temperature, permission, kennt_hasenbau, wissen)", err)
+		return nil, fehler("frontmatter: %v (erlaubt: description, model, temperature, permission, knows_hasenbau, knowledge)", err)
 	}
 
 	t := &Template{

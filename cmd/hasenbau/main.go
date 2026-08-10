@@ -42,6 +42,7 @@ Befehle:
   get <ressource>       zeigen, was der Bau kennt (auftraege, hasen,
                         gaenge, laeufe, lauf, provider)
   describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
+  new <res> <name>      Gerüst anlegen (auftrag, hase)
   dig [-json] <id>      Trace eines Laufs ziehen (Baumeister-Input)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
@@ -110,6 +111,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdBaumeister(bau, rest[1:], out, errw)
 	case "get":
 		return cmdGet(bau, rest[1:], out, errw)
+	case "new":
+		return cmdNew(bau, rest[1:], out, errw)
 	case "provider":
 		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":
