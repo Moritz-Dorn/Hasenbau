@@ -81,6 +81,44 @@ func TestGrabenFehlerpfade(t *testing.T) {
 	}
 }
 
+// TestGrabenAusDerDBOhneServer: seit die Läufe ihren Trace ablegen,
+// braucht graben keinen opencode mehr. Der leere PATH ist der Beweis —
+// käme der Weg über den Server, fände sich kein Binary.
+func TestGrabenAusDerDBOhneServer(t *testing.T) {
+	bau := t.TempDir()
+	dbFile := filepath.Join(bau, "state", "hasenbau.db")
+
+	st, err := store.Open(dbFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.LaufBeginne("notiz-einlagern", "manuell", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.LaufBeende(id, store.LaufErgebnis{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
+		t.Fatal(err)
+	}
+	roh := []byte(`{"session_id":"ses_t","schritte":[` +
+		`{"art":"reasoning","rolle":"assistant","text":"Erst lesen."},` +
+		`{"art":"tool","rolle":"assistant","tool":"write","status":"completed","input":"{\"filePath\":\"raeume/lager/x.md\"}"}]}`)
+	if err := st.TraceSchreibe(id, "ses_t", roh); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	t.Setenv("PATH", "")
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "graben", "1"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	for _, muss := range []string{"Trace Lauf 1", "notiz-einlagern", "[tool write — completed]", "raeume/lager/x.md"} {
+		if !strings.Contains(out.String(), muss) {
+			t.Errorf("Ausgabe ohne %q:\n%s", muss, out.String())
+		}
+	}
+}
+
 func TestLaeufeUndStatus(t *testing.T) {
 	bau := t.TempDir()
 

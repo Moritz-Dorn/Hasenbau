@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	sdk "github.com/sst/opencode-sdk-go"
 )
@@ -45,8 +46,16 @@ func ZieheTrace(ctx context.Context, client *sdk.Client, sessionID string) (*Tra
 	if err != nil {
 		return nil, fmt.Errorf("trace der Session %s: %w", sessionID, err)
 	}
+	return TraceAus(sessionID, *msgs), nil
+}
+
+// TraceAus normalisiert bereits geholte Messages — derselbe Weg wie
+// ZieheTrace, nur ohne HTTP. Der Runner hat die Messages am Lauf-Ende
+// ohnehin in der Hand und legt den Trace damit ab, ohne ihn ein
+// zweites Mal zu holen.
+func TraceAus(sessionID string, msgs []sdk.SessionMessagesResponse) *Trace {
 	t := &Trace{SessionID: sessionID}
-	for _, m := range *msgs {
+	for _, m := range msgs {
 		rolle := string(m.Info.Role)
 		for _, p := range m.Parts {
 			switch u := p.AsUnion().(type) {
@@ -82,7 +91,38 @@ func ZieheTrace(ctx context.Context, client *sdk.Client, sessionID string) (*Tra
 			}
 		}
 	}
-	return t, nil
+	return t
+}
+
+// Gekuerzt liefert eine Kopie, deren Ausgaben und Fehlertexte bei max
+// Bytes gekappt sind. Was in die Bau-DB geht, ist Baumeister-Input,
+// kein Archiv: für die Verdichtung zählen Werkzeug, Argumente und
+// Status — nicht der Volltext einer gelesenen Datei. Der Live-Weg über
+// den Server bleibt ungekürzt.
+func (t *Trace) Gekuerzt(max int) *Trace {
+	kopie := &Trace{SessionID: t.SessionID, Schritte: make([]TraceSchritt, len(t.Schritte))}
+	copy(kopie.Schritte, t.Schritte)
+	for i := range kopie.Schritte {
+		s := &kopie.Schritte[i]
+		s.Output = kappe(s.Output, max)
+		s.Fehler = kappe(s.Fehler, max)
+		s.Input = kappe(s.Input, max)
+	}
+	return kopie
+}
+
+// kappe schneidet auf max Bytes und sagt, dass es das getan hat —
+// stilles Abschneiden würde der Baumeister für die ganze Wahrheit
+// halten. Schnitt an einer Runen-Grenze, damit gültiges UTF-8 bleibt.
+func kappe(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	schnitt := max
+	for schnitt > 0 && !utf8.RuneStart(s[schnitt]) {
+		schnitt--
+	}
+	return s[:schnitt] + fmt.Sprintf("… (gekürzt, %d Bytes insgesamt)", len(s))
 }
 
 // toolZeiten liest start/end (Unix-ms) aus dem Time-Union des

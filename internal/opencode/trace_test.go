@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // nachrichtenMitTrace bildet die in §11.3 verifizierte Antwort einer
@@ -107,5 +108,43 @@ func TestZieheTraceUnbekannteSession(t *testing.T) {
 	_, err := ZieheTrace(context.Background(), New(srv.URL), "ses_weg")
 	if err == nil || !strings.Contains(err.Error(), "ses_weg") {
 		t.Fatalf("erwartete Fehler mit Session-ID, bekam %v", err)
+	}
+}
+
+func TestGekuerztKapptUndSagtEs(t *testing.T) {
+	lang := strings.Repeat("x", 100)
+	trace := &Trace{SessionID: "ses_t", Schritte: []TraceSchritt{
+		{Art: "tool", Tool: "read", Input: `{"filePath":"a.md"}`, Output: lang},
+		{Art: "tool", Tool: "write", Fehler: lang},
+		{Art: "text", Text: lang},
+	}}
+
+	k := trace.Gekuerzt(20)
+	if len(trace.Schritte[0].Output) != 100 {
+		t.Error("Gekuerzt hat das Original verändert")
+	}
+	if !strings.HasPrefix(k.Schritte[0].Output, strings.Repeat("x", 20)) ||
+		!strings.Contains(k.Schritte[0].Output, "gekürzt, 100 Bytes") {
+		t.Errorf("Output = %q", k.Schritte[0].Output)
+	}
+	if !strings.Contains(k.Schritte[1].Fehler, "gekürzt") {
+		t.Errorf("Fehler = %q", k.Schritte[1].Fehler)
+	}
+	// Kurze Felder und Texte bleiben, wie sie sind — der Trace soll
+	// lesbar bleiben, nicht überall Stummel zeigen.
+	if k.Schritte[0].Input != `{"filePath":"a.md"}` {
+		t.Errorf("kurzer Input gekappt: %q", k.Schritte[0].Input)
+	}
+	if k.Schritte[2].Text != lang {
+		t.Error("Text darf nicht gekappt werden — er ist die Absicht, nicht die Ausgabe")
+	}
+}
+
+func TestGekuerztSchneidetAnRunengrenze(t *testing.T) {
+	// 10 Umlaute = 20 Bytes; ein Schnitt bei 15 landet mitten in einem.
+	trace := &Trace{Schritte: []TraceSchritt{{Art: "tool", Output: strings.Repeat("ä", 10)}}}
+	got := trace.Gekuerzt(15).Schritte[0].Output
+	if !utf8.ValidString(got) {
+		t.Errorf("gekappter Output ist kein gültiges UTF-8: %q", got)
 	}
 }

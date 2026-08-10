@@ -8,6 +8,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -31,7 +32,13 @@ type LaufStore interface {
 	SummaryQuelle
 	LaufBeginne(auftrag, trigger, ausloeser string) (int64, error)
 	LaufBeende(id int64, e store.LaufErgebnis) error
+	TraceSchreibe(lauf int64, sessionID string, roh []byte) error
 }
+
+// traceMax ist die Kappungsgrenze pro Feld für den abgelegten Trace.
+// Ein einzelnes read-Tool kann Megabytes ausgeben; für die Verdichtung
+// zählen Werkzeug, Argumente und Status, nicht der Volltext.
+const traceMax = 8 << 10
 
 // Runner führt Läufe aus und serialisiert instance/dispose gegen sie.
 type Runner struct {
@@ -103,6 +110,7 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 		}
 		e := erg.alsErgebnis()
 		e.Fehler = grund.Error()
+		r.legeTraceAb(id, erg, logf)
 		if err := r.Store.LaufBeende(id, e); err != nil {
 			logf("lauf %s: %v", laufID, err)
 		}
@@ -136,6 +144,7 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 		}
 	}
 	erg.Status = "ok"
+	r.legeTraceAb(id, erg, logf)
 	if err := r.Store.LaufBeende(id, erg.alsErgebnis()); err != nil {
 		return err
 	}
@@ -151,6 +160,7 @@ type haseErgebnis struct {
 	TokensIn   int64
 	TokensOut  int64
 	KostenCent int64
+	Trace      *opencode.Trace // nil, wenn der Lauf vor der Auswertung scheiterte
 }
 
 func (h haseErgebnis) alsErgebnis() store.LaufErgebnis {
@@ -251,7 +261,24 @@ warten:
 		return erg, fmt.Errorf("session %s auswerten: %w", sess.ID, err)
 	}
 	erg.Summary, erg.TokensIn, erg.TokensOut, erg.KostenCent = werteAus(*msgs)
+	erg.Trace = opencode.TraceAus(sess.ID, *msgs).Gekuerzt(traceMax)
 	return erg, nil
+}
+
+// legeTraceAb schreibt den Verlauf zum Lauf. Ein Fehler dabei wird
+// gemeldet, scheitert den Lauf aber nie: der Trace ist Material für
+// später, das Ergebnis des Laufs hängt nicht an ihm.
+func (r *Runner) legeTraceAb(id int64, erg haseErgebnis, logf func(string, ...any)) {
+	if erg.Trace == nil || erg.SessionID == "" {
+		return
+	}
+	roh, err := json.Marshal(erg.Trace)
+	if err == nil {
+		err = r.Store.TraceSchreibe(id, erg.SessionID, roh)
+	}
+	if err != nil {
+		logf("lauf %d: Trace nicht abgelegt: %v", id, err)
+	}
 }
 
 // werteAus zieht Summary, Tokens und Kosten aus den Session-Messages.

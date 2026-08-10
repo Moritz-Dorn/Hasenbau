@@ -311,19 +311,24 @@ func cmdDaemon(root string, errw io.Writer) int {
 	return 1
 }
 
-// cmdGraben zieht den Trace eines Laufs über dessen session_id
-// (§8 Phase 2, Zugriffsweg §11.3) und druckt ihn als Baumeister-Input
-// (Markdown) oder mit -json strukturiert. Die Session liegt im
-// Storage des Servers — ein frisch gestarteter Server reicht.
+// cmdGraben druckt den Trace eines Laufs als Baumeister-Input
+// (Markdown) oder mit -json strukturiert (§8 Phase 2).
+//
+// Zuerst aus der Bau-DB: seit die Läufe ihren Trace beim Ende ablegen,
+// braucht graben dafür keinen opencode-Server — wichtig, weil der
+// Baumeister graben in einem Gang aufruft. Fehlt die Zeile (Altlauf),
+// holt es den Trace beim Server und trägt sie nach. -live erzwingt den
+// Server-Weg und liefert die ungekürzten Ausgaben.
 func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("graben", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	alsJSON := fs.Bool("json", false, "Trace als JSON statt Markdown")
+	live := fs.Bool("live", false, "Trace beim Server holen statt aus der Bau-DB")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau graben [-json] <lauf-id>")
+		fmt.Fprintln(errw, "Aufruf: hasenbau graben [-json] [-live] <lauf-id>")
 		return 2
 	}
 	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
@@ -351,20 +356,7 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
-	if err != nil {
-		logger.Print(err)
-		return 1
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := sup.Start(ctx); err != nil {
-		logger.Print(err)
-		return 1
-	}
-	defer sup.Stop()
-
-	trace, err := opencode.ZieheTrace(ctx, opencode.New(sup.BaseURL()), l.SessionID)
+	trace, err := holeTrace(root, st, l, *live, logger)
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -395,6 +387,50 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	}
 	fmt.Fprint(out, trace.Markdown())
 	return 0
+}
+
+// holeTrace liefert den Trace eines Laufs — aus der Bau-DB, wenn er
+// dort liegt, sonst über einen eigenen opencode-Server. Was so geholt
+// wurde, wird nachgetragen: das erste graben eines Altlaufs füllt seine
+// Zeile, danach geht es ohne Server.
+func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *log.Logger) (*opencode.Trace, error) {
+	if !live {
+		roh, da, err := st.TraceLies(l.ID)
+		if err != nil {
+			return nil, err
+		}
+		if da {
+			var t opencode.Trace
+			if err := json.Unmarshal(roh, &t); err != nil {
+				return nil, fmt.Errorf("hasenbau graben: abgelegter Trace von Lauf %d ist unlesbar: %w", l.ID, err)
+			}
+			return &t, nil
+		}
+	}
+
+	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
+	if err != nil {
+		return nil, err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := sup.Start(ctx); err != nil {
+		return nil, err
+	}
+	defer sup.Stop()
+
+	trace, err := opencode.ZieheTrace(ctx, opencode.New(sup.BaseURL()), l.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if !live {
+		if roh, err := json.Marshal(trace); err == nil {
+			if err := st.TraceSchreibe(l.ID, l.SessionID, roh); err != nil {
+				logger.Printf("Trace von Lauf %d nicht nachgetragen: %v", l.ID, err)
+			}
+		}
+	}
+	return trace, nil
 }
 
 // cmdProvider hält die Modell-Liste eines custom Providers aktuell

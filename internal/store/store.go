@@ -74,6 +74,16 @@ var migrations = [][]string{
 		`ALTER TABLE laeufe ADD COLUMN pid INTEGER`,
 		`ALTER TABLE laeufe ADD COLUMN pid_gestartet TIMESTAMP`,
 	},
+	{
+		// Der Verlauf eines Laufs, beim Lauf-Ende abgelegt (trace.go).
+		// json ist bewusst opak: das Format gehört internal/opencode.
+		`CREATE TABLE trace (
+			lauf          INTEGER PRIMARY KEY REFERENCES laeufe(id),
+			session_id    TEXT NOT NULL,
+			json          TEXT NOT NULL,
+			geschrieben   TIMESTAMP NOT NULL
+		)`,
+	},
 }
 
 // Store ist die Datenbank des Baus (state/hasenbau.db).
