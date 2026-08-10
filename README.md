@@ -98,6 +98,15 @@ selbst ein. Aus einem einzelnen Trace ist nicht sicher zu erkennen, was
 Parameter und was Konstante war; ein Entwurf ist deshalb eine
 Gesprächsgrundlage, kein fertiger Gang.
 
+Ein Hasen-Template kann Hintergrundwissen anfordern: `kennt_hasenbau:
+true` bindet eine mitgelieferte Einführung in den Hasenbau ein (Begriffe,
+Ablauf, Trace-Aufbau, Grenzen), `wissen: [pfade]` eigene Dateien aus dem
+Bau. Beides landet im generierten Agenten und gilt damit nur für diesen
+Hasen — anders als `instructions` in der opencode.json, das
+Workspace-weit für *jeden* Agenten gilt. Die Einführung steckt bewusst im
+Binary statt im Bau: so passt sie immer zur installierten Version, statt
+als veraltete Kopie mitzulaufen.
+
 Stirbt der Daemon mitten in einem Lauf, bleibt dessen Zeile auf
 `laeuft` stehen. `hasenbau daemon` und `hasenbau lauf` räumen deshalb
 beim Start die Läufe ab, deren Prozess nicht mehr lebt — sie werden als

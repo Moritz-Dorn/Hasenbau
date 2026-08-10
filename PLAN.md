@@ -411,6 +411,35 @@ Generierungsregel (deterministisch):
    `POST /instance/dispose` (§11.6) — vom Runner gegen aktive Läufe
    serialisiert, denn dispose cancelt laufende Sessions.
 
+### Wissen für einen einzelnen Hasen
+
+`instructions` in der opencode.json wäre der naheliegende Weg,
+Hintergrundwissen mitzugeben — aber es geht nicht: **verifiziert am
+Schema (opencode.ai/config.json, 2026-08-10)** ist `instructions`
+Workspace-weit und gilt für *jeden* Agenten, und ein einzelner Agent hat
+kein eigenes `instructions`-Feld (zulässig sind `model`, `variant`,
+`temperature`, `top_p`, `prompt`, `disable`, `description`, `mode`,
+`hidden`, `options`, `color`, `steps`, `permission`). Der einzige
+agentenspezifische Weg ist `prompt` — und den generiert der Hasenbau
+ohnehin selbst. Zwei Template-Felder nutzen das:
+
+- **`kennt_hasenbau: true`** bindet einen Text ein, der **im Binary**
+  liegt: Begriffe, Ablauf eines Laufs, wie ein Trace zu lesen ist,
+  Permissions und Grenzen. Nicht im Bau, und das ist der Punkt — eine
+  kopierte Datei driftet, sobald der Hasenbau sich ändert, und dann
+  erzählt der Hase von einem System, das es so nicht mehr gibt. Wissen
+  über das Werkzeug gehört ins Werkzeug (entschieden 2026-08-10).
+- **`wissen: [pfade]`** bindet eigene Bau-relative Dateien ein (Globs
+  erlaubt). Mehrere Hasen dürfen dieselbe teilen, ohne sie zu
+  duplizieren.
+
+Beides wird beim Laden gelesen und beim Generieren mit einer Überschrift
+eingebettet, die die Herkunft nennt — sonst ist im Trace nicht zu
+erkennen, woher eine Anweisung kam. Reihenfolge im Agenten: erst die
+Rolle aus dem Template, dann das Nachschlagewerk, dann der Rückkanal.
+Wer die Hausordnung wirklich *jedem* Hasen mitgeben will, hat weiterhin
+`instructions` — mit der Konsequenz, dass es dann auch für jeden gilt.
+
 ### Variablen im Auftrag
 
 | Variable | Bedeutung |

@@ -6,11 +6,13 @@ package hase
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,6 +20,14 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/frontmatter"
 	"gopkg.in/yaml.v3"
 )
+
+// hasenbauWissen erklärt einem Hasen das System, in dem er läuft. Der
+// Text liegt im Binary statt im Bau: eine kopierte Datei driftet, sobald
+// der Hasenbau sich ändert, und dann erzählt der Hase von einem System,
+// das es so nicht mehr gibt. Eingebunden wird er über `kennt_hasenbau`.
+//
+//go:embed wissen/hasenbau.md
+var hasenbauWissen string
 
 // Template ist eine geparste Hasen-Definition aus hasen/<name>.md.
 type Template struct {
@@ -27,6 +37,19 @@ type Template struct {
 	Temperature *float64
 	Denies      []Regel // zusätzliche Einschränkungen, ausschließlich deny
 	Prompt      string
+
+	// Wissen sind die Texte, die dem Prompt beigelegt werden — aus
+	// `kennt_hasenbau` und `wissen:`. Lade füllt sie, damit Generiere
+	// keine Dateien mehr anfassen muss.
+	Wissen []WissenStueck
+}
+
+// WissenStueck ist ein beigelegter Text mit seiner Herkunft; die
+// Herkunft steht als Überschrift im generierten Agenten, damit im Trace
+// erkennbar bleibt, woher eine Anweisung kam.
+type WissenStueck struct {
+	Herkunft string
+	Text     string
 }
 
 // Regel ist ein Permission-Eintrag (Aktion ist immer "deny" —
@@ -39,10 +62,12 @@ type Regel struct {
 // tplFrontmatter: erlaubte Template-Felder. Alles andere (mode, tools,
 // steps, …) entscheidet der Generator, nicht das Template.
 type tplFrontmatter struct {
-	Description string    `yaml:"description"`
-	Model       string    `yaml:"model"`
-	Temperature *float64  `yaml:"temperature"`
-	Permission  yaml.Node `yaml:"permission"`
+	Description   string    `yaml:"description"`
+	Model         string    `yaml:"model"`
+	Temperature   *float64  `yaml:"temperature"`
+	Permission    yaml.Node `yaml:"permission"`
+	KenntHasenbau bool      `yaml:"kennt_hasenbau"`
+	Wissen        []string  `yaml:"wissen"`
 }
 
 // Lade liest das Template hasen/<name>.md unter root.
@@ -64,7 +89,7 @@ func Lade(root, name string) (*Template, error) {
 	dec.KnownFields(true)
 	var fm tplFrontmatter
 	if err := dec.Decode(&fm); err != nil && !errors.Is(err, io.EOF) { // EOF = leeres Frontmatter, alles optional
-		return nil, fehler("frontmatter: %v (erlaubt: description, model, temperature, permission)", err)
+		return nil, fehler("frontmatter: %v (erlaubt: description, model, temperature, permission, kennt_hasenbau, wissen)", err)
 	}
 
 	t := &Template{
@@ -82,7 +107,47 @@ func Lade(root, name string) (*Template, error) {
 	if err != nil {
 		return nil, fehler("%v", err)
 	}
+	t.Wissen, err = ladeWissen(root, fm.KenntHasenbau, fm.Wissen)
+	if err != nil {
+		return nil, fehler("%v", err)
+	}
 	return t, nil
+}
+
+// ladeWissen sammelt die beigelegten Texte: erst das mitgelieferte
+// Wissen über den Hasenbau, dann die eigenen Dateien des Nutzers.
+// Gelesen wird hier, nicht beim Generieren — so bleibt Generiere eine
+// reine Funktion über das, was schon im Speicher steht.
+func ladeWissen(root string, kenntHasenbau bool, muster []string) ([]WissenStueck, error) {
+	var out []WissenStueck
+	if kenntHasenbau {
+		out = append(out, WissenStueck{Herkunft: "Der Hasenbau", Text: strings.TrimSpace(hasenbauWissen)})
+	}
+	for _, m := range muster {
+		if err := auftrag.BauRelativ(m); err != nil {
+			return nil, fmt.Errorf("wissen %q: %v", m, err)
+		}
+		treffer, err := filepath.Glob(filepath.Join(root, m))
+		if err != nil {
+			return nil, fmt.Errorf("wissen %q: %v", m, err)
+		}
+		if len(treffer) == 0 {
+			return nil, fmt.Errorf("wissen %q: keine Datei gefunden", m)
+		}
+		sort.Strings(treffer)
+		for _, datei := range treffer {
+			roh, err := os.ReadFile(datei)
+			if err != nil {
+				return nil, fmt.Errorf("wissen: %v", err)
+			}
+			rel, err := filepath.Rel(root, datei)
+			if err != nil {
+				rel = datei
+			}
+			out = append(out, WissenStueck{Herkunft: rel, Text: strings.TrimSpace(string(roh))})
+		}
+	}
+	return out, nil
 }
 
 // parseDenies akzeptiert `bash: deny` (skalar ⇒ Pattern "*") und
@@ -212,6 +277,13 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 	b.WriteString("---\n")
 	b.WriteString(t.Prompt)
 	b.WriteString("\n")
+	// Beigelegtes Wissen nach der Rolle: erst wer der Hase ist und was
+	// er tun soll, dann das Nachschlagewerk. Die Herkunft steht als
+	// Überschrift dabei — sonst ist im Trace nicht zu erkennen, woher
+	// eine Anweisung kam.
+	for _, w := range t.Wissen {
+		fmt.Fprintf(&b, "\n## Wissen: %s\n\n%s\n", w.Herkunft, w.Text)
+	}
 	// Injektionspunkt: was das Framework jedem Hasen mitgibt,
 	// unabhängig vom Template. Bisher nur der Rückkanal.
 	b.WriteString(rueckkanalPrompt)

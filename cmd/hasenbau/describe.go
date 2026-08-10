@@ -282,6 +282,18 @@ func describeHase(root string, args []string, out, errw io.Writer) int {
 	}
 	ab.fertig()
 
+	if len(t.Wissen) > 0 {
+		fmt.Fprint(out, "\nBeigelegtes Wissen (steht in jedem Prompt dieses Hasen)\n")
+		for _, w := range t.Wissen {
+			zeilen := len(strings.Split(w.Text, "\n"))
+			quelle := w.Herkunft
+			if quelle == "Der Hasenbau" {
+				quelle += "  (mitgeliefert, passt zur installierten Version)"
+			}
+			fmt.Fprintf(out, "  %s  —  %d Zeilen\n", quelle, zeilen)
+		}
+	}
+
 	if len(t.Denies) > 0 {
 		fmt.Fprint(out, "\nEigene Einschränkungen (das Template darf nur verengen)\n")
 		for _, d := range t.Denies {
