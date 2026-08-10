@@ -186,7 +186,11 @@ func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
 		return nil, fmt.Errorf("store: Läufe lesen: %w", err)
 	}
 	defer rows.Close()
+	return scanLaeufe(rows)
+}
 
+// scanLaeufe liest die Spaltenfolge, die sich die Lauf-Abfragen teilen.
+func scanLaeufe(rows *sql.Rows) ([]Lauf, error) {
 	var out []Lauf
 	for rows.Next() {
 		var l Lauf
@@ -203,6 +207,24 @@ func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+// LetzteLaeufeNachAuftrag liefert die jüngsten Läufe eines Auftrags,
+// neueste zuerst — anders als LetzterLaufNachAuftrag auch die ohne
+// Session, denn gerade die gescheiterten sind interessant.
+func (s *Store) LetzteLaeufeNachAuftrag(auftrag string, n int) ([]Lauf, error) {
+	rows, err := s.db.Query(`
+		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
+		       beendet, status, COALESCE(session_id,''), COALESCE(summary,''),
+		       COALESCE(fehler,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
+		       COALESCE(kosten_cent,0)
+		FROM laeufe WHERE auftrag = ?
+		ORDER BY gestartet DESC, id DESC LIMIT ?`, auftrag, n)
+	if err != nil {
+		return nil, fmt.Errorf("store: Läufe von %q lesen: %w", auftrag, err)
+	}
+	defer rows.Close()
+	return scanLaeufe(rows)
 }
 
 // LetzteSummaries liefert die jüngsten nicht-leeren Summaries eines

@@ -62,8 +62,12 @@ ihres Auftrags.
 hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config)
 hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
+hasenbau get auftraege     # was der Bau kennt
+hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get laeufe        # Historie
-hasenbau describe lauf <id>   # ein Lauf mit Notizen, Fehlern, Kosten
+hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
+hasenbau describe hase <name>     # effektive Permissions je Auftrag
+hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar

@@ -13,6 +13,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
+	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
@@ -20,6 +22,8 @@ import (
 const getUsage = `Aufruf: hasenbau get <ressource>
 
 Ressourcen:
+  auftraege       die Aufträge des Baus
+  hasen           die Hasen-Templates
   laeufe [-n N]   die letzten Läufe
   lauf <id>       ein Lauf (Details: hasenbau describe lauf <id>)
   provider        Provider der Bau-Config: Endpoint, Modelle, Schlüssel
@@ -37,6 +41,10 @@ func cmdGet(root string, args []string, out, errw io.Writer) int {
 		return getLaeufe(root, args[1:], out, errw)
 	case "lauf":
 		return getLauf(root, args[1:], out, errw)
+	case "auftraege", "auftrag":
+		return getAuftraege(root, args[1:], out, errw)
+	case "hasen", "hase":
+		return getHasen(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau get: unbekannte Ressource %q\n\n%s", args[0], getUsage)
 		return 2
@@ -224,4 +232,115 @@ func jaNein(b bool) string {
 		return "ja"
 	}
 	return "nein"
+}
+
+func getAuftraege(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get auftraege")
+		return 2
+	}
+	auftraege, err := ladeDefinitionen(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(auftraege) == 0 {
+		fmt.Fprintln(out, "keine Aufträge unter auftraege/")
+		return 0
+	}
+
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	defer st.Close()
+	states, err := st.AuftragStates()
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	stand := map[string]store.AuftragState{}
+	for _, s := range states {
+		stand[s.Auftrag] = s
+	}
+
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tTRIGGER\tHASE\tGÄNGE\tRÄUME\tLETZTER LAUF\tFEHLERSERIE")
+	for _, a := range auftraege {
+		s := stand[a.Name]
+		letzter := "—"
+		if s.LetzterLauf != nil {
+			letzter = s.LetzterLauf.Local().Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\n",
+			a.Name, triggerKurz(a.Trigger), a.Hase,
+			len(a.Gaenge), len(a.Raeume), letzter, s.FehlerSerie)
+	}
+	w.Flush()
+	return 0
+}
+
+// triggerKurz fasst den Trigger für eine Tabellenzelle zusammen.
+func triggerKurz(t auftrag.Trigger) string {
+	switch t.Art() {
+	case auftrag.TriggerCron:
+		return "cron " + t.Cron
+	case auftrag.TriggerManuell:
+		return "manuell"
+	default:
+		return "watch " + t.Watch
+	}
+}
+
+func getHasen(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get hasen")
+		return 2
+	}
+	namen, err := hasenNamen(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(namen) == 0 {
+		fmt.Fprintln(out, "keine Hasen unter hasen/")
+		return 0
+	}
+	// Ohne die Aufträge fehlt die Spalte, die den Hasen erst einordnet —
+	// aber ein kaputter Auftrag soll `get hasen` nicht unbrauchbar
+	// machen. Deshalb weiter mit leerer Liste und einem Hinweis.
+	auftraege, ladefehler := ladeDefinitionen(root)
+
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tMODELL\tTEMPERATUR\tDENIES\tBENUTZT VON")
+	for _, name := range namen {
+		t, err := hase.Lade(root, name)
+		if err != nil {
+			fmt.Fprintf(w, "%s\tKAPUTT: %s\t\t\t\n", name, einzeilig(err.Error()))
+			continue
+		}
+		modell := t.Model
+		if modell == "" {
+			modell = "— (opencode-Default)"
+		}
+		temp := "—"
+		if t.Temperature != nil {
+			temp = fmt.Sprintf("%g", *t.Temperature)
+		}
+		var von []string
+		for _, a := range nutzer(auftraege, name) {
+			von = append(von, a.Name)
+		}
+		benutzt := strings.Join(von, ", ")
+		if benutzt == "" {
+			benutzt = "—"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", name, modell, temp, len(t.Denies), benutzt)
+	}
+	w.Flush()
+	if ladefehler != nil {
+		fmt.Fprintf(out, "\nSpalte BENUTZT VON unvollständig: %v\n", ladefehler)
+	}
+	return 0
 }

@@ -91,7 +91,7 @@ func TestGetOhneUndMitUnbekannterRessource(t *testing.T) {
 		t.Errorf("Hilfe fehlt: %q", errw.String())
 	}
 	errw.Reset()
-	if code := run([]string{"-bau", t.TempDir(), "get", "hasen"}, &out, &errw); code != 2 {
+	if code := run([]string{"-bau", t.TempDir(), "get", "karotten"}, &out, &errw); code != 2 {
 		t.Errorf("unbekannte Ressource: exit %d, erwartet 2", code)
 	}
 	if !strings.Contains(errw.String(), "unbekannte Ressource") {
