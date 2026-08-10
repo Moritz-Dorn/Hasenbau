@@ -156,6 +156,24 @@ func (s *Store) LaufNachID(id int64) (*Lauf, error) {
 	return &l, nil
 }
 
+// LetzterLaufNachAuftrag liefert den jüngsten Lauf eines Auftrags, der
+// eine Session hat — nur an so einem hängt ein Trace, und nur damit
+// kann der Baumeister etwas anfangen (§8 Phase 2).
+func (s *Store) LetzterLaufNachAuftrag(auftrag string) (*Lauf, error) {
+	var id int64
+	err := s.db.QueryRow(`
+		SELECT id FROM laeufe
+		WHERE auftrag = ? AND session_id IS NOT NULL AND session_id != ''
+		ORDER BY gestartet DESC, id DESC LIMIT 1`, auftrag).Scan(&id)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("store: kein Lauf des Auftrags %q mit Session", auftrag)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: letzten Lauf von %q lesen: %w", auftrag, err)
+	}
+	return s.LaufNachID(id)
+}
+
 // LetzteLaeufe liefert die jüngsten Läufe, neueste zuerst.
 func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
 	rows, err := s.db.Query(`

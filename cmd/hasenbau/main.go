@@ -41,6 +41,9 @@ Befehle:
                         auslösende Datei (Bau-relativ, nur watch)
   laeufe [-n N]         letzte Läufe zeigen
   graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
+  baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
+                        Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
+                        Auftrag (dann dessen letzter Lauf)
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
@@ -96,6 +99,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdLaeufe(bau, rest[1:], out, errw)
 	case "graben":
 		return cmdGraben(bau, rest[1:], out, errw)
+	case "baumeister":
+		return cmdBaumeister(bau, rest[1:], out, errw)
 	case "provider":
 		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":
@@ -500,67 +505,6 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		return 1
 	}
 	fmt.Fprintf(out, "geschrieben: %s\n", conf.Pfad)
-	return 0
-}
-
-// cmdLauf triggert einen Auftrag manuell: eigener Server hoch, Lauf
-// ausführen, Server runter. Kein Konflikt mit einem laufenden Daemon —
-// beide binden eigene Ports; die DB teilt SQLite im WAL-Modus.
-func cmdLauf(root, name, input string, errw io.Writer) int {
-	logger := log.New(errw, "", log.LstdFlags)
-
-	st, err := store.Open(dbPath(root))
-	if err != nil {
-		logger.Print(err)
-		return 1
-	}
-	defer st.Close()
-
-	if err := laeufeAufraeumen(st, logger.Printf); err != nil {
-		logger.Print(err)
-		return 1
-	}
-	auftraege, err := ladeUndGeneriere(root)
-	if err != nil {
-		logger.Print(err)
-		return 1
-	}
-	var ziel *auftrag.Auftrag
-	for _, a := range auftraege {
-		if a.Name == name {
-			ziel = a
-		}
-	}
-	if ziel == nil {
-		fmt.Fprintf(errw, "hasenbau lauf: unbekannter Auftrag %q\n", name)
-		return 1
-	}
-	if err := rueckkanalEintragen(root, logger.Printf); err != nil {
-		logger.Print(err)
-		return 1
-	}
-
-	sup, err := supervisor.New(supervisor.Config{BauDir: root, Logf: logger.Printf})
-	if err != nil {
-		logger.Print(err)
-		return 1
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := sup.Start(ctx); err != nil {
-		logger.Print(err)
-		return 1
-	}
-	defer sup.Stop()
-
-	funnel := opencode.NewFunnel(sup.BaseURL, logger.Printf)
-	funnel.Start(ctx)
-	r := &runner.Runner{Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf}
-
-	if err := r.FuehreAus(ctx, ziel, "manuell", input); err != nil {
-		logger.Print(err)
-		return 1
-	}
 	return 0
 }
 
