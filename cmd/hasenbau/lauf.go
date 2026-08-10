@@ -88,6 +88,9 @@ func (k *laufContext) StartServer() error {
 		return err
 	}
 	k.sup = sup
+	if err := verifyBackchannel(k.Ctx, sup.BaseURL()); err != nil {
+		return err
+	}
 
 	funnel := opencode.NewFunnel(sup.BaseURL, k.logger.Printf)
 	funnel.Start(k.Ctx)

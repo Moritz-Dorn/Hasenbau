@@ -185,6 +185,41 @@ func ensureBackchannel(root string, logf func(string, ...any)) error {
 	return nil
 }
 
+// verifyBackchannel prüft nach dem Server-Start, ob der Rückkanal
+// wirklich verbunden ist — und lässt keinen Hasen los, solange er es
+// nicht ist.
+//
+// Ein gescheiterter MCP-Client fällt sonst nirgends auf: opencode
+// kommt hoch, sagt nichts, und der Hase sieht `hasenbau_summary`
+// einfach nicht. Der generierte Agent verspricht ihm die Werkzeuge
+// trotzdem, also schreibt er seine Meldung als Fließtext, die Summary
+// kommt aus dem Fallback und die Notizen entstehen gar nicht. Genau so
+// ist Lauf 10 im Test-Bau gelaufen (Hasenbau-08u), und man sieht es
+// dem Lauf nicht an: er steht als 'ok' in der DB.
+func verifyBackchannel(ctx context.Context, baseURL string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	status, err := opencode.MCPStatus(ctx, opencode.New(baseURL))
+	if err != nil {
+		return fmt.Errorf("Rückkanal: Zustand nicht abfragbar: %w", err)
+	}
+	s, da := status[bau.MCPEintrag]
+	switch {
+	case !da:
+		return fmt.Errorf("Rückkanal: opencode kennt keinen MCP-Server %q — fehlt der Eintrag in %s?",
+			bau.MCPEintrag, bau.OpencodeConfig)
+	case s.Status == opencode.MCPConnected:
+		return nil
+	case s.Error != "":
+		return fmt.Errorf("Rückkanal %q: %s — %s (Eintrag in %s)",
+			bau.MCPEintrag, s.Status, s.Error, bau.OpencodeConfig)
+	default:
+		return fmt.Errorf("Rückkanal %q: %s (Eintrag in %s)",
+			bau.MCPEintrag, s.Status, bau.OpencodeConfig)
+	}
+}
+
 // cleanupLaeufe schließt die Läufe ab, deren Prozess gestorben ist,
 // bevor dieser hier selbst welche anlegt. Ohne das zählt `hasenbau
 // status` für immer falsch und der Rückkanal findet keinen eindeutigen
@@ -277,6 +312,12 @@ func cmdDaemon(root string, errw io.Writer) int {
 	go func() { supFertig <- sup.Run(ctx) }()
 
 	if err := waitForServer(ctx, sup, 60*time.Second); err != nil {
+		logger.Print(err)
+		stop()
+		<-supFertig
+		return 1
+	}
+	if err := verifyBackchannel(ctx, sup.BaseURL()); err != nil {
 		logger.Print(err)
 		stop()
 		<-supFertig
