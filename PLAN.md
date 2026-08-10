@@ -157,7 +157,7 @@ Der Bau ist selbst-enthaltend. Alles, was das System ausmacht, liegt darin.
 
 ```
 bau/
-├── hasenbau.yaml            # Daemon-Config: Defaults, Sinks, Log-Level
+├── hasenbau.yaml            # Bau-Config: log_level, baumeister
 ├── .opencode-home/          # XDG_CONFIG_HOME des Servers
 │   └── opencode/            #   opencode erwartet dieses Unterverzeichnis
 │       ├── opencode.json    #   minimal, explizit, plugin: []
@@ -170,7 +170,8 @@ bau/
 ├── auftraege/               # Auftrags-Definitionen (Markdown + YAML-Frontmatter)
 │   └── pdf-einlagern.md
 ├── gaenge/                  # deterministische Skripte
-│   └── pdf_to_md.py
+│   ├── pdf_to_md.py
+│   └── entwurf/             #   was der Baumeister schreibt — nie aktiv (§8)
 ├── raeume/                  # der eigentliche Materialfluss
 │   ├── laderampe/
 │   │   ├── sources/         #   Drop-Zone
@@ -184,6 +185,19 @@ bau/
 
 Räume sind nicht hartkodiert. Der Auftrag benennt sie; der Daemon legt
 fehlende an. `laderampe/`, `lager/` usw. sind Konvention, kein Vertrag.
+
+`hasenbau.yaml` ist bewusst dünn: `log_level` (noch ohne Konsumenten —
+der Daemon loggt levelfrei) und `baumeister`, der Auftrag, den
+`hasenbau baumeister` startet. Unbekannte Schlüssel sind ein Fehler; ein
+verschriebener darf nicht still wirkungslos bleiben.
+
+Der Baumeister zeigt eine Dehnung des Raum-Begriffs: sein `out`-Raum ist
+`gaenge/entwurf/`, also **Code als Material**. Das ist gewollt — nur aus
+den Räumen entsteht sein Schreibrecht (§6), und so steht es an derselben
+Stelle wie jede andere Rechtevergabe. Der Preis ist begrifflich, und das
+Review-Gate ist genau deshalb da: `gaenge/` ist versioniert, jeder
+Entwurf steht im `git diff` des Baus, und aktiviert wird er nie
+automatisch (§8, §10).
 
 Der Bau ist außerdem ein **Git-Repo mit mindestens einem Commit** — nicht
 zur Versionierung, sondern weil opencode daran Projekt-Identität und
@@ -290,6 +304,34 @@ CREATE INDEX idx_notizen_lauf ON notizen(lauf, id);
 Gelesen werden sie von `hasenbau graben`: was der Hase selbst für
 erwähnenswert hielt, steht dort über dem Trace.
 
+Dazu der Verlauf selbst — eine Zeile pro Lauf, geschrieben beim
+Lauf-Ende:
+
+```sql
+CREATE TABLE trace (
+  lauf          INTEGER PRIMARY KEY REFERENCES laeufe(id),
+  session_id    TEXT NOT NULL,
+  json          TEXT NOT NULL,     -- opencode.Trace, Ausgaben gekappt
+  geschrieben   TIMESTAMP NOT NULL
+);
+```
+
+Der Runner holt `Session.Messages` am Lauf-Ende ohnehin für Summary,
+Tokens und Kosten — der Trace fällt dabei ab und kostet keinen zweiten
+Aufruf. `json` ist für den Store opak; das Format gehört
+`internal/opencode`.
+
+Der Grund ist der Baumeister (§8): der zieht seinen Trace in einem
+**Gang**, und der müsste sonst `hasenbau graben` rufen, das einen
+zweiten opencode-Server startet — der bei einem Gang-Timeout verwaist
+zurückbliebe, weil der Kill nur die Prozessgruppe der Gang-Shell trifft
+(§2: „hängt nie als offener Endpoint herum"). Mit der Zeile hier
+braucht `graben` gar keinen Server. Fehlt sie (Altläufe), holt `graben`
+den Trace wie bisher und trägt sie nach; `-live` erzwingt den
+Server-Weg mit ungekürzten Ausgaben. Gekappt wird, was die Verdichtung
+nicht braucht: Tool-Ausgaben und Fehlertexte bei 8 KiB, mit Hinweis —
+Werkzeug, Argumente und Status bleiben vollständig.
+
 ---
 
 ## 6. Auftrags-Format
@@ -303,6 +345,7 @@ trigger:
   watch: raeume/laderampe/sources/*.pdf
   debounce: 5s
   # alternativ:  cron: "0 7 * * *"
+  # alternativ:  manuell: true      # läuft nur auf Zuruf
 
 gaenge:                            # deterministisch, läuft VOR dem Hasen
   - name: pdf-zu-markdown
@@ -373,9 +416,24 @@ Generierungsregel (deterministisch):
 | Variable | Bedeutung |
 |---|---|
 | `$BAU` | Root des Baus |
-| `$INPUT` | Die auslösende Datei (nur bei `watch`) |
+| `$INPUT` | Der Auslöser: bei `watch` die auslösende Datei, bei `manuell` das übergebene Argument |
 | `$WORK` | Scratch-Verzeichnis dieses Laufs, wird pro Lauf angelegt |
 | `$RAUM_<name>` | Pfad des unter `raeume:` benannten Raums |
+| `$HASENBAU` | Pfad des laufenden Binaries — für Gänge, die den Hasenbau selbst rufen |
+
+Genau eine Trigger-Art pro Auftrag. `manuell` gibt es, weil nicht jeder
+Auftrag auf Material oder die Uhr wartet: der Baumeister wird auf einen
+*Lauf* angesetzt (§8). Scheduler und Watcher wählen positiv aus und
+ignorieren ihn von selbst.
+
+**`$INPUT` ist nur bei `watch` ein Pfad.** Bei `manuell` ist es das
+Argument von der Kommandozeile — freier Text. Deshalb lehnt der Parser
+`$INPUT` in `kontext: - datei:` und in `nachher:` für manuell-Aufträge
+ab, und die Quarantäne (§7) greift nur bei `watch`: sonst würde ein
+Gang-Fehler eine gleichnamige Datei im Bau wegtragen, die mit dem Lauf
+nichts zu tun hat. Zu unterscheiden ist das von `laeufe.trigger` (§5) —
+ein watch-Auftrag, den `hasenbau lauf` startet, wird dort als `manuell`
+verbucht, bleibt aber ein watch-Auftrag.
 
 ### Ablauf eines Laufs
 
@@ -489,8 +547,9 @@ kompiliert. Bezahlt in Tokens, Latenz und Nichtdeterminismus.
    strukturiert, kein Log-Parsing) ✅ *(2026-07-14, Hasenbau-2qy:
    `graben [-json]`, Zugriffsweg §11.3 — der Trace enthält auch die
    reasoning-Parts, also die Absicht des Hasen)*
-3. Der **Baumeister** (ein Hase mit Schreibrecht auf `gaenge/`) bekommt den
-   Trace und schreibt daraus ein Skript
+3. Der **Baumeister** (ein Hase mit Schreibrecht auf `gaenge/entwurf/`)
+   bekommt den Trace und schreibt daraus ein Skript ✅ *(2026-08-10,
+   Hasenbau-xfm, siehe unten)*
 4. Der Nutzer liest das Skript und trägt es selbst in den Auftrag ein
 
 **Die harte Stelle:** Ein Trace ist konkret, ein Gang muss generisch sein.
@@ -502,10 +561,55 @@ ist selbst eine Modell-Aufgabe und geht regelmäßig daneben.
 **Deshalb, nicht verhandelbar:**
 
 > Ein gegrabener Gang wird **nie automatisch scharf geschaltet.** Der
-> Baumeister schreibt das Skript nach `gaenge/`, der Nutzer liest es, der
-> Nutzer trägt es ein. Sonst entsteht ein System, das sich selbst
+> Baumeister schreibt das Skript nach `gaenge/entwurf/`, der Nutzer liest
+> es, der Nutzer trägt es ein. Sonst entsteht ein System, das sich selbst
 > umschreibt und dessen Fehlverhalten drei Läufe später in einem
 > generierten Skript steckt, das nie jemand gelesen hat.
+
+**Der Baumeister ist kein Sonderpfad im Code** (entschieden 2026-08-10,
+Hasenbau-xfm). Er ist ein ganz normaler Auftrag mit einem ganz normalen
+Hasen — sein Material sind nur keine PDFs, sondern Läufe, und seine
+deterministische Vorverarbeitung ist ein Gang wie jeder andere:
+
+```yaml
+trigger:  {manuell: true}
+gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'}]
+hase:     baumeister
+raeume:   {work: raeume/baumeister/work/, out: gaenge/entwurf/}
+kontext:  [{datei: $WORK/trace.md}]
+```
+
+Damit frisst der Hasenbau sein eigenes Hundefutter: die Verdichtung
+läuft durch dieselbe Maschinerie wie alles andere, und die
+Vorverarbeitung kann später selbst zu einem Gang verdichtet werden.
+`hasenbau baumeister <lauf-id|auftrag>` ist nur ein dünner Befehl
+darüber — er schlägt in `hasenbau.yaml` nach, welcher Auftrag der
+Baumeister ist, löst das Ziel zu einer Lauf-ID auf (damit `$INPUT` eine
+Zahl ist, kein Pfad und keine Shell-Syntax) und berichtet hinterher, was
+im out-Raum neu ist.
+
+Drei Dinge tragen dabei die Garantie aus §10, und zwar im Code statt im
+Prompt: das Schreibrecht entsteht **ausschließlich** aus `raeume: out:`
+(§6) — auf `auftraege/` hat der Baumeister keines und kann sich deshalb
+nicht selbst scharf schalten; `gaenge/entwurf/` statt `gaenge/` heißt,
+dass kein Lauf einen benutzten Gang überschreiben kann; und ein
+Golden-Test in `internal/hase` hält den generierten Agenten der
+ausgelieferten Beispiel-Dateien fest, damit eine Änderung an den Räumen
+sofort auffällt.
+
+**Bekannte Grenze:** Aus *einem* Trace ist prinzipiell nicht
+entscheidbar, was Parameter und was Konstante war. Das Modell antwortet
+trotzdem plausibel und schreibt die Eigenheiten des ersten Materials als
+Regel fest. Der `Annahmen:`-Block im Skriptkopf und die Anweisung „lieber
+nichts schreiben" dämpfen das, heilen es nicht — Stufe 1 liefert
+Gesprächsgrundlagen, keine einsatzfähigen Gänge. Die Antwort darauf ist
+nicht ein besserer Prompt, sondern mehr Material: der Argument-Diff über
+N Läufe sagt empirisch, welche Position variiert (Epic Hasenbau-4cx).
+Zweitens kann der Baumeister sein Skript nicht ausführen — `bash: deny`
+ist unbedingt, Templates dürfen Rechte nur verengen. Deshalb prüft
+`hasenbau baumeister` neue Entwürfe nach dem Lauf auf Syntax
+(`py_compile`, `sh -n`); das ist deterministisch und außerhalb der
+Reichweite des Modells.
 
 **Rückkanal:** Ein kleiner MCP-Server (in Go, `mark3labs/mcp-go`), der den
 Hasen die Tools `notiz(text)` und `summary(text)` gibt und damit direkt in

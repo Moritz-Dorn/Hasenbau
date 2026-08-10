@@ -4,11 +4,13 @@ Ein Daemon, der [opencode](https://opencode.ai) headless orchestriert:
 zeitgesteuerte und dateigetriggerte Agenten-Aufträge mit deterministischer
 Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 
-**Status: Phase 0 (Fundament) und Phase 1 (Aufträge) sind fertig** —
-der Referenz-Auftrag `pdf-einlagern` läuft Ende-zu-Ende (siehe
-[`beispiele/`](beispiele/)). In Arbeit: Phase 2 (Verdichtung und
-Rückkanal); `hasenbau graben` und der MCP-Rückkanal existieren bereits,
-es fehlt der Baumeister-Hase. `PLAN.md` ist der Spec.
+**Status: Phase 0 (Fundament), Phase 1 (Aufträge) und Phase 2
+(Verdichtung und Rückkanal) sind fertig** — der Referenz-Auftrag
+`pdf-einlagern` läuft Ende-zu-Ende, `hasenbau graben` zieht Traces, der
+MCP-Rückkanal steht, und der Baumeister verdichtet einen Lauf zu einem
+Gang-Entwurf (siehe [`beispiele/`](beispiele/)). Als nächstes: die
+Befund-Analyse über viele Läufe, damit die Verdichtung nicht aus einem
+einzelnen Trace raten muss. `PLAN.md` ist der Spec.
 
 ## Die Idee
 
@@ -62,6 +64,7 @@ hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau laeufe            # Historie
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
 hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
 hasenbau status            # Zustand des Baus
 ```
@@ -74,6 +77,18 @@ getan hat (der nächste Lauf desselben Auftrags bekommt sie als Kontext),
 und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
 `hasenbau graben`. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er beim Daemon-Start selbst.
+
+`hasenbau baumeister <lauf-id|auftrag>` setzt den Baumeister auf einen
+Lauf an: er liest dessen Trace und schreibt daraus einen Gang-Entwurf
+nach `gaenge/entwurf/`. Der Baumeister ist dabei kein Sonderfall im
+Code, sondern selbst ein Auftrag mit einem Hasen — sein Material sind
+nur Läufe statt PDFs, und sein Gang ist `hasenbau graben`. Sein
+Schreibrecht entsteht ausschließlich aus dem `out`-Raum seines
+Auftrags; auf `auftraege/` hat er keines. **Ein Entwurf wird nie
+automatisch aktiviert** — der Nutzer liest ihn und trägt den Gang
+selbst ein. Aus einem einzelnen Trace ist nicht sicher zu erkennen, was
+Parameter und was Konstante war; ein Entwurf ist deshalb eine
+Gesprächsgrundlage, kein fertiger Gang.
 
 Stirbt der Daemon mitten in einem Lauf, bleibt dessen Zeile auf
 `laeuft` stehen. `hasenbau daemon` und `hasenbau lauf` räumen deshalb
