@@ -26,12 +26,15 @@ func TestMCPSicherstellen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	geschrieben, err := EnsureMCP(root, "/opt/hasenbau")
+	update, err := EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !geschrieben {
+	if !update.Written {
 		t.Fatal("frischer Bau: nichts geschrieben")
+	}
+	if update.Previous != "" {
+		t.Errorf("neuer Eintrag hat keinen Vorgänger, gemeldet: %q", update.Previous)
 	}
 
 	roh := leseConfig(t, root)
@@ -55,18 +58,46 @@ func TestMCPSicherstellen(t *testing.T) {
 		t.Error("$schema ist verschwunden")
 	}
 
-	// Zweiter Aufruf ist ein No-op.
-	geschrieben, err = EnsureMCP(root, "/opt/hasenbau")
+	// Zweiter Aufruf mit demselben Binary ist ein No-op.
+	update, err = EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if geschrieben {
+	if update.Written {
 		t.Error("zweiter Aufruf hat erneut geschrieben")
 	}
 }
 
-// Wer den Eintrag von Hand anpasst, behält ihn — auch wenn das Binary
-// inzwischen woanders liegt.
+// Der Kern von Hasenbau-2nq: Der Eintrag ist eine Selbstreferenz auf
+// das Binary, das den Bau fährt — zeigt er woandershin, wird er
+// korrigiert, und der alte Pfad kommt zurück, damit es im Log auffällt.
+func TestMCPSicherstellenKorrigiertVeraltetesBinary(t *testing.T) {
+	root := t.TempDir()
+	if _, err := Init(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureMCP(root, "/tmp/wegwerf/hasenbau"); err != nil {
+		t.Fatal(err)
+	}
+
+	update, err := EnsureMCP(root, "/opt/hasenbau")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !update.Written {
+		t.Fatal("veralteter Pfad blieb stehen")
+	}
+	if update.Previous != "/tmp/wegwerf/hasenbau" {
+		t.Errorf("Vorgänger = %q", update.Previous)
+	}
+	eintrag := leseConfig(t, root)["mcp"].(map[string]any)[MCPEintrag].(map[string]any)
+	if befehl := eintrag["command"].([]any); befehl[0] != "/opt/hasenbau" {
+		t.Errorf("command = %v", befehl)
+	}
+}
+
+// Korrigiert wird der Binary-Pfad, sonst nichts: Zusatz-Argumente und
+// eigene Felder überleben.
 func TestMCPSicherstellenLaesstHandarbeitStehen(t *testing.T) {
 	root := t.TempDir()
 	if _, err := Init(root); err != nil {
@@ -75,21 +106,56 @@ func TestMCPSicherstellenLaesstHandarbeitStehen(t *testing.T) {
 	pfad := filepath.Join(root, OpencodeConfig)
 	if err := os.WriteFile(pfad, []byte(`{
   "plugin": [],
-  "mcp": {"hasenbau": {"type": "local", "command": ["/eigener/pfad", "mcp"]}}
+  "mcp": {"hasenbau": {"type": "local", "enabled": false,
+    "command": ["/eigener/pfad", "-bau", "/anderswo", "mcp"],
+    "environment": {"HASENBAU_DEBUG": "1"}}}
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	geschrieben, err := EnsureMCP(root, "/opt/hasenbau")
+	update, err := EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if geschrieben {
-		t.Fatal("vorhandener Eintrag wurde überschrieben")
+	if !update.Written || update.Previous != "/eigener/pfad" {
+		t.Fatalf("update = %+v", update)
 	}
 	eintrag := leseConfig(t, root)["mcp"].(map[string]any)[MCPEintrag].(map[string]any)
-	if befehl := eintrag["command"].([]any); befehl[0] != "/eigener/pfad" {
+	befehl := eintrag["command"].([]any)
+	if len(befehl) != 4 || befehl[0] != "/opt/hasenbau" || befehl[2] != "/anderswo" {
+		t.Errorf("nur das Binary sollte sich ändern: command = %v", befehl)
+	}
+	if eintrag["enabled"] != false {
+		t.Errorf("enabled wurde angefasst: %v", eintrag["enabled"])
+	}
+	if _, da := eintrag["environment"]; !da {
+		t.Error("environment ist verschwunden")
+	}
+}
+
+// Ein Eintrag ohne aufrufbaren Befehl ist keine Handarbeit, sondern
+// kaputt — er entsteht kanonisch neu.
+func TestMCPSicherstellenRepariertLeerenBefehl(t *testing.T) {
+	root := t.TempDir()
+	if _, err := Init(root); err != nil {
+		t.Fatal(err)
+	}
+	pfad := filepath.Join(root, OpencodeConfig)
+	if err := os.WriteFile(pfad, []byte(`{"mcp": {"hasenbau": {"type": "local"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	update, err := EnsureMCP(root, "/opt/hasenbau")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !update.Written {
+		t.Fatal("kaputter Eintrag blieb stehen")
+	}
+	eintrag := leseConfig(t, root)["mcp"].(map[string]any)[MCPEintrag].(map[string]any)
+	befehl, _ := eintrag["command"].([]any)
+	if len(befehl) != 4 || befehl[0] != "/opt/hasenbau" || befehl[2] != root {
 		t.Errorf("command = %v", befehl)
 	}
 }

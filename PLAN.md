@@ -657,10 +657,20 @@ Hasen die Tools `notiz(text)` und `summary(text)` gibt und damit direkt in
 die SQLite schreibt. Strukturierte Writes statt stdout-Parsing — sonst
 entsteht in drei Wochen ein Regex-Friedhof. ✅ *(2026-08-05,
 Hasenbau-ekm: `hasenbau mcp` über stdio, von opencode gestartet;
-Eintrag `mcp.hasenbau` in der Bau-Config, den der Daemon bei jedem
-Server-Start auf das laufende Binary setzt. Der generierte Agent bringt
+Eintrag `mcp.hasenbau` in der Bau-Config. Der generierte Agent bringt
 den Absatz mit, der die Werkzeuge erklärt — ohne ihn ruft sie kein Hase.
 Zur Lauf-Zuordnung §11.7)*
+
+**Der Eintrag ist eine Selbstreferenz, kein Fremdprodukt.** `hasenbau
+mcp` ist der Hasenbau selbst über stdio; `command:` benennt also nicht
+„ein Werkzeug", sondern das Binary, das diesen Bau fährt — und das
+wechselt bei jedem Rebuild. Ein einmal eingetragener Pfad veraltet
+deshalb zwangsläufig: im Test-Bau zeigte er fünf Tage lang auf einen
+Wegwerf-Build unter `/tmp` (Hasenbau-2nq). Der Hasenbau setzt darum bei
+jedem Server-Start das *erste Element* von `command:` auf das laufende
+Binary und sagt im Log, wenn er dabei etwas korrigiert hat. Zusatz-
+Argumente, `env`, `type` und `enabled` bleiben stehen — Handarbeit am
+Eintrag überlebt, nur das veraltete Binary nicht.
 
 **Ein Rückkanal, der nicht hochkommt, hält den Lauf an.** Scheitert der
 MCP-Client, sagt opencode nichts: der Server startet normal, loggt keine

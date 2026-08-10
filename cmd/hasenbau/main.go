@@ -175,11 +175,17 @@ func ensureBackchannel(root string, logf func(string, ...any)) error {
 	if err != nil {
 		return fmt.Errorf("hasenbau: eigenen Pfad bestimmen: %w", err)
 	}
-	geschrieben, err := bau.EnsureMCP(root, exe)
-	if err != nil {
+	update, err := bau.EnsureMCP(root, exe)
+	switch {
+	case err != nil:
 		return err
-	}
-	if geschrieben {
+	case update.Previous != "":
+		// Sichtbar machen: der Eintrag zeigte auf ein anderes Binary,
+		// und genau das hat schon einmal still den Rückkanal gekostet
+		// (Hasenbau-2nq).
+		logf("Rückkanal in %s zeigte auf %s — korrigiert auf %s",
+			bau.OpencodeConfig, update.Previous, exe)
+	case update.Written:
 		logf("Rückkanal in %s eingetragen (%s)", bau.OpencodeConfig, exe)
 	}
 	return nil
