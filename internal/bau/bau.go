@@ -37,6 +37,10 @@ const MCPEintrag = "hasenbau"
 const hasenbauYAML = `# Hasenbau — Daemon-Config (PLAN.md §4).
 # Die Felder wachsen mit den Phasen; Unbekanntes wird abgelehnt.
 log_level: info
+
+# Welcher Auftrag ` + "`hasenbau baumeister`" + ` startet. Vorlage zum
+# Kopieren: beispiele/auftraege/baumeister.md + beispiele/hasen/baumeister.md
+# baumeister: baumeister
 `
 
 // gitIgnore: Der Bau versioniert Definitionen (Aufträge, Hasen, Gänge,
