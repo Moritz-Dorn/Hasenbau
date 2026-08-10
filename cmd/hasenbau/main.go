@@ -42,7 +42,7 @@ Befehle:
   get <ressource>       zeigen, was der Bau kennt (auftraege, hasen,
                         gaenge, laeufe, lauf, provider)
   describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
-  dig [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
+  dig [-json] <id>      Trace eines Laufs ziehen (Baumeister-Input)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
                         Auftrag (dann dessen letzter Lauf)
