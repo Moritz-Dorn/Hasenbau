@@ -113,13 +113,25 @@ func gangCandidate(history []store.LaufTools) (Finding, bool) {
 			}
 		}
 	}
-	for key, laeufe := range zaehlung {
+	// Über sortierte Schlüssel, nicht über die Map: bei Gleichstand
+	// entschiede sonst die Iterationsreihenfolge, und zwei Aufrufe
+	// lieferten verschiedene Befunde. Reproduzierbar zu sein ist der
+	// halbe Sinn der Übung.
+	keys := make([]string, 0, len(zaehlung))
+	for key := range zaehlung {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		laeufe := zaehlung[key]
 		n := len(strings.Split(key, ">"))
 		if n < 2 || len(laeufe) < minLaeufe {
 			continue
 		}
 		// Mehr Läufe schlägt länger: ein Muster, das überall vorkommt,
 		// trägt eine Generalisierung, ein langes in drei Läufen nicht.
+		// Bei völligem Gleichstand gewinnt der alphabetisch erste — eine
+		// willkürliche, aber stabile Regel.
 		if len(laeufe) > bestLaeufe || (len(laeufe) == bestLaeufe && n > len(best)) {
 			best, bestLaeufe = strings.Split(key, ">"), len(laeufe)
 		}
@@ -262,7 +274,7 @@ func costAndDuration(history []store.LaufTools, laeufe []store.Lauf) (Finding, b
 		teile = append(teile, fmt.Sprintf("Kosten über %d Läufe: %d ct.", len(kosten), summe))
 	}
 	if tool, ms := teuerstesWerkzeug(history); tool != "" {
-		teile = append(teile, fmt.Sprintf("Die meiste Werkzeug-Zeit geht an %s (%s über alle Läufe).", tool, (time.Duration(ms) * time.Millisecond).Round(time.Millisecond)))
+		teile = append(teile, fmt.Sprintf("Die meiste Werkzeug-Zeit geht an %s (%s über alle Läufe).", tool, (time.Duration(ms)*time.Millisecond).Round(time.Millisecond)))
 	}
 	f.Detail = strings.Join(teile, " ")
 	if f.Detail == "" {

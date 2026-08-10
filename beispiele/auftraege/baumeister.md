@@ -1,15 +1,17 @@
 ---
 # Der Baumeister ist ein ganz normaler Auftrag — sein Material sind
 # keine PDFs, sondern Läufe. Gestartet wird er auf Zuruf:
-#   hasenbau baumeister <lauf-id|auftrag>
+#   hasenbau baumeister <lauf-id|auftrag>            ein Trace
+#   hasenbau baumeister -finding <n> <auftrag>       ein Befund über N Läufe
 trigger:
   manual: true
 
 gaenge:
-  # $INPUT ist hier die Lauf-ID, kein Pfad. Die run-Zeile muss in
-  # einfache Anführungszeichen, weil sie mit einem doppelten beginnt.
-  - name: trace-ziehen
-    run: '"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"'
+  # $INPUT ist hier eine Lauf-ID oder ein Befund (<auftrag>#<n>), nie
+  # ein Pfad. Die run-Zeile muss in einfache Anführungszeichen, weil sie
+  # mit einem doppelten beginnt.
+  - name: material-ziehen
+    run: '"$HASENBAU" dig "$INPUT" > "$WORK/material.md"'
     timeout: 60s
 
 hase: baumeister
@@ -28,15 +30,17 @@ raeume:
   out: gaenge/entwurf/
 
 context:
-  - file: $WORK/trace.md
+  - file: $WORK/material.md
 ---
 
-Im Kontext unten steht der Trace eines einzelnen Laufs: was der Hase
-vorhatte, was er tat, was fehlschlug.
+Im Kontext unten steht das Material: entweder ein gerechneter Befund
+über mehrere Läufe samt den Traces, auf denen er beruht — dann sagen
+dir die Zahlen bereits, welche Position variiert — oder der Trace eines
+einzelnen Laufs, und dann musst du selbst urteilen.
 
-Finde darin den deterministischen Teil — die Schritte, die bei jedem
-Lauf dieses Auftrags gleich abgelaufen wären — und schreib daraus
-**einen** Gang-Entwurf in deinen out-Raum.
+Finde den deterministischen Teil — die Schritte, die bei jedem Lauf
+dieses Auftrags gleich abliefen — und schreib daraus **einen**
+Gang-Entwurf in deinen out-Raum.
 
 Bleibt nichts Deterministisches übrig, schreib keine Datei und sag in
 deiner Summary, warum.

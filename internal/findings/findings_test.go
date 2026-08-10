@@ -212,3 +212,20 @@ func TestZielAusArgumenten(t *testing.T) {
 		}
 	}
 }
+
+// Reproduzierbarkeit ist der halbe Sinn: derselbe Input muss denselben
+// Befund liefern, auch wenn mehrere Muster gleich häufig sind.
+func TestAnalyseIstReproduzierbar(t *testing.T) {
+	history := []store.LaufTools{
+		lauf(4, "read", "{}", "glob", "{}", "write", "{}"),
+		lauf(3, "glob", "{}", "read", "{}", "write", "{}"),
+		lauf(2, "read", "{}", "glob", "{}", "write", "{}"),
+		lauf(1, "glob", "{}", "read", "{}", "write", "{}"),
+	}
+	erste := Analyze("a", history, nil).Markdown()
+	for i := 0; i < 20; i++ {
+		if got := Analyze("a", history, nil).Markdown(); got != erste {
+			t.Fatalf("Durchlauf %d weicht ab:\n%s\n---\n%s", i, erste, got)
+		}
+	}
+}

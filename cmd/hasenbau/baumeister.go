@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -31,15 +32,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
 func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau baumeister <lauf-id|auftrag>")
+	fs := flag.NewFlagSet("baumeister", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	// Stufe 2 (Hasenbau-4cx.4): nicht ein Trace, sondern ein gerechneter
+	// Befund über N Läufe. Die Nummer kommt aus `hasenbau findings`.
+	befund := fs.Int("finding", 0, "Nummer eines Befunds aus `hasenbau findings <auftrag>`")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau baumeister [-finding N] <lauf-id|auftrag>")
+		return 2
+	}
+	args = fs.Args()
 	logger := log.New(errw, "", log.LstdFlags)
 
 	conf, err := bau.LoadConfig(root)
@@ -74,7 +85,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	}
 
 	// Vor dem Server auflösen: ein Tippfehler soll kein opencode starten.
-	quelle, err := targetLauf(k.Store, args[0])
+	material, err := resolveMaterial(k.Store, args[0], *befund)
 	if err != nil {
 		fmt.Fprintf(errw, "hasenbau baumeister: %v\n", err)
 		return 1
@@ -86,8 +97,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(out, "Baumeister %s auf Lauf %d (%s, %s, %s)\n",
-		ziel.Name, quelle.ID, quelle.Auftrag, quelle.Trigger, quelle.Status)
+	fmt.Fprintf(out, "Baumeister %s auf %s\n", ziel.Name, material.Kopf)
 	if err := k.StartServer(); err != nil {
 		logger.Print(err)
 		return 1
@@ -95,7 +105,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 
 	// Der Runner loggt den Fehlschlag mit Grund, und reportLauf sagt
 	// unten, was in der DB steht — hier nichts nachdrucken (Hasenbau-vwr).
-	laufID, laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
+	laufID, laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", material.Input)
 
 	// Bericht auch nach einem Fehlschlag: der Hase kann geschrieben
 	// haben, bevor etwas anderes schiefging.
@@ -114,7 +124,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 			"(PLAN.md §8/§10). Lies das Skript, dann trag den Gang selbst ein; der\n"+
 			"Vorschlag steht im Kopf der Datei.\n")
 	}
-	fmt.Fprintf(out, "\nDer Trace, aus dem er gearbeitet hat: `hasenbau dig %d`.\n", quelle.ID)
+	fmt.Fprintf(out, "\nDas Material, aus dem er gearbeitet hat: `hasenbau dig %s`.\n", material.Input)
 
 	if laufFehler != nil {
 		return 1
@@ -150,6 +160,58 @@ func reportLauf(w io.Writer, st *store.Store, laufID int64) {
 	if l.Status != "ok" {
 		fmt.Fprintf(w, "  Was unten steht, ist deshalb womöglich unfertig.\n")
 	}
+}
+
+// material beschreibt, woran der Baumeister arbeitet.
+type material struct {
+	Input string // $INPUT des Laufs — eine Lauf-ID oder ein Befund-Selektor
+	Kopf  string // was oben in der Ausgabe steht
+}
+
+// resolveMaterial entscheidet zwischen den beiden Stufen des
+// Baumeisters (PLAN.md §8): ein einzelner Trace, oder ein gerechneter
+// Befund über N Läufe.
+//
+// Stufe 2 ist die bessere, wo es sie gibt — aus EINEM Trace ist
+// prinzipiell nicht entscheidbar, was Parameter und was Konstante war.
+// Stufe 1 bleibt trotzdem: solange ein Auftrag zu wenige ausgewertete
+// Läufe hat, gibt es keine Befunde, und ein Trace ist mehr als nichts.
+func resolveMaterial(st *store.Store, ziel string, befund int) (material, error) {
+	if befund <= 0 {
+		l, err := targetLauf(st, ziel)
+		if err != nil {
+			return material{}, err
+		}
+		return material{
+			Input: strconv.FormatInt(l.ID, 10),
+			Kopf:  fmt.Sprintf("Lauf %d (%s, %s, %s)", l.ID, l.Auftrag, l.Trigger, l.Status),
+		}, nil
+	}
+
+	sel := selector{Auftrag: ziel, Nr: befund}
+	if auftrag.ValidName(ziel) != nil {
+		return material{}, fmt.Errorf("-finding braucht einen Auftrag, %q ist keiner", ziel)
+	}
+	_, f, err := resolveFinding(st, sel, 20)
+	if err != nil {
+		return material{}, err
+	}
+	return material{
+		Input: sel.String(),
+		Kopf: fmt.Sprintf("Befund %d von %s: %s (Läufe %s)",
+			befund, ziel, f.Title, laufListe(f.Laeufe)),
+	}, nil
+}
+
+func laufListe(ids []int64) string {
+	var s []string
+	for _, id := range ids {
+		s = append(s, strconv.FormatInt(id, 10))
+	}
+	if len(s) == 0 {
+		return "—"
+	}
+	return strings.Join(s, ", ")
 }
 
 // targetLauf löst das Argument auf: reine Ziffern sind eine Lauf-ID,

@@ -89,3 +89,93 @@ func TestFindingsFehlerpfade(t *testing.T) {
 		t.Errorf("Ausgabe: %q", out.String())
 	}
 }
+
+func TestSelektorParsen(t *testing.T) {
+	faelle := []struct {
+		s       string
+		auftrag string
+		nr      int
+		ok      bool
+	}{
+		{"pdf-einlagern#2", "pdf-einlagern", 2, true},
+		{"a#1", "a", 1, true},
+		{"12", "", 0, false},              // Lauf-ID
+		{"pdf-einlagern", "", 0, false},   // nur der Auftrag
+		{"pdf-einlagern#0", "", 0, false}, // Befunde zählen ab 1
+		{"pdf-einlagern#x", "", 0, false},
+		{"mit/slash#1", "", 0, false},
+		{"#1", "", 0, false},
+	}
+	for _, f := range faelle {
+		sel, ok := parseSelector(f.s)
+		if ok != f.ok {
+			t.Errorf("parseSelector(%q): ok=%v, erwartet %v", f.s, ok, f.ok)
+			continue
+		}
+		if ok && (sel.Auftrag != f.auftrag || sel.Nr != f.nr) {
+			t.Errorf("parseSelector(%q) = %+v", f.s, sel)
+		}
+		if ok && sel.String() != f.s {
+			t.Errorf("String() = %q, erwartet %q", sel.String(), f.s)
+		}
+	}
+}
+
+// Hasenbau-4cx.4: `dig <auftrag>#<n>` liefert das Material für Stufe 2
+// — den gerechneten Befund und die Traces, auf denen er beruht.
+func TestDigBefundLiefertBefundUndTraces(t *testing.T) {
+	bau := t.TempDir()
+	st, err := store.Open(filepath.Join(bau, "state", "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		id, err := st.StartLauf("pdf-einlagern", "watch", fmt.Sprintf("sources/%d.pdf", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.WriteToolCalls(id, []store.ToolCall{
+			{Tool: "read", Args: fmt.Sprintf(`{"path":"sources/%d.pdf"}`, i), Status: "completed"},
+			{Tool: "write", Args: `{"path":"raeume/lager/x.md"}`, Status: "completed"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		roh := []byte(fmt.Sprintf(`{"session_id":"ses","steps":[{"kind":"tool","role":"assistant",`+
+			`"tool":"read","status":"completed","input":"{\"path\":\"sources/%d.pdf\"}"}]}`, i))
+		if err := st.WriteTrace(id, "ses", roh); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.Close()
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "dig", "pdf-einlagern#1"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	got := out.String()
+	for _, muss := range []string{
+		"# Befund 1 zu pdf-einlagern", "deterministisch, ohne Modell",
+		"read → write", "VARIIERT",
+		"Die Läufe, auf denen der Befund beruht", "## Lauf 3", "[tool read — completed]",
+	} {
+		if !strings.Contains(got, muss) {
+			t.Errorf("Material ohne %q:\n%s", muss, got)
+		}
+	}
+	// Der Schlusssatz an den Menschen gehört nicht ins Material des Hasen.
+	if strings.Contains(got, "Nichts davon ist beschlossen") {
+		t.Errorf("Listen-Schlusssatz im Einzelbefund:\n%s", got)
+	}
+
+	// Eine Nummer, die es nicht gibt, sagt was es gibt.
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "dig", "pdf-einlagern#99"}, &out, &errw); code != 1 {
+		t.Errorf("exit %d, erwartet 1", code)
+	}
+	if !strings.Contains(errw.String(), "hasenbau findings pdf-einlagern") {
+		t.Errorf("Meldung ohne Wegweiser: %q", errw.String())
+	}
+}

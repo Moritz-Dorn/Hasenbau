@@ -33,34 +33,44 @@ func (r Report) Markdown() string {
 	}
 
 	for i, f := range r.Findings {
-		fmt.Fprintf(&b, "## %d. %s\n\n%s\n", i+1, f.Title, kopfzeile(f))
-		if f.Detail != "" {
-			fmt.Fprintf(&b, "\n%s\n", f.Detail)
-		}
-		if len(f.Steps) > 0 {
-			b.WriteString("\n")
-			for _, s := range f.Steps {
-				art := "konstant"
-				if s.Varies {
-					art = "VARIIERT"
-				}
-				fmt.Fprintf(&b, "%d. `%s` — %s (%d verschiedene Argumente)\n", s.Nr, s.Tool, art, s.Distinct)
-				for _, e := range s.Examples {
-					fmt.Fprintf(&b, "   - `%s`\n", e)
-				}
-			}
-		}
-		if len(f.Samples) > 0 && len(f.Steps) == 0 {
-			b.WriteString("\n")
-			for _, s := range f.Samples {
-				fmt.Fprintf(&b, "- `%s`\n", s)
-			}
-		}
+		b.WriteString(f.Markdown(i + 1))
 		b.WriteString("\n")
 	}
 	b.WriteString("Nichts davon ist beschlossen. Wer einen Befund ausarbeiten lassen\n" +
 		"will, setzt den Baumeister auf einen der genannten Läufe an; er\n" +
 		"schreibt einen Entwurf, eingetragen wird er von Hand (PLAN.md §8/§10).\n")
+	return b.String()
+}
+
+// Markdown rendert einen einzelnen Befund unter seiner Nummer. Eigene
+// Methode, weil der Baumeister genau einen bekommt (Hasenbau-4cx.4) —
+// ohne die Liste drumherum und ohne den Schlusssatz, der an den
+// Menschen gerichtet ist.
+func (f Finding) Markdown(nr int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "## %d. %s\n\n%s\n", nr, f.Title, kopfzeile(f))
+	if f.Detail != "" {
+		fmt.Fprintf(&b, "\n%s\n", f.Detail)
+	}
+	if len(f.Steps) > 0 {
+		b.WriteString("\n")
+		for _, s := range f.Steps {
+			art := "konstant"
+			if s.Varies {
+				art = "VARIIERT"
+			}
+			fmt.Fprintf(&b, "%d. `%s` — %s (%d verschiedene Argumente)\n", s.Nr, s.Tool, art, s.Distinct)
+			for _, e := range s.Examples {
+				fmt.Fprintf(&b, "   - `%s`\n", e)
+			}
+		}
+	}
+	if len(f.Samples) > 0 && len(f.Steps) == 0 {
+		b.WriteString("\n")
+		for _, s := range f.Samples {
+			fmt.Fprintf(&b, "- `%s`\n", s)
+		}
+	}
 	return b.String()
 }
 

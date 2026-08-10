@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +36,7 @@ func buildBinary(t *testing.T) string {
 // Modell. Damit ist alles bis zum LLM-Schritt abgedeckt: die Gang-Zeile
 // aus dem Beispiel, $HASENBAU als Unterprozess, die Umleitung nach
 // $WORK und dass dig seinen Trace aus der Bau-DB nimmt.
-func TestBaumeisterGangZiehtTrace(t *testing.T) {
+func TestBaumeisterGangZiehtMaterial(t *testing.T) {
 	binaer := buildBinary(t)
 	root := t.TempDir()
 
@@ -76,13 +77,13 @@ func TestBaumeisterGangZiehtTrace(t *testing.T) {
 	u.Hasenbau = binaer // im echten Lauf das laufende Binary
 
 	if _, err := runner.RunGaenge(context.Background(), u, a, time.Minute); err != nil {
-		log, _ := os.ReadFile(filepath.Join(root, u.Work, "gang-trace-ziehen.log"))
+		log, _ := os.ReadFile(filepath.Join(root, u.Work, "gang-material-ziehen.log"))
 		t.Fatalf("Gang gescheitert: %v\nlog: %s", err, log)
 	}
 
-	trace, err := os.ReadFile(filepath.Join(root, u.Work, "trace.md"))
+	trace, err := os.ReadFile(filepath.Join(root, u.Work, "material.md"))
 	if err != nil {
-		t.Fatalf("$WORK/trace.md fehlt: %v", err)
+		t.Fatalf("$WORK/material.md fehlt: %v", err)
 	}
 	for _, muss := range []string{"Trace Lauf 1", "notiz-einlagern", "[tool read — completed]", "notiz.txt"} {
 		if !strings.Contains(string(trace), muss) {
@@ -277,5 +278,64 @@ func TestBerichteLaufOhneZeile(t *testing.T) {
 	reportLauf(&out, st, 0)
 	if out.String() != "" {
 		t.Errorf("erwartet leer, bekam %q", out.String())
+	}
+}
+
+// Hasenbau-4cx.4: -finding wählt einen Befund statt eines Traces. Was
+// als $INPUT in den Lauf geht, entscheidet sich hier — vor jedem
+// Server-Start.
+func TestBaumeisterMaterialBeideStufen(t *testing.T) {
+	bau := t.TempDir()
+	st, err := store.Open(dbPath(bau))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for i := 0; i < 3; i++ {
+		id, err := st.StartLauf("pdf-einlagern", "watch", "x.pdf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.WriteToolCalls(id, []store.ToolCall{
+			{Tool: "read", Args: fmt.Sprintf(`{"path":"%d.pdf"}`, i), Status: "completed"},
+			{Tool: "write", Args: `{"path":"lager/x.md"}`, Status: "completed"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Stufe 1: ein Lauf, $INPUT ist seine ID.
+	m, err := resolveMaterial(st, "pdf-einlagern", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Input != "3" || !strings.Contains(m.Kopf, "Lauf 3") {
+		t.Errorf("Stufe 1: %+v", m)
+	}
+
+	// Stufe 2: ein Befund, $INPUT ist der Selektor — und die Kopfzeile
+	// nennt die Läufe, auf denen die Generalisierung beruht.
+	m, err = resolveMaterial(st, "pdf-einlagern", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Input != "pdf-einlagern#1" {
+		t.Errorf("Stufe 2: Input = %q", m.Input)
+	}
+	for _, muss := range []string{"Befund 1", "read → write", "Läufe 3, 2, 1"} {
+		if !strings.Contains(m.Kopf, muss) {
+			t.Errorf("Kopfzeile ohne %q: %q", muss, m.Kopf)
+		}
+	}
+
+	// Eine Nummer ohne Befund scheitert, bevor irgendein Server startet.
+	if _, err := resolveMaterial(st, "pdf-einlagern", 99); err == nil {
+		t.Error("Befund 99 wurde angenommen")
+	}
+	if _, err := resolveMaterial(st, "kein/auftrag", 1); err == nil {
+		t.Error("ungültiger Auftragsname wurde angenommen")
 	}
 }

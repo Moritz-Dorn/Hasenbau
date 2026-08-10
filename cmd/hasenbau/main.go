@@ -43,12 +43,14 @@ Befehle:
                         gaenge, laeufe, lauf, provider)
   describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
   new <res> <name>      Gerüst anlegen (auftrag, hase)
-  dig [-json] <id>      Trace eines Laufs ziehen (Baumeister-Input)
+  dig [-json] <ziel>    Material für den Baumeister: der Trace eines
+                        Laufs, oder <auftrag>#<n> für einen Befund
   findings <auftrag>    was sich über die Läufe rechnen lässt: Gang-
                         Kandidaten, Reibung, Ausreißer (kein Modell)
-  baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
-                        Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
-                        Auftrag (dann dessen letzter Lauf)
+  baumeister [-finding N] <ziel>
+                        Baumeister-Auftrag (aus hasenbau.yaml) ansetzen —
+                        auf einen Lauf (Lauf-ID oder Auftrag) oder mit
+                        -finding auf einen Befund über viele Läufe
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
@@ -417,12 +419,7 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau dig [-json] [-live] <lauf-id>")
-		return 2
-	}
-	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
-	if err != nil {
-		fmt.Fprintf(errw, "hasenbau dig: ungültige Lauf-ID %q\n", fs.Arg(0))
+		fmt.Fprintln(errw, "Aufruf: hasenbau dig [-json] [-live] <lauf-id|auftrag#n>")
 		return 2
 	}
 
@@ -433,6 +430,19 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	defer st.Close()
+
+	// `<auftrag>#<n>` ist die Auswahl eines Befunds: dann ist das
+	// Material nicht ein Trace, sondern der gerechnete Befund samt den
+	// Läufen, auf denen er beruht (Hasenbau-4cx.4).
+	if sel, ok := parseSelector(fs.Arg(0)); ok {
+		backfillToolCalls(st, logger.Printf)
+		return digFinding(st, sel, *alsJSON, out, errw)
+	}
+	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau dig: %q ist weder eine Lauf-ID noch ein Befund (<auftrag>#<n>)\n", fs.Arg(0))
+		return 2
+	}
 
 	l, err := st.LaufByID(id)
 	if err != nil {
@@ -592,8 +602,12 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 	return 0
 }
 
-func cmdStatus(bau string, out, errw io.Writer) int {
-	st, err := store.Open(dbPath(bau))
+// cmdStatus ist das Mini-Dashboard: **was liegt hier und was ist
+// passiert** (Hasenbau-ha0.6). Keine Prüfungen — die gehören zu
+// `describe bau`. Der Unterschied ist nicht kosmetisch: ein Dashboard,
+// das mahnt, liest sich niemand mehr freiwillig an.
+func cmdStatus(root string, out, errw io.Writer) int {
+	st, err := store.Open(dbPath(root))
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -611,7 +625,33 @@ func cmdStatus(bau string, out, errw io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(out, "Bau: %s\n", bau)
+	fmt.Fprintf(out, "Bau: %s\n", root)
+
+	// Was der Bau kennt — die Frage „was liegt hier" beantwortet sich
+	// nicht aus der Datenbank, sondern aus den Definitionen.
+	if auftraege, err := loadDefinitions(root); err == nil {
+		hasen := map[string]bool{}
+		for _, a := range auftraege {
+			hasen[a.Hase] = true
+		}
+		// Nur Dateien: entwurf/ ist ein Verzeichnis und zählt nicht als Gang.
+		var gaenge int
+		if eintraege, err := os.ReadDir(filepath.Join(root, "gaenge")); err == nil {
+			for _, e := range eintraege {
+				if !e.IsDir() {
+					gaenge++
+				}
+			}
+		}
+		entwuerfe, _ := filepath.Glob(filepath.Join(root, "gaenge", "entwurf", "*"))
+		fmt.Fprintf(out, "Kennt: %d Aufträge, %d Hasen, %d Gänge",
+			len(auftraege), len(hasen), gaenge)
+		if len(entwuerfe) > 0 {
+			fmt.Fprintf(out, ", %d Entwürfe (ungeprüft, nicht aktiv)", len(entwuerfe))
+		}
+		fmt.Fprintln(out)
+	}
+
 	total := 0
 	for _, n := range counts {
 		total += n
@@ -641,5 +681,13 @@ func cmdStatus(bau string, out, errw io.Writer) int {
 			a.Auftrag, fmtTime(a.LastLauf), fmtTime(a.LastOk), a.ErrorStreak)
 	}
 	w.Flush()
+
+	// Die jüngsten Läufe gehören dazu: „was ist passiert" heißt selten
+	// „wie viele", meistens „welche".
+	if laeufe, err := st.RecentLaeufe(5); err == nil && len(laeufe) > 0 {
+		fmt.Fprint(out, "\nDie letzten Läufe\n")
+		writeLaufTable(out, laeufe)
+	}
+	fmt.Fprintln(out, "\nIst der Bau in Ordnung? `hasenbau describe bau`")
 	return 0
 }
