@@ -336,9 +336,10 @@ func cmdDaemon(root string, errw io.Writer) int {
 	lock := lauf.NewLock()
 
 	sched, err := scheduler.New(auftraege, lock, func(a *auftrag.Auftrag) {
-		if _, err := r.Execute(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
-			logger.Printf("scheduler: %v", err)
-		}
+		// Kein eigenes Log: der Runner hat den Lauf schon mit Grund
+		// gemeldet, und der Scheduler hat dem nichts hinzuzufügen
+		// (Hasenbau-vwr).
+		_, _ = r.Execute(ctx, a, "cron", "")
 	}, logger.Printf)
 	if err != nil {
 		logger.Print(err)

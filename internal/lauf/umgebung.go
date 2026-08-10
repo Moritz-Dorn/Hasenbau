@@ -41,8 +41,11 @@ var laufIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 // Datei (Pflicht), bei cron verboten und bei manuell das übergebene
 // Argument (optional, kein Pfad).
 func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, error) {
+	// Ohne Lauf-Präfix: der einzige Aufrufer ist der Runner, und der
+	// setzt es selbst davor. Sonst stünde es zweimal in derselben Zeile
+	// (Hasenbau-vwr).
 	fehler := func(format string, args ...any) error {
-		return fmt.Errorf("lauf %s (%s): %s", laufID, a.Name, fmt.Sprintf(format, args...))
+		return fmt.Errorf(format, args...)
 	}
 
 	if !filepath.IsAbs(root) {

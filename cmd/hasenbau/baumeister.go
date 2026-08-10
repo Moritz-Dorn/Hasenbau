@@ -93,10 +93,9 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
+	// Der Runner loggt den Fehlschlag mit Grund, und reportLauf sagt
+	// unten, was in der DB steht — hier nichts nachdrucken (Hasenbau-vwr).
 	laufID, laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
-	if laufFehler != nil {
-		logger.Print(laufFehler)
-	}
 
 	// Bericht auch nach einem Fehlschlag: der Hase kann geschrieben
 	// haben, bevor etwas anderes schiefging.

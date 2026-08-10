@@ -102,11 +102,18 @@ func (k *laufContext) StartServer() error {
 }
 
 // Close gibt frei, was offen ist — in umgekehrter Reihenfolge.
+//
+// Erst der Kontext, dann der Server: der Funnel hängt am Event-Stream
+// und meldet jeden Abriss. Stirbt der Server zuerst, ist das ein Abriss
+// wie jeder andere, und am Ende jedes Laufs stand „Event-Stream weg
+// (unexpected EOF), neu verbinden in 1s" — ein Fehler, der keiner war.
+// Zuerst abgebrochen, weiß der Funnel, dass er gemeint ist, und
+// schweigt (Hasenbau-vwr).
 func (k *laufContext) Close() {
+	k.stop()
 	if k.sup != nil {
 		k.sup.Stop()
 	}
-	k.stop()
 	k.Store.Close()
 }
 
@@ -129,8 +136,9 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
+	// Nicht noch einmal ausgeben: der Runner hat den Fehlschlag schon
+	// samt Grund geloggt, und zwar über denselben logger (Hasenbau-vwr).
 	if _, err := k.Runner.Execute(k.Ctx, ziel, "manual", input); err != nil {
-		logger.Print(err)
 		return 1
 	}
 	return 0
