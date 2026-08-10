@@ -195,9 +195,9 @@ func TestSchreibRaeumeStimmtMitGenerierungUeberein(t *testing.T) {
 	agent := string(roh)
 	for rolle, pfad := range rollen {
 		erlaubt := strings.Contains(agent, `"`+strings.TrimSuffix(pfad, "/")+`/**": allow`)
-		if erlaubt != gibtSchreibrecht(rolle) {
-			t.Errorf("Rolle %q: Generierung erlaubt=%v, gibtSchreibrecht=%v",
-				rolle, erlaubt, gibtSchreibrecht(rolle))
+		if erlaubt != grantsWrite(rolle) {
+			t.Errorf("Rolle %q: Generierung erlaubt=%v, grantsWrite=%v",
+				rolle, erlaubt, grantsWrite(rolle))
 		}
 	}
 }
@@ -210,13 +210,13 @@ func TestGangDateien(t *testing.T) {
 		{`python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/x.md"`, "gaenge/pdf_to_md.py"},
 		{`gaenge/x.sh "$INPUT"`, "gaenge/x.sh"},
 		{`"gaenge/mit leer.py"`, "gaenge/mit"}, // Grenze der einfachen Regel, bewusst
-		{`"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"`, ""},
+		{`"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"`, ""},
 		{`tr a-z A-Z < "$INPUT"`, ""},
 	}
 	for _, f := range faelle {
-		got := strings.Join(gangDateien(f.run), ",")
+		got := strings.Join(gangFiles(f.run), ",")
 		if got != f.want {
-			t.Errorf("gangDateien(%q) = %q, erwartet %q", f.run, got, f.want)
+			t.Errorf("gangFiles(%q) = %q, erwartet %q", f.run, got, f.want)
 		}
 	}
 }
@@ -233,7 +233,7 @@ func zeileMit(text, s string) string {
 
 func TestGetUndDescribeGang(t *testing.T) {
 	root := baueDefinitionsBau(t)
-	// Ein Entwurf des Baumeisters, den kein Auftrag einträgt.
+	// Ein Draft des Baumeisters, den kein Auftrag einträgt.
 	if err := os.MkdirAll(filepath.Join(root, "gaenge", "entwurf"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -250,8 +250,8 @@ func TestGetUndDescribeGang(t *testing.T) {
 	if !strings.Contains(got, "gaenge/pdf_to_md.py") || !strings.Contains(got, "pdf-einlagern/pdf-zu-markdown") {
 		t.Errorf("Benutzung fehlt:\n%s", got)
 	}
-	if !strings.Contains(got, "Entwurf, nicht eingetragen") {
-		t.Errorf("Entwurf nicht als solcher markiert:\n%s", got)
+	if !strings.Contains(got, "Draft, nicht eingetragen") {
+		t.Errorf("Draft nicht als solcher markiert:\n%s", got)
 	}
 
 	out.Reset()
@@ -267,7 +267,7 @@ func TestGetUndDescribeGang(t *testing.T) {
 
 	out.Reset()
 	if code := run([]string{"-bau", root, "describe", "gang", "gaenge/entwurf/lager_index.py"}, &out, &errw); code != 0 {
-		t.Fatalf("describe Entwurf: exit %d", code)
+		t.Fatalf("describe Draft: exit %d", code)
 	}
 	got = out.String()
 	if !strings.Contains(got, "Stellt einen Index.") && !strings.Contains(got, "lager_index.py --lager") {

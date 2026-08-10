@@ -29,7 +29,7 @@ func TestUnbekannterBefehlUndUsage(t *testing.T) {
 }
 
 func TestLaufUnbekannterAuftrag(t *testing.T) {
-	// Leerer Bau: der Auftrag existiert nicht — sauberer Fehler, bevor
+	// Leerer Bau: der Auftrag exists nicht — sauberer Fehler, bevor
 	// irgendein Server gestartet wird.
 	var out, errw strings.Builder
 	if code := run([]string{"-bau", t.TempDir(), "lauf", "pdf-einlagern"}, &out, &errw); code != 1 {
@@ -45,7 +45,7 @@ func TestGrabenFehlerpfade(t *testing.T) {
 
 	// Unbekannter Lauf: klarer Fehler, bevor irgendein Server startet.
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", bau, "graben", "7"}, &out, &errw); code != 1 {
+	if code := run([]string{"-bau", bau, "dig", "7"}, &out, &errw); code != 1 {
 		t.Errorf("unbekannter Lauf: exit %d, erwartet 1", code)
 	}
 	if !strings.Contains(errw.String(), "kein Lauf mit ID 7") {
@@ -67,7 +67,7 @@ func TestGrabenFehlerpfade(t *testing.T) {
 	st.Close()
 
 	errw.Reset()
-	if code := run([]string{"-bau", bau, "graben", "1"}, &out, &errw); code != 1 {
+	if code := run([]string{"-bau", bau, "dig", "1"}, &out, &errw); code != 1 {
 		t.Errorf("Lauf ohne Session: exit %d, erwartet 1", code)
 	}
 	if !strings.Contains(errw.String(), "hat keine Session") {
@@ -76,13 +76,13 @@ func TestGrabenFehlerpfade(t *testing.T) {
 
 	// Kaputte Lauf-ID.
 	errw.Reset()
-	if code := run([]string{"-bau", bau, "graben", "vier"}, &out, &errw); code != 2 {
+	if code := run([]string{"-bau", bau, "dig", "vier"}, &out, &errw); code != 2 {
 		t.Errorf("ungültige ID: exit %d, erwartet 2", code)
 	}
 }
 
 // TestGrabenAusDerDBOhneServer: seit die Läufe ihren Trace ablegen,
-// braucht graben keinen opencode mehr. Der leere PATH ist der Beweis —
+// braucht dig keinen opencode mehr. Der leere PATH ist der Beweis —
 // käme der Weg über den Server, fände sich kein Binary.
 func TestGrabenAusDerDBOhneServer(t *testing.T) {
 	bau := t.TempDir()
@@ -109,7 +109,7 @@ func TestGrabenAusDerDBOhneServer(t *testing.T) {
 
 	t.Setenv("PATH", "")
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", bau, "graben", "1"}, &out, &errw); code != 0 {
+	if code := run([]string{"-bau", bau, "dig", "1"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
 	for _, muss := range []string{"Trace Lauf 1", "notiz-einlagern", "[tool write — completed]", "raeume/lager/x.md"} {
@@ -190,7 +190,7 @@ func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
 	db.Close()
 
 	var out, errw strings.Builder
-	// Der Auftrag existiert nicht — aufgeräumt wird trotzdem, es
+	// Der Auftrag exists nicht — aufgeräumt wird trotzdem, es
 	// passiert vor allem anderen.
 	if code := run([]string{"-bau", bau, "lauf", "tagesbericht"}, &out, &errw); code != 1 {
 		t.Fatalf("exit %d, erwartet 1 (unbekannter Auftrag), stderr %q", code, errw.String())

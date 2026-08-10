@@ -15,9 +15,9 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
-// baueBinary übersetzt den Hasenbau für Tests, die ihn als
+// buildBinary übersetzt den Hasenbau für Tests, die ihn als
 // Unterprozess brauchen — genau das tut der Gang des Baumeisters.
-func baueBinary(t *testing.T) string {
+func buildBinary(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("kein go im PATH")
@@ -34,9 +34,9 @@ func baueBinary(t *testing.T) string {
 // Baumeister-Auftrags gegen eine echte DB — ohne opencode und ohne
 // Modell. Damit ist alles bis zum LLM-Schritt abgedeckt: die Gang-Zeile
 // aus dem Beispiel, $HASENBAU als Unterprozess, die Umleitung nach
-// $WORK und dass graben seinen Trace aus der Bau-DB nimmt.
+// $WORK und dass dig seinen Trace aus der Bau-DB nimmt.
 func TestBaumeisterGangZiehtTrace(t *testing.T) {
-	binaer := baueBinary(t)
+	binaer := buildBinary(t)
 	root := t.TempDir()
 
 	st, err := store.Open(dbPath(root))
@@ -112,37 +112,37 @@ func TestZielLauf(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l, err := zielLauf(st, "2")
+	l, err := targetLauf(st, "2")
 	if err != nil || l.ID != alt {
 		t.Errorf("Lauf-ID als Ziel: %+v, %v", l, err)
 	}
 	// Auftragsname: der jüngste Lauf mit Session gewinnt.
-	l, err = zielLauf(st, "pdf-einlagern")
+	l, err = targetLauf(st, "pdf-einlagern")
 	if err != nil || l.ID != neu {
 		t.Errorf("Auftrag als Ziel: %+v, %v", l, err)
 	}
 	// Ein Lauf ohne Session hat nichts zu verdichten.
-	if _, err := zielLauf(st, "1"); err == nil || !strings.Contains(err.Error(), "keine Session") {
+	if _, err := targetLauf(st, "1"); err == nil || !strings.Contains(err.Error(), "keine Session") {
 		t.Errorf("Lauf ohne Session: %v", err)
 	}
-	if _, err := zielLauf(st, "tagesbericht"); err == nil {
+	if _, err := targetLauf(st, "tagesbericht"); err == nil {
 		t.Error("unbekannter Auftrag muss scheitern")
 	}
 }
 
 func TestBerichteEntwurf(t *testing.T) {
-	vorher := map[string]entwurfDatei{
-		"gaenge/entwurf/alt.py":   {Groesse: 10, Hash: "aa"},
-		"gaenge/entwurf/bleib.py": {Groesse: 5, Hash: "bb"},
+	vorher := map[string]draftFile{
+		"gaenge/entwurf/alt.py":   {Size: 10, Hash: "aa"},
+		"gaenge/entwurf/bleib.py": {Size: 5, Hash: "bb"},
 	}
-	nachher := map[string]entwurfDatei{
-		"gaenge/entwurf/alt.py":   {Groesse: 12, Hash: "cc"},
-		"gaenge/entwurf/bleib.py": {Groesse: 5, Hash: "bb"},
-		"gaenge/entwurf/neu.py":   {Groesse: 42, Hash: "dd"},
+	nachher := map[string]draftFile{
+		"gaenge/entwurf/alt.py":   {Size: 12, Hash: "cc"},
+		"gaenge/entwurf/bleib.py": {Size: 5, Hash: "bb"},
+		"gaenge/entwurf/neu.py":   {Size: 42, Hash: "dd"},
 	}
 
 	var b strings.Builder
-	neu := berichteEntwurf(&b, "gaenge/entwurf/", vorher, nachher)
+	neu := reportDrafts(&b, "gaenge/entwurf/", vorher, nachher)
 	if len(neu) != 1 || neu[0] != "gaenge/entwurf/neu.py" {
 		t.Errorf("neu = %v", neu)
 	}
@@ -154,7 +154,7 @@ func TestBerichteEntwurf(t *testing.T) {
 
 	// Nichts geschrieben: das muss dastehen, nicht bloß fehlen.
 	b.Reset()
-	if neu := berichteEntwurf(&b, "gaenge/entwurf/", vorher, vorher); neu != nil {
+	if neu := reportDrafts(&b, "gaenge/entwurf/", vorher, vorher); neu != nil {
 		t.Errorf("neu = %v ohne Änderung", neu)
 	}
 	if !strings.Contains(b.String(), "unverändert — der Baumeister hat nichts geschrieben") {
@@ -165,7 +165,7 @@ func TestBerichteEntwurf(t *testing.T) {
 func TestEntwurfStandFehlenderRaum(t *testing.T) {
 	// Räume legt der Runner erst beim Lauf an — vorher ist der Raum
 	// schlicht leer, kein Fehler.
-	stand, err := entwurfStand(t.TempDir(), "gaenge/entwurf/")
+	stand, err := draftSnapshot(t.TempDir(), "gaenge/entwurf/")
 	if err != nil || len(stand) != 0 {
 		t.Errorf("stand = %v, err = %v", stand, err)
 	}
@@ -188,7 +188,7 @@ func TestPruefeEntwurfFindetSyntaxfehler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meldungen := strings.Join(pruefeEntwurf(root, []string{gut, kaputt}), "\n")
+	meldungen := strings.Join(checkDrafts(root, []string{gut, kaputt}), "\n")
 	if !strings.Contains(meldungen, "Syntax von "+gut+" ist in Ordnung") {
 		t.Errorf("gutes Skript: %s", meldungen)
 	}
@@ -200,7 +200,7 @@ func TestPruefeEntwurfFindetSyntaxfehler(t *testing.T) {
 		t.Errorf("Meldung ohne den eigentlichen Error: %s", meldungen)
 	}
 	// Und die Prüfung darf nichts im Bau hinterlassen — er ist ein
-	// Git-Repo, im Diff soll der Entwurf stehen, nicht sein Bytecode.
+	// Git-Repo, im Diff soll der Draft stehen, nicht sein Bytecode.
 	eintraege, err := os.ReadDir(filepath.Join(root, "gaenge", "entwurf"))
 	if err != nil {
 		t.Fatal(err)

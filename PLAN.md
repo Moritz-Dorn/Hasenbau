@@ -14,9 +14,21 @@ explizit kein Ziel.
 ## 1. Vokabular
 
 Diese Begriffe sind verbindlich für Package-Namen, Typen, Verzeichnisse
-und DB-Tabellen. Die Domänen-Ebene ist deutsch, die Infrastruktur-Ebene
-englisch (`Store`, `Scheduler`, `Watcher`, `Client`, `Runner`).
-Keine Mischformen wie `HasenStore`.
+und DB-Tabellen — und sie sind **die einzigen deutschen Wörter im
+Code**, samt Plural (`laeufe`, `gaenge`, `raeume`, `auftraege`). Alles
+andere ist englisch: Bezeichner, Formatschlüssel, DB-Spalten und -Werte,
+Paketnamen.
+
+Zusammengesetzte Namen mischen deshalb bewusst: **englisches Verb,
+deutsches Domänen-Nomen** — `StartLauf`, `EndLauf`, `LaufByID`,
+`RecentLaeufe`, `RunGaenge`, `last_lauf`. Die frühere Regel „keine
+Mischformen" ist damit hinfällig; sie war nicht durchzuhalten, sobald
+ein Verb auf ein Domänen-Nomen trifft (entschieden 2026-08-10).
+
+Prosa bleibt deutsch: Kommentare, dieses Dokument, README, die
+Meldungstexte der CLI und Testfunktionsnamen. Die Zustandswerte eines
+Laufs (`running`, `ok`, `failed`, `aborted`) sind Daten, keine Prosa —
+englisch in der DB und in der Ausgabe.
 
 | Begriff | Technisch |
 |---|---|
@@ -301,7 +313,7 @@ CREATE TABLE notizen (
 CREATE INDEX idx_notizen_lauf ON notizen(lauf, id);
 ```
 
-Gelesen werden sie von `hasenbau graben`: was der Hase selbst für
+Gelesen werden sie von `hasenbau dig`: was der Hase selbst für
 erwähnenswert hielt, steht dort über dem Trace.
 
 Dazu der Verlauf selbst — eine Zeile pro Lauf, geschrieben beim
@@ -322,11 +334,11 @@ Aufruf. `json` ist für den Store opak; das Format gehört
 `internal/opencode`.
 
 Der Grund ist der Baumeister (§8): der zieht seinen Trace in einem
-**Gang**, und der müsste sonst `hasenbau graben` rufen, das einen
+**Gang**, und der müsste sonst `hasenbau dig` rufen, das einen
 zweiten opencode-Server startet — der bei einem Gang-Timeout verwaist
 zurückbliebe, weil der Kill nur die Prozessgruppe der Gang-Shell trifft
 (§2: „hängt nie als offener Endpoint herum"). Mit der Zeile hier
-braucht `graben` gar keinen Server. Fehlt sie (Altläufe), holt `graben`
+braucht `dig` gar keinen Server. Fehlt sie (Altläufe), holt `dig`
 den Trace wie bisher und trägt sie nach; `-live` erzwingt den
 Server-Weg mit ungekürzten Ausgaben. Gekappt wird, was die Verdichtung
 nicht braucht: Tool-Ausgaben und Fehlertexte bei 8 KiB, mit Hinweis —
@@ -571,10 +583,10 @@ kompiliert. Bezahlt in Tokens, Latenz und Nichtdeterminismus.
 
 1. Tool-Calls werden ohnehin schon aus dem Event-Stream mitgeloggt
    ✅ *(Phase 1, Hasenbau-q4y)*
-2. `hasenbau graben <lauf-id>` zieht den Trace der Session
+2. `hasenbau dig <lauf-id>` zieht den Trace der Session
    (`session.messages()` → Tool-Call-Parts mit Namen und Argumenten;
    strukturiert, kein Log-Parsing) ✅ *(2026-07-14, Hasenbau-2qy:
-   `graben [-json]`, Zugriffsweg §11.3 — der Trace enthält auch die
+   `dig [-json]`, Zugriffsweg §11.3 — der Trace enthält auch die
    reasoning-Parts, also die Absicht des Hasen)*
 3. Der **Baumeister** (ein Hase mit Schreibrecht auf `gaenge/entwurf/`)
    bekommt den Trace und schreibt daraus ein Skript ✅ *(2026-08-10,
@@ -602,7 +614,7 @@ deterministische Vorverarbeitung ist ein Gang wie jeder andere:
 
 ```yaml
 trigger:  {manuell: true}
-gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'}]
+gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"'}]
 hase:     baumeister
 raeume:   {work: raeume/baumeister/work/, out: gaenge/entwurf/}
 context:  [{datei: $WORK/trace.md}]
@@ -784,7 +796,7 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
      XDG_DATA_HOME (`opencode.db`, Tabellen `session`/`message`/
      `part`), getrennt nach `project_id` (Hash des Bau-Root-Commits,
      §11.5). Ein **frisch gestarteter** Server liefert die Sessions
-     längst toter Server-Instanzen — `hasenbau graben` funktioniert
+     längst toter Server-Instanzen — `hasenbau dig` funktioniert
      also post-hoc, Tage später. Die DB ist mit dem Alltags-opencode
      geteilt (§3), die Sessions sind es wegen der project_id nicht.
    - **Verworfene Wege:** Kein Writeback-Tool (Selbstauskunft des

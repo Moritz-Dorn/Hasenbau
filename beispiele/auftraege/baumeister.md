@@ -9,7 +9,7 @@ gaenge:
   # $INPUT ist hier die Lauf-ID, kein Pfad. Die run-Zeile muss in
   # einfache Anführungszeichen, weil sie mit einem doppelten beginnt.
   - name: trace-ziehen
-    run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'
+    run: '"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"'
     timeout: 60s
 
 hase: baumeister

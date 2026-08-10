@@ -6,7 +6,7 @@ Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 
 **Status: Phase 0 (Fundament), Phase 1 (Aufträge) und Phase 2
 (Verdichtung und Rückkanal) sind fertig** — der Referenz-Auftrag
-`pdf-einlagern` läuft Ende-zu-Ende, `hasenbau graben` zieht Traces, der
+`pdf-einlagern` läuft Ende-zu-Ende, `hasenbau dig` zieht Traces, der
 MCP-Rückkanal steht, und der Baumeister verdichtet einen Lauf zu einem
 Gang-Entwurf (siehe [`beispiele/`](beispiele/)). Als nächstes: die
 Befund-Analyse über viele Läufe, damit die Verdichtung nicht aus einem
@@ -22,7 +22,7 @@ einzelnen Trace raten muss. `PLAN.md` ist der Spec.
    bekommt aufbereitetes Markdown, nie das rohe PDF.
 3. **Verdichtung.** Ein Hase, der bei jedem Lauf dieselben Tool-Calls
    macht, ist ein Interpreter, der jedes Mal neu kompiliert. Der Hasenbau
-   loggt die Traces; `hasenbau graben` + der Baumeister-Hase machen daraus
+   loggt die Traces; `hasenbau dig` + der Baumeister-Hase machen daraus
    deterministische Gänge. Aktiviert wird ein generierter Gang **nie
    automatisch** — der Nutzer liest ihn und trägt ihn selbst ein.
 
@@ -70,7 +70,7 @@ hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
 hasenbau describe hase <name>     # effektive Permissions je Auftrag
 hasenbau describe gang <datei>    # Zweck und alle Aufträge, die ihn rufen
 hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
-hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau dig <lauf-id>  # Trace eines Laufs — Input für den Baumeister
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
 hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
@@ -83,14 +83,14 @@ Jeder Hase bekommt zwei Werkzeuge, mit denen er selbst in die Bau-
 Datenbank schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf
 getan hat (der nächste Lauf desselben Auftrags bekommt sie als Kontext),
 und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
-`hasenbau graben`. Dahinter steckt ein MCP-Server, den opencode als
+`hasenbau dig`. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er beim Daemon-Start selbst.
 
 `hasenbau baumeister <lauf-id|auftrag>` setzt den Baumeister auf einen
 Lauf an: er liest dessen Trace und schreibt daraus einen Gang-Entwurf
 nach `gaenge/entwurf/`. Der Baumeister ist dabei kein Sonderfall im
 Code, sondern selbst ein Auftrag mit einem Hasen — sein Material sind
-nur Läufe statt PDFs, und sein Gang ist `hasenbau graben`. Sein
+nur Läufe statt PDFs, und sein Gang ist `hasenbau dig`. Sein
 Schreibrecht entsteht ausschließlich aus dem `out`-Raum seines
 Auftrags; auf `auftraege/` hat er keines. **Ein Entwurf wird nie
 automatisch aktiviert** — der Nutzer liest ihn und trägt den Gang

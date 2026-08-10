@@ -58,9 +58,21 @@ im selben Arbeitsgang, nicht „später":
 | **Lauf** | Eine Ausführung eines Auftrags |
 | **Baumeister** | Sonder-Hase, verdichtet Traces zu Gängen (Phase 2) |
 
-Domänen-Ebene deutsch, Infrastruktur englisch (`Store`, `Scheduler`,
-`Watcher`, `Client`, `Runner`, `Supervisor`). Keine Mischformen, kein
-`Job` statt `Auftrag`.
+**Diese sieben Begriffe sind die einzigen deutschen Wörter im Code** —
+samt Plural (`laeufe`, `gaenge`, `raeume`, `auftraege`). Alles andere ist
+englisch: Bezeichner, Formatschlüssel, DB-Spalten und -Werte,
+Paketnamen. Kein `Job` statt `Auftrag`, aber auch kein `gestartet` statt
+`started`.
+
+Zusammengesetzte Namen mischen bewusst: **englisches Verb, deutsches
+Domänen-Nomen** — `StartLauf`, `EndLauf`, `LaufByID`, `RecentLaeufe`,
+`RunGaenge`, `last_lauf`. Das ist keine Nachlässigkeit, sondern die
+Folge daraus, dass die Fachsprache deutsch bleibt und der Rest nicht.
+
+Ausgenommen bleibt **Prosa**: Kommentare, PLAN.md, README, die
+Meldungstexte der CLI und Testfunktionsnamen sind deutsch. Die
+Zustandswerte eines Laufs (`running`, `ok`, `failed`, `aborted`) sind
+Daten, keine Prosa — sie stehen englisch in der DB und in der Ausgabe.
 
 Sprachlich strikt trennen: **Hasenbau** ist dieses Projekt/Programm,
 ein **Bau** ist eine mit `hasenbau init` erzeugte Instanz (eigenes

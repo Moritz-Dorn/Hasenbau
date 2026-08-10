@@ -42,7 +42,7 @@ Befehle:
   get <ressource>       zeigen, was der Bau kennt (auftraege, hasen,
                         gaenge, laeufe, lauf, provider)
   describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
-  graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
+  dig [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
                         Auftrag (dann dessen letzter Lauf)
@@ -74,7 +74,7 @@ func run(args []string, out, errw io.Writer) int {
 	}
 	bau, err := filepath.Abs(*bauFlag)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: Bau-Pfad: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau: Bau-Path: %v\n", err)
 		return 1
 	}
 
@@ -104,8 +104,8 @@ func run(args []string, out, errw io.Writer) int {
 		// alte Name bleibt nur als Wegweiser stehen.
 		fmt.Fprintln(errw, "hasenbau laeufe heißt jetzt `hasenbau get laeufe`")
 		return 2
-	case "graben":
-		return cmdGraben(bau, rest[1:], out, errw)
+	case "dig":
+		return cmdDig(bau, rest[1:], out, errw)
 	case "baumeister":
 		return cmdBaumeister(bau, rest[1:], out, errw)
 	case "get":
@@ -167,10 +167,10 @@ func cmdMCP(root string, errw io.Writer) int {
 	return 0
 }
 
-// rueckkanalEintragen hält den mcp:-Eintrag der Bau-Config auf dem
+// ensureBackchannel hält den mcp:-Eintrag der Bau-Config auf dem
 // laufenden Binary. Muss vor dem Server-Start passieren — opencode
 // liest die Config beim Hochfahren.
-func rueckkanalEintragen(root string, logf func(string, ...any)) error {
+func ensureBackchannel(root string, logf func(string, ...any)) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("hasenbau: eigenen Pfad bestimmen: %w", err)
@@ -185,11 +185,11 @@ func rueckkanalEintragen(root string, logf func(string, ...any)) error {
 	return nil
 }
 
-// laeufeAufraeumen schließt die Läufe ab, deren Prozess gestorben ist,
+// cleanupLaeufe schließt die Läufe ab, deren Prozess gestorben ist,
 // bevor dieser hier selbst welche anlegt. Ohne das zählt `hasenbau
 // status` für immer falsch und der Rückkanal findet keinen eindeutigen
 // aktiven Lauf mehr (PLAN.md §5, §11.7).
-func laeufeAufraeumen(st *store.Store, logf func(string, ...any)) error {
+func cleanupLaeufe(st *store.Store, logf func(string, ...any)) error {
 	leichen, err := st.CleanupLaeufe()
 	if err != nil {
 		return err
@@ -202,10 +202,10 @@ func laeufeAufraeumen(st *store.Store, logf func(string, ...any)) error {
 	return nil
 }
 
-// ladeUndGeneriere lädt die Aufträge und schreibt die generierten
+// loadAndGenerate lädt die Aufträge und schreibt die generierten
 // Agenten (§6: beim Laden der Definitionen, nicht pro Lauf). Läuft vor
 // dem Server-Start — dispose braucht es hier deshalb nicht.
-func ladeUndGeneriere(root string) ([]*auftrag.Auftrag, error) {
+func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	auftraege, err := auftrag.Load(root)
 	if err != nil {
 		return nil, err
@@ -222,9 +222,9 @@ func ladeUndGeneriere(root string) ([]*auftrag.Auftrag, error) {
 	return auftraege, nil
 }
 
-// warteAufServer blockiert, bis der Supervisor eine BaseURL meldet —
+// waitForServer blockiert, bis der Supervisor eine BaseURL meldet —
 // Trigger werden erst danach scharf.
-func warteAufServer(ctx context.Context, sup *supervisor.Supervisor, timeout time.Duration) error {
+func waitForServer(ctx context.Context, sup *supervisor.Supervisor, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if sup.BaseURL() != "" {
@@ -249,16 +249,16 @@ func cmdDaemon(root string, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	if err := laeufeAufraeumen(st, logger.Printf); err != nil {
+	if err := cleanupLaeufe(st, logger.Printf); err != nil {
 		logger.Print(err)
 		return 1
 	}
-	auftraege, err := ladeUndGeneriere(root)
+	auftraege, err := loadAndGenerate(root)
 	if err != nil {
 		logger.Print(err)
 		return 1
 	}
-	if err := rueckkanalEintragen(root, logger.Printf); err != nil {
+	if err := ensureBackchannel(root, logger.Printf); err != nil {
 		logger.Print(err)
 		return 1
 	}
@@ -276,7 +276,7 @@ func cmdDaemon(root string, errw io.Writer) int {
 	supFertig := make(chan error, 1)
 	go func() { supFertig <- sup.Run(ctx) }()
 
-	if err := warteAufServer(ctx, sup, 60*time.Second); err != nil {
+	if err := waitForServer(ctx, sup, 60*time.Second); err != nil {
 		logger.Print(err)
 		stop()
 		<-supFertig
@@ -325,16 +325,16 @@ func cmdDaemon(root string, errw io.Writer) int {
 	return 1
 }
 
-// cmdGraben druckt den Trace eines Laufs als Baumeister-Input
+// cmdDig druckt den Trace eines Laufs als Baumeister-Input
 // (Markdown) oder mit -json strukturiert (§8 Phase 2).
 //
 // Zuerst aus der Bau-DB: seit die Läufe ihren Trace beim Ende ablegen,
-// braucht graben dafür keinen opencode-Server — wichtig, weil der
-// Baumeister graben in einem Gang aufruft. Fehlt die Zeile (Altlauf),
+// braucht dig dafür keinen opencode-Server — wichtig, weil der
+// Baumeister dig in einem Gang aufruft. Fehlt die Zeile (Altlauf),
 // holt es den Trace beim Server und trägt sie nach. -live erzwingt den
 // Server-Weg und liefert die ungekürzten Ausgaben.
-func cmdGraben(root string, args []string, out, errw io.Writer) int {
-	fs := flag.NewFlagSet("graben", flag.ContinueOnError)
+func cmdDig(root string, args []string, out, errw io.Writer) int {
+	fs := flag.NewFlagSet("dig", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	alsJSON := fs.Bool("json", false, "Trace als JSON statt Markdown")
 	live := fs.Bool("live", false, "Trace beim Server holen statt aus der Bau-DB")
@@ -342,12 +342,12 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau graben [-json] [-live] <lauf-id>")
+		fmt.Fprintln(errw, "Aufruf: hasenbau dig [-json] [-live] <lauf-id>")
 		return 2
 	}
 	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau graben: ungültige Lauf-ID %q\n", fs.Arg(0))
+		fmt.Fprintf(errw, "hasenbau dig: ungültige Lauf-ID %q\n", fs.Arg(0))
 		return 2
 	}
 
@@ -361,16 +361,16 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 
 	l, err := st.LaufByID(id)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau graben: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau dig: %v\n", err)
 		return 1
 	}
 	if l.SessionID == "" {
-		fmt.Fprintf(errw, "hasenbau graben: Lauf %d (%s, %s) hat keine Session — der Lauf scheiterte vor dem Hasen (Gänge? Prompt?).\n",
+		fmt.Fprintf(errw, "hasenbau dig: Lauf %d (%s, %s) hat keine Session — der Lauf scheiterte vor dem Hasen (Gänge? Prompt?).\n",
 			l.ID, l.Auftrag, l.Status)
 		return 1
 	}
 
-	trace, err := holeTrace(root, st, l, *live, logger)
+	trace, err := fetchTrace(root, st, l, *live, logger)
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -403,11 +403,11 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	return 0
 }
 
-// holeTrace liefert den Trace eines Laufs — aus der Bau-DB, wenn er
+// fetchTrace liefert den Trace eines Laufs — aus der Bau-DB, wenn er
 // dort liegt, sonst über einen eigenen opencode-Server. Was so geholt
-// wurde, wird nachgetragen: das erste graben eines Altlaufs füllt seine
+// wurde, wird nachgetragen: das erste dig eines Altlaufs füllt seine
 // Zeile, danach geht es ohne Server.
-func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *log.Logger) (*opencode.Trace, error) {
+func fetchTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *log.Logger) (*opencode.Trace, error) {
 	if !live {
 		roh, da, err := st.ReadTrace(l.ID)
 		if err != nil {
@@ -416,7 +416,7 @@ func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *l
 		if da {
 			var t opencode.Trace
 			if err := json.Unmarshal(roh, &t); err != nil {
-				return nil, fmt.Errorf("hasenbau graben: abgelegter Trace von Lauf %d ist unlesbar: %w", l.ID, err)
+				return nil, fmt.Errorf("hasenbau dig: abgelegter Trace von Lauf %d ist unlesbar: %w", l.ID, err)
 			}
 			return &t, nil
 		}

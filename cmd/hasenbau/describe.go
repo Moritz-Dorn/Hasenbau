@@ -2,7 +2,7 @@
 //
 // `describe` ist kein `cat`. Es zeigt ein Objekt gerendert, samt allem,
 // was der Hasenbau darüber hinaus darüber weiß — bei einem Lauf also die
-// Notizen aus dem Rückkanal, die sonst nur als Beifang von `graben`
+// Notizen aus dem Rückkanal, die sonst nur als Beifang von `dig`
 // sichtbar wären. Dateien gibt es nie im Volltext aus; wer sie will,
 // bekommt den Pfad genannt.
 package main
@@ -54,7 +54,7 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau describe lauf <id>")
 		return 2
 	}
-	st, l, code := oeffneLauf(root, args[0], errw)
+	st, l, code := openLauf(root, args[0], errw)
 	if st != nil {
 		defer st.Close()
 	}
@@ -62,32 +62,32 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 		return code
 	}
 
-	a := neuerAbschnitt(out)
-	a.feld("Lauf", "%d", l.ID)
-	a.feld("Auftrag", "%s", l.Auftrag)
-	a.feld("Trigger", "%s", l.Trigger)
+	a := newSection(out)
+	a.field("Lauf", "%d", l.ID)
+	a.field("Auftrag", "%s", l.Auftrag)
+	a.field("Trigger", "%s", l.Trigger)
 	if l.Input != "" {
-		a.feld("Auslöser", "%s", l.Input)
+		a.field("Auslöser", "%s", l.Input)
 	}
-	a.feld("Status", "%s", l.Status)
-	a.feld("Gestartet", "%s", l.Started.Local().Format("2006-01-02 15:04:05"))
+	a.field("Status", "%s", l.Status)
+	a.field("Gestartet", "%s", l.Started.Local().Format("2006-01-02 15:04:05"))
 	if l.Ended != nil {
-		a.feld("Beendet", "%s  (%s)", l.Ended.Local().Format("2006-01-02 15:04:05"), laufDauer(*l))
+		a.field("Beendet", "%s  (%s)", l.Ended.Local().Format("2006-01-02 15:04:05"), laufDuration(*l))
 	} else {
-		a.feld("Beendet", "läuft noch")
+		a.field("Beendet", "läuft noch")
 	}
 	if l.SessionID != "" {
-		a.feld("Session", "%s", l.SessionID)
+		a.field("Session", "%s", l.SessionID)
 	}
 	if l.TokensIn > 0 || l.TokensOut > 0 {
-		a.feld("Tokens", "%d ein, %d aus", l.TokensIn, l.TokensOut)
+		a.field("Tokens", "%d ein, %d aus", l.TokensIn, l.TokensOut)
 	}
-	a.feld("Kosten", "%s", kosten(l.CostCent))
+	a.field("Kosten", "%s", cost(l.CostCent))
 	if l.Summary != "" {
-		a.feld("Summary", "%s", l.Summary)
+		a.field("Summary", "%s", l.Summary)
 	}
 
-	a.fertig()
+	a.done()
 
 	// Der Fehler eines Laufs ist mehrzeilig und der Grund, warum man
 	// überhaupt hinsieht — hier steht er vollständig, nicht gekürzt.
@@ -111,25 +111,25 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	if l.SessionID == "" {
 		fmt.Fprintln(out, "Kein Trace — der Lauf scheiterte vor dem Hasen.")
 	} else {
-		fmt.Fprintf(out, "Trace: hasenbau graben %d\n", l.ID)
+		fmt.Fprintf(out, "Trace: hasenbau dig %d\n", l.ID)
 	}
 	return 0
 }
 
-// abschnitt sammelt Label-Wert-Zeilen und richtet sie gemeinsam aus.
+// section sammelt Label-Wert-Zeilen und richtet sie gemeinsam aus.
 // Gemeinsam heißt: erst beim fertig() — vorher weiß der Tabwriter die
 // Spaltenbreite nicht.
-type abschnitt struct{ w *tabwriter.Writer }
+type section struct{ w *tabwriter.Writer }
 
-func neuerAbschnitt(out io.Writer) *abschnitt {
-	return &abschnitt{w: tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)}
+func newSection(out io.Writer) *section {
+	return &section{w: tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)}
 }
 
-func (a *abschnitt) feld(label, format string, args ...any) {
+func (a *section) field(label, format string, args ...any) {
 	fmt.Fprintf(a.w, "%s\t%s\n", label, fmt.Sprintf(format, args...))
 }
 
-func (a *abschnitt) fertig() { a.w.Flush() }
+func (a *section) done() { a.w.Flush() }
 
 // indent hängt mehrzeilige Werte unter ihre erste Zeile.
 func indent(s string) string {
@@ -141,7 +141,7 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau describe auftrag <name>")
 		return 2
 	}
-	auftraege, err := ladeDefinitionen(root)
+	auftraege, err := loadDefinitions(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -157,20 +157,20 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	ab := neuerAbschnitt(out)
-	ab.feld("Auftrag", "%s", a.Name)
-	ab.feld("Datei", "auftraege/%s.md", a.Name)
-	ab.feld("Trigger", "%s", triggerKurz(a.Trigger))
+	ab := newSection(out)
+	ab.field("Auftrag", "%s", a.Name)
+	ab.field("Datei", "auftraege/%s.md", a.Name)
+	ab.field("Trigger", "%s", triggerShort(a.Trigger))
 	if a.Trigger.Watch != "" {
 		if n, err := filepath.Glob(filepath.Join(root, a.Trigger.Watch)); err == nil {
-			ab.feld("", "%d Datei(en) liegen gerade im Glob", len(n))
+			ab.field("", "%d Datei(en) liegen gerade im Glob", len(n))
 		}
 		if a.Trigger.Debounce > 0 {
-			ab.feld("", "debounce %s", a.Trigger.Debounce)
+			ab.field("", "debounce %s", a.Trigger.Debounce)
 		}
 	}
-	ab.feld("Hase", "%s  →  Agent %s", a.Hase, hase.AgentName(a))
-	ab.fertig()
+	ab.field("Hase", "%s  →  Agent %s", a.Hase, hase.AgentName(a))
+	ab.done()
 
 	if len(a.Gaenge) > 0 {
 		fmt.Fprint(out, "\nGänge\n")
@@ -180,9 +180,9 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 				timeout = g.Timeout.String()
 			}
 			fmt.Fprintf(out, "  %d  %s  (%s)\n     %s\n", i+1, g.Name, timeout, g.Run)
-			for _, datei := range gangDateien(g.Run) {
+			for _, datei := range gangFiles(g.Run) {
 				zustand := "vorhanden"
-				if !existiert(root, datei) {
+				if !exists(root, datei) {
 					zustand = "FEHLT"
 				}
 				fmt.Fprintf(out, "     %s  %s\n", datei, zustand)
@@ -192,15 +192,15 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 
 	if len(a.Raeume) > 0 {
 		fmt.Fprint(out, "\nRäume\n")
-		r := neuerAbschnitt(out)
-		for _, rolle := range sortiert(a.Raeume) {
+		r := newSection(out)
+		for _, rolle := range sortedKeys(a.Raeume) {
 			hinweis := ""
-			if gibtSchreibrecht(rolle) {
+			if grantsWrite(rolle) {
 				hinweis = "  → Schreibrecht des Hasen"
 			}
-			r.feld("  "+rolle, "%s%s", a.Raeume[rolle], hinweis)
+			r.field("  "+rolle, "%s%s", a.Raeume[rolle], hinweis)
 		}
-		r.fertig()
+		r.done()
 	}
 
 	if len(a.Context) > 0 {
@@ -229,12 +229,12 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 	fmt.Fprintf(out, "\nPrompt-Kern  %d Zeilen  (cat auftraege/%s.md)\n",
 		len(strings.Split(a.Body, "\n")), a.Name)
 
-	return letzteLaeufe(root, a.Name, out, errw)
+	return recentLaeufe(root, a.Name, out, errw)
 }
 
-// letzteLaeufe hängt die jüngste Historie an ein describe — die Frage
+// recentLaeufe hängt die jüngste Historie an ein describe — die Frage
 // „und, läuft das?" stellt sich sofort danach.
-func letzteLaeufe(root, auftragName string, out, errw io.Writer) int {
+func recentLaeufe(root, auftragName string, out, errw io.Writer) int {
 	st, err := store.Open(dbPath(root))
 	if err != nil {
 		fmt.Fprintln(errw, err)
@@ -251,7 +251,7 @@ func letzteLaeufe(root, auftragName string, out, errw io.Writer) int {
 		return 0
 	}
 	fmt.Fprint(out, "\nLetzte Läufe\n")
-	schreibeLaufTabelle(out, laeufe)
+	writeLaufTable(out, laeufe)
 	return 0
 }
 
@@ -266,21 +266,21 @@ func describeHase(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	ab := neuerAbschnitt(out)
-	ab.feld("Hase", "%s", t.Name)
-	ab.feld("Datei", "hasen/%s.md", t.Name)
+	ab := newSection(out)
+	ab.field("Hase", "%s", t.Name)
+	ab.field("Datei", "hasen/%s.md", t.Name)
 	if t.Description != "" {
-		ab.feld("Beschreibung", "%s", t.Description)
+		ab.field("Beschreibung", "%s", t.Description)
 	}
 	modell := t.Model
 	if modell == "" {
 		modell = "— (opencode entscheidet)"
 	}
-	ab.feld("Modell", "%s", modell)
+	ab.field("Modell", "%s", modell)
 	if t.Temperature != nil {
-		ab.feld("Temperatur", "%g", *t.Temperature)
+		ab.field("Temperatur", "%g", *t.Temperature)
 	}
-	ab.fertig()
+	ab.done()
 
 	if len(t.Knowledge) > 0 {
 		fmt.Fprint(out, "\nBeigelegtes Wissen (steht in jedem Prompt dieses Hasen)\n")
@@ -303,18 +303,18 @@ func describeHase(root string, args []string, out, errw io.Writer) int {
 
 	// Der Grund für diesen Befehl: die effektiven Rechte stehen weder
 	// im Template noch im Auftrag — sie entstehen erst beim Generieren.
-	auftraege, ladefehler := ladeDefinitionen(root)
+	auftraege, ladefehler := loadDefinitions(root)
 	if ladefehler != nil {
 		fmt.Fprintf(errw, "hasenbau: Aufträge nicht lesbar, Permissions unbekannt: %v\n", ladefehler)
 		return 1
 	}
-	benutzer := nutzer(auftraege, t.Name)
+	benutzer := users(auftraege, t.Name)
 	if len(benutzer) == 0 {
 		fmt.Fprintln(out, "\nKein Auftrag benutzt diesen Hasen — es gibt keinen generierten Agenten.")
 	}
 	for _, a := range benutzer {
 		fmt.Fprintf(out, "\nIn Auftrag %s  (Agent %s)\n", a.Name, hase.AgentName(a))
-		zeilen, err := effektivePermissions(root, a, t)
+		zeilen, err := effectivePermissions(root, a, t)
 		if err != nil {
 			fmt.Fprintf(errw, "hasenbau: %v\n", err)
 			return 1
@@ -329,9 +329,9 @@ func describeHase(root string, args []string, out, errw io.Writer) int {
 	return 0
 }
 
-// sortiert liefert die Schlüssel einer Rollen-Tabelle in fester
+// sortedKeys liefert die Schlüssel einer Rollen-Tabelle in fester
 // Reihenfolge — Map-Iteration wäre bei jedem Aufruf anders.
-func sortiert(m map[string]string) []string {
+func sortedKeys(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -345,8 +345,8 @@ func describeGang(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau describe gang <datei>")
 		return 2
 	}
-	auftraege, ladefehler := ladeDefinitionen(root)
-	gaenge, err := sammleGaenge(root, auftraege)
+	auftraege, ladefehler := loadDefinitions(root)
+	gaenge, err := collectGaenge(root, auftraege)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -354,9 +354,9 @@ func describeGang(root string, args []string, out, errw io.Writer) int {
 	// Bequemlichkeit: `describe gang pdf_to_md.py` findet auch
 	// `gaenge/pdf_to_md.py`.
 	gesucht := args[0]
-	var g *gangDatei
+	var g *gangFile
 	for i := range gaenge {
-		if gaenge[i].Pfad == gesucht || filepath.Base(gaenge[i].Pfad) == gesucht {
+		if gaenge[i].Path == gesucht || filepath.Base(gaenge[i].Path) == gesucht {
 			g = &gaenge[i]
 			break
 		}
@@ -366,30 +366,30 @@ func describeGang(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	ab := neuerAbschnitt(out)
-	ab.feld("Gang", "%s", g.Pfad)
-	if !existiert(root, g.Pfad) {
-		ab.feld("Datei", "FEHLT — ein Auftrag ruft sie, aber es gibt sie nicht")
+	ab := newSection(out)
+	ab.field("Gang", "%s", g.Path)
+	if !exists(root, g.Path) {
+		ab.field("Datei", "FEHLT — ein Auftrag ruft sie, aber es gibt sie nicht")
 	} else {
-		ab.feld("Größe", "%d Bytes%s", g.Groesse, wennAusfuehrbar(g.Ausfuehrbar))
+		ab.field("Größe", "%d Bytes%s", g.Size, execFlag(g.Executable))
 	}
-	if g.Entwurf {
-		ab.feld("Entwurf", "vom Baumeister geschrieben, nicht aktiviert (PLAN.md §8)")
+	if g.Draft {
+		ab.field("Draft", "vom Baumeister geschrieben, nicht aktiviert (PLAN.md §8)")
 	}
-	if z := zweck(root, g.Pfad); z != "" {
-		ab.feld("Zweck", "%s", z)
+	if z := purpose(root, g.Path); z != "" {
+		ab.field("Zweck", "%s", z)
 	}
-	ab.fertig()
+	ab.done()
 
-	if len(g.Benutzungen) == 0 {
-		if g.Entwurf {
+	if len(g.Uses) == 0 {
+		if g.Draft {
 			fmt.Fprintln(out, "\nKein Auftrag trägt ihn ein — lies ihn und trag den Gang selbst ein.")
 		} else {
 			fmt.Fprintln(out, "\nKein Auftrag benutzt ihn.")
 		}
 	} else {
 		fmt.Fprint(out, "\nBenutzt von\n")
-		for _, b := range g.Benutzungen {
+		for _, b := range g.Uses {
 			timeout := "kein Timeout"
 			if b.Timeout > 0 {
 				timeout = b.Timeout.String()
@@ -403,7 +403,7 @@ func describeGang(root string, args []string, out, errw io.Writer) int {
 	return 0
 }
 
-func wennAusfuehrbar(b bool) string {
+func execFlag(b bool) string {
 	if b {
 		return ", ausführbar"
 	}

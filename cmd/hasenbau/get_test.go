@@ -121,7 +121,7 @@ func laufMitNotizen(t *testing.T, bau string) *store.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.WriteNote(id, "31. Februar existiert nicht"); err != nil {
+	if err := st.WriteNote(id, "31. Februar exists nicht"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.WriteNote(id, "zweite Beobachtung"); err != nil {
@@ -177,8 +177,8 @@ func TestDescribeLauf(t *testing.T) {
 	for _, muss := range []string{
 		"Lauf", "Auftrag", "notiz-einlagern", "Auslöser", "raeume/laderampe/sources/a.txt",
 		"Session", "ses_t", "2100 ein, 360 aus", "12 ct", "Notiz abgelegt",
-		"Notizen des Hasen", "31. Februar existiert nicht", "zweite Beobachtung",
-		"hasenbau graben 1",
+		"Notizen des Hasen", "31. Februar exists nicht", "zweite Beobachtung",
+		"hasenbau dig 1",
 	} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)

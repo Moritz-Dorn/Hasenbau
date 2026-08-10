@@ -82,7 +82,7 @@ func getLaeufe(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(out, "keine Läufe")
 		return 0
 	}
-	schreibeLaufTabelle(out, laeufe)
+	writeLaufTable(out, laeufe)
 	return 0
 }
 
@@ -91,20 +91,20 @@ func getLauf(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau get lauf <id>")
 		return 2
 	}
-	st, l, code := oeffneLauf(root, args[0], errw)
+	st, l, code := openLauf(root, args[0], errw)
 	if st != nil {
 		defer st.Close()
 	}
 	if code != 0 {
 		return code
 	}
-	schreibeLaufTabelle(out, []store.Lauf{*l})
+	writeLaufTable(out, []store.Lauf{*l})
 	return 0
 }
 
-// oeffneLauf öffnet die DB und löst eine Lauf-ID auf — der gemeinsame
+// openLauf öffnet die DB und löst eine Lauf-ID auf — der gemeinsame
 // Vorspann von `get lauf` und `describe lauf`.
-func oeffneLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, int) {
+func openLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, int) {
 	id, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
 		fmt.Fprintf(errw, "hasenbau: ungültige Lauf-ID %q\n", arg)
@@ -123,7 +123,7 @@ func oeffneLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, in
 	return st, l, 0
 }
 
-func schreibeLaufTabelle(out io.Writer, laeufe []store.Lauf) {
+func writeLaufTable(out io.Writer, laeufe []store.Lauf) {
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tGESTARTET\tDAUER\tKOSTEN\tSUMMARY")
 	for _, l := range laeufe {
@@ -134,12 +134,12 @@ func schreibeLaufTabelle(out io.Writer, laeufe []store.Lauf) {
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			l.ID, l.Auftrag, l.Trigger, l.Status,
 			l.Started.Local().Format("2006-01-02 15:04"),
-			laufDauer(l), kosten(l.CostCent), kuerze(einzeilig(summary), 70))
+			laufDuration(l), cost(l.CostCent), truncate(oneLine(summary), 70))
 	}
 	w.Flush()
 }
 
-func laufDauer(l store.Lauf) string {
+func laufDuration(l store.Lauf) string {
 	if l.Ended == nil {
 		return "läuft"
 	}
@@ -148,23 +148,23 @@ func laufDauer(l store.Lauf) string {
 
 // kosten zeigt kosten_cent so, wie es gemeint ist: Cent, und bei einem
 // lokalen Modell schlicht nichts.
-func kosten(cent int64) string {
+func cost(cent int64) string {
 	if cent == 0 {
 		return "—"
 	}
 	return strconv.FormatInt(cent, 10) + " ct"
 }
 
-// einzeilig hält eine Tabellenzelle einzeilig — die Summary hält der
+// oneLine hält eine Tabellenzelle oneLine — die Summary hält der
 // Store zwar auf einer Zeile (§5), der Fehlertext eines Laufs nicht.
-func einzeilig(s string) string {
+func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// kuerze hält eine Tabelle lesbar. Eine Summary darf 500 Zeichen lang
+// truncate hält eine Tabelle lesbar. Eine Summary darf 500 Zeichen lang
 // sein (§5), und wenn sie aus dem Fallback stammt, ist sie es auch —
 // vollständig steht sie in `describe lauf`.
-func kuerze(s string, max int) string {
+func truncate(s string, max int) string {
 	runen := []rune(s)
 	if len(runen) <= max {
 		return s
@@ -213,7 +213,7 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 			ohneSchluessel = true
 		}
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
-			e.ID, endpoint, e.Modelle, jaNein(e.Aktiv), jaNein(schluessel[e.ID]))
+			e.ID, endpoint, e.Modelle, yesNo(e.Aktiv), yesNo(schluessel[e.ID]))
 	}
 	w.Flush()
 
@@ -230,7 +230,7 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 	return 0
 }
 
-func jaNein(b bool) string {
+func yesNo(b bool) string {
 	if b {
 		return "ja"
 	}
@@ -242,7 +242,7 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau get auftraege")
 		return 2
 	}
-	auftraege, err := ladeDefinitionen(root)
+	auftraege, err := loadDefinitions(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -277,15 +277,15 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 			letzter = s.LastLauf.Local().Format("2006-01-02 15:04")
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\n",
-			a.Name, triggerKurz(a.Trigger), a.Hase,
+			a.Name, triggerShort(a.Trigger), a.Hase,
 			len(a.Gaenge), len(a.Raeume), letzter, s.ErrorStreak)
 	}
 	w.Flush()
 	return 0
 }
 
-// triggerKurz fasst den Trigger für eine Tabellenzelle zusammen.
-func triggerKurz(t auftrag.Trigger) string {
+// triggerShort fasst den Trigger für eine Tabellenzelle zusammen.
+func triggerShort(t auftrag.Trigger) string {
 	switch t.Kind() {
 	case auftrag.TriggerCron:
 		return "cron " + t.Cron
@@ -301,7 +301,7 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau get hasen")
 		return 2
 	}
-	namen, err := hasenNamen(root)
+	namen, err := hasenNames(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -313,14 +313,14 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 	// Ohne die Aufträge fehlt die Spalte, die den Hasen erst einordnet —
 	// aber ein kaputter Auftrag soll `get hasen` nicht unbrauchbar
 	// machen. Deshalb weiter mit leerer Liste und einem Hinweis.
-	auftraege, ladefehler := ladeDefinitionen(root)
+	auftraege, ladefehler := loadDefinitions(root)
 
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tMODELL\tTEMPERATUR\tDENIES\tBENUTZT VON")
 	for _, name := range namen {
 		t, err := hase.Lade(root, name)
 		if err != nil {
-			fmt.Fprintf(w, "%s\tKAPUTT: %s\t\t\t\n", name, einzeilig(err.Error()))
+			fmt.Fprintf(w, "%s\tKAPUTT: %s\t\t\t\n", name, oneLine(err.Error()))
 			continue
 		}
 		modell := t.Model
@@ -332,7 +332,7 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 			temp = fmt.Sprintf("%g", *t.Temperature)
 		}
 		var von []string
-		for _, a := range nutzer(auftraege, name) {
+		for _, a := range users(auftraege, name) {
 			von = append(von, a.Name)
 		}
 		benutzt := strings.Join(von, ", ")
@@ -353,8 +353,8 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau get gaenge")
 		return 2
 	}
-	auftraege, ladefehler := ladeDefinitionen(root)
-	gaenge, err := sammleGaenge(root, auftraege)
+	auftraege, ladefehler := loadDefinitions(root)
+	gaenge, err := collectGaenge(root, auftraege)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -368,21 +368,21 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 	fmt.Fprintln(w, "DATEI\tGRÖSSE\tBENUTZT VON")
 	for _, g := range gaenge {
 		var von []string
-		for _, b := range g.Benutzungen {
+		for _, b := range g.Uses {
 			von = append(von, b.Auftrag+"/"+b.Gang)
 		}
 		benutzt := strings.Join(von, ", ")
-		groesse := fmt.Sprintf("%d B", g.Groesse)
+		groesse := fmt.Sprintf("%d B", g.Size)
 		switch {
-		case len(g.Benutzungen) == 0 && g.Entwurf:
-			benutzt = "—  (Entwurf, nicht eingetragen)"
-		case len(g.Benutzungen) == 0:
+		case len(g.Uses) == 0 && g.Draft:
+			benutzt = "—  (Draft, nicht eingetragen)"
+		case len(g.Uses) == 0:
 			benutzt = "—"
 		}
-		if g.Groesse == 0 && len(g.Benutzungen) > 0 && !existiert(root, g.Pfad) {
+		if g.Size == 0 && len(g.Uses) > 0 && !exists(root, g.Path) {
 			groesse = "FEHLT"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", g.Pfad, groesse, benutzt)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", g.Path, groesse, benutzt)
 	}
 	w.Flush()
 	if ladefehler != nil {

@@ -21,35 +21,35 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 )
 
-// gangVerzeichnis ist der Ort der Gang-Skripte, Bau-relativ (§4).
-const gangVerzeichnis = "gaenge/"
+// gangDir ist der Ort der Gang-Skripte, Bau-relativ (§4).
+const gangDir = "gaenge/"
 
-// gangDateien zieht die Bau-relativen Skript-Pfade aus einer run-Zeile.
+// gangFiles zieht die Bau-relativen Skript-Pfade aus einer run-Zeile.
 // Bewusst simpel: ein Token, das mit `gaenge/` beginnt, ist eine
 // Referenz. Das deckt die realen Formen ab (`python3 gaenge/x.py …`,
 // `gaenge/x.py …`) und erfindet keinen Shell-Parser — eine run-Zeile
 // darf alles Mögliche sein, und was hier nicht erkannt wird, fehlt
 // höchstens in einer Übersicht.
-func gangDateien(run string) []string {
+func gangFiles(run string) []string {
 	var out []string
 	for _, feld := range strings.Fields(run) {
 		feld = strings.Trim(feld, `"'`)
-		if strings.HasPrefix(feld, gangVerzeichnis) {
+		if strings.HasPrefix(feld, gangDir) {
 			out = append(out, feld)
 		}
 	}
 	return out
 }
 
-// ladeDefinitionen liest Aufträge und Hasen, ohne Agenten zu schreiben —
-// anders als ladeUndGeneriere, das zum Lauf gehört. Ein Lesebefehl
+// loadDefinitions liest Aufträge und Hasen, ohne Agenten zu schreiben —
+// anders als loadAndGenerate, das zum Lauf gehört. Ein Lesebefehl
 // verändert den Bau nicht.
-func ladeDefinitionen(root string) ([]*auftrag.Auftrag, error) {
+func loadDefinitions(root string) ([]*auftrag.Auftrag, error) {
 	return auftrag.Load(root)
 }
 
-// hasenNamen listet die Templates unter hasen/.
-func hasenNamen(root string) ([]string, error) {
+// hasenNames listet die Templates unter hasen/.
+func hasenNames(root string) ([]string, error) {
 	dateien, err := filepath.Glob(filepath.Join(root, "hasen", "*.md"))
 	if err != nil {
 		return nil, fmt.Errorf("hasen suchen: %w", err)
@@ -63,7 +63,7 @@ func hasenNamen(root string) ([]string, error) {
 }
 
 // nutzer sind die Aufträge, die einen Hasen einsetzen.
-func nutzer(auftraege []*auftrag.Auftrag, haseName string) []*auftrag.Auftrag {
+func users(auftraege []*auftrag.Auftrag, haseName string) []*auftrag.Auftrag {
 	var out []*auftrag.Auftrag
 	for _, a := range auftraege {
 		if a.Hase == haseName {
@@ -73,14 +73,14 @@ func nutzer(auftraege []*auftrag.Auftrag, haseName string) []*auftrag.Auftrag {
 	return out
 }
 
-// schreibRaeume nennt die Rollen, aus denen Schreibrecht entsteht — die
+// writeRaeume nennt die Rollen, aus denen Schreibrecht entsteht — die
 // Stelle, an der sich Nutzer am ehesten irren. Die Liste spiegelt
 // hase.Generiere; weicht sie ab, lügt die Anzeige, deshalb prüft ein
 // Test beides gegeneinander.
-var schreibRaeume = []string{"work", "out"}
+var writeRaeume = []string{"work", "out"}
 
-func gibtSchreibrecht(rolle string) bool {
-	for _, r := range schreibRaeume {
+func grantsWrite(rolle string) bool {
+	for _, r := range writeRaeume {
 		if r == rolle {
 			return true
 		}
@@ -88,17 +88,17 @@ func gibtSchreibrecht(rolle string) bool {
 	return false
 }
 
-// existiert meldet, ob ein Bau-relativer Pfad da ist.
-func existiert(root, rel string) bool {
+// exists meldet, ob ein Bau-relativer Pfad da ist.
+func exists(root, rel string) bool {
 	_, err := os.Stat(filepath.Join(root, rel))
 	return err == nil
 }
 
-// effektivePermissions rendert den permission-Block, den ein Hase in
+// effectivePermissions rendert den permission-Block, den ein Hase in
 // einem konkreten Auftrag bekommt. Genau dafür gibt es describe: die
 // Rechte stehen weder im Template noch im Auftrag, sie entstehen erst
 // beim Generieren.
-func effektivePermissions(root string, a *auftrag.Auftrag, t *hase.Template) ([]string, error) {
+func effectivePermissions(root string, a *auftrag.Auftrag, t *hase.Template) ([]string, error) {
 	roh, err := hase.Generiere(a, t)
 	if err != nil {
 		return nil, err
@@ -118,44 +118,44 @@ func effektivePermissions(root string, a *auftrag.Auftrag, t *hase.Template) ([]
 	return zeilen, nil
 }
 
-// gangDatei ist eine Skriptdatei unter gaenge/ samt ihrer Benutzungen.
-type gangDatei struct {
-	Pfad        string // Bau-relativ
-	Groesse     int64
-	Ausfuehrbar bool
-	Entwurf     bool // liegt unter gaenge/entwurf/ — vom Baumeister, nicht eingetragen
-	Benutzungen []gangBenutzung
+// gangFile ist eine Skriptdatei unter gaenge/ samt ihrer Uses.
+type gangFile struct {
+	Path       string // Bau-relativ
+	Size       int64
+	Executable bool
+	Draft      bool // liegt unter gaenge/entwurf/ — vom Baumeister, nicht eingetragen
+	Uses       []gangUse
 }
 
-// gangBenutzung ist ein Auftrag, der diese Datei in einer run-Zeile ruft.
-type gangBenutzung struct {
+// gangUse ist ein Auftrag, der diese Datei in einer run-Zeile ruft.
+type gangUse struct {
 	Auftrag string
 	Gang    string
 	Run     string
 	Timeout time.Duration
 }
 
-// entwurfVerzeichnis ist der Ablageort des Baumeisters (§8).
-const entwurfVerzeichnis = gangVerzeichnis + "entwurf/"
+// draftDir ist der Ablageort des Baumeisters (§8).
+const draftDir = gangDir + "entwurf/"
 
-// sammleGaenge listet die Dateien unter gaenge/ und hängt jeder die
+// collectGaenge listet die Dateien unter gaenge/ und hängt jeder die
 // Aufträge an, die sie benutzen. Die Beziehung wird abgeleitet, nicht
 // gepflegt: die Wahrheit steht in den run-Zeilen.
-func sammleGaenge(root string, auftraege []*auftrag.Auftrag) ([]gangDatei, error) {
-	benutzung := map[string][]gangBenutzung{}
+func collectGaenge(root string, auftraege []*auftrag.Auftrag) ([]gangFile, error) {
+	benutzung := map[string][]gangUse{}
 	for _, a := range auftraege {
 		for _, g := range a.Gaenge {
-			for _, datei := range gangDateien(g.Run) {
-				benutzung[datei] = append(benutzung[datei], gangBenutzung{
+			for _, datei := range gangFiles(g.Run) {
+				benutzung[datei] = append(benutzung[datei], gangUse{
 					Auftrag: a.Name, Gang: g.Name, Run: g.Run, Timeout: g.Timeout,
 				})
 			}
 		}
 	}
 
-	var out []gangDatei
+	var out []gangFile
 	gesehen := map[string]bool{}
-	wurzel := filepath.Join(root, gangVerzeichnis)
+	wurzel := filepath.Join(root, gangDir)
 	err := filepath.WalkDir(wurzel, func(pfad string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) && pfad == wurzel {
@@ -175,12 +175,12 @@ func sammleGaenge(root string, auftraege []*auftrag.Auftrag) ([]gangDatei, error
 			return err
 		}
 		gesehen[rel] = true
-		out = append(out, gangDatei{
-			Pfad:        rel,
-			Groesse:     info.Size(),
-			Ausfuehrbar: info.Mode()&0o111 != 0,
-			Entwurf:     strings.HasPrefix(rel, entwurfVerzeichnis),
-			Benutzungen: benutzung[rel],
+		out = append(out, gangFile{
+			Path:       rel,
+			Size:       info.Size(),
+			Executable: info.Mode()&0o111 != 0,
+			Draft:      strings.HasPrefix(rel, draftDir),
+			Uses:       benutzung[rel],
 		})
 		return nil
 	})
@@ -192,16 +192,16 @@ func sammleGaenge(root string, auftraege []*auftrag.Auftrag) ([]gangDatei, error
 	// häufigste Fehler (Datei umbenannt, Auftrag nicht) niemandem auf.
 	for datei, b := range benutzung {
 		if !gesehen[datei] {
-			out = append(out, gangDatei{Pfad: datei, Benutzungen: b})
+			out = append(out, gangFile{Path: datei, Uses: b})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Pfad < out[j].Pfad })
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
 }
 
-// zweck zieht die erste erklärende Zeile aus einem Skript: den Anfang
+// purpose zieht die erste erklärende Zeile aus einem Skript: den Anfang
 // des Python-Docstrings oder den ersten Kommentar nach dem Shebang.
-func zweck(root, rel string) string {
+func purpose(root, rel string) string {
 	roh, err := os.ReadFile(filepath.Join(root, rel))
 	if err != nil {
 		return ""

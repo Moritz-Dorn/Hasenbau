@@ -53,12 +53,12 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	k, err := oeffneLaufKontext(root, logger)
+	k, err := openLaufContext(root, logger)
 	if err != nil {
 		logger.Print(err)
 		return 1
 	}
-	defer k.Schliesse()
+	defer k.Close()
 
 	ziel, err := k.Auftrag(conf.Baumeister)
 	if err != nil {
@@ -73,13 +73,13 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	}
 
 	// Vor dem Server auflösen: ein Tippfehler soll kein opencode starten.
-	quelle, err := zielLauf(k.Store, args[0])
+	quelle, err := targetLauf(k.Store, args[0])
 	if err != nil {
 		fmt.Fprintf(errw, "hasenbau baumeister: %v\n", err)
 		return 1
 	}
 
-	vorher, err := entwurfStand(root, raum)
+	vorher, err := draftSnapshot(root, raum)
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -87,7 +87,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 
 	fmt.Fprintf(out, "Baumeister %s auf Lauf %d (%s, %s, %s)\n",
 		ziel.Name, quelle.ID, quelle.Auftrag, quelle.Trigger, quelle.Status)
-	if err := k.StarteServer(); err != nil {
+	if err := k.StartServer(); err != nil {
 		logger.Print(err)
 		return 1
 	}
@@ -99,13 +99,13 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 
 	// Bericht auch nach einem Fehlschlag: der Hase kann geschrieben
 	// haben, bevor etwas anderes schiefging.
-	nachher, err := entwurfStand(root, raum)
+	nachher, err := draftSnapshot(root, raum)
 	if err != nil {
 		logger.Print(err)
 		return 1
 	}
-	neu := berichteEntwurf(out, raum, vorher, nachher)
-	for _, meldung := range pruefeEntwurf(root, neu) {
+	neu := reportDrafts(out, raum, vorher, nachher)
+	for _, meldung := range checkDrafts(root, neu) {
 		fmt.Fprintf(out, "  %s\n", meldung)
 	}
 	if len(neu) > 0 {
@@ -113,7 +113,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 			"(PLAN.md §8/§10). Lies das Skript, dann trag den Gang selbst ein; der\n"+
 			"Vorschlag steht im Kopf der Datei.\n")
 	}
-	fmt.Fprintf(out, "\nDer Trace, aus dem er gearbeitet hat: `hasenbau graben %d`.\n", quelle.ID)
+	fmt.Fprintf(out, "\nDer Trace, aus dem er gearbeitet hat: `hasenbau dig %d`.\n", quelle.ID)
 
 	if laufFehler != nil {
 		return 1
@@ -121,11 +121,11 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	return 0
 }
 
-// zielLauf löst das Argument auf: reine Ziffern sind eine Lauf-ID,
+// targetLauf löst das Argument auf: reine Ziffern sind eine Lauf-ID,
 // alles andere ein Auftragsname (dann der jüngste Lauf mit Session).
 // Zurück kommt immer ein echter Lauf — damit ist das $INPUT des
 // Baumeister-Laufs eine Zahl und nie ein Pfad oder Shell-Syntax.
-func zielLauf(st *store.Store, ziel string) (*store.Lauf, error) {
+func targetLauf(st *store.Store, ziel string) (*store.Lauf, error) {
 	var l *store.Lauf
 	var err error
 	if id, e := strconv.ParseInt(ziel, 10, 64); e == nil {
@@ -142,17 +142,17 @@ func zielLauf(st *store.Store, ziel string) (*store.Lauf, error) {
 	return l, nil
 }
 
-// entwurfDatei ist der Stand einer Datei im out-Raum. Größe und Hash,
+// draftFile ist der Stand einer Datei im out-Raum. Größe und Hash,
 // damit auch eine gleich große Änderung auffällt.
-type entwurfDatei struct {
-	Groesse int64
-	Hash    string
+type draftFile struct {
+	Size int64
+	Hash string
 }
 
-// entwurfStand fotografiert einen Raum. Ein fehlendes Verzeichnis ist
+// draftSnapshot fotografiert einen Raum. Ein fehlendes Verzeichnis ist
 // kein Fehler — der Runner legt Räume erst beim Lauf an.
-func entwurfStand(bauRoot, raum string) (map[string]entwurfDatei, error) {
-	stand := map[string]entwurfDatei{}
+func draftSnapshot(bauRoot, raum string) (map[string]draftFile, error) {
+	stand := map[string]draftFile{}
 	wurzel := filepath.Join(bauRoot, raum)
 	err := filepath.WalkDir(wurzel, func(pfad string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -173,7 +173,7 @@ func entwurfStand(bauRoot, raum string) (map[string]entwurfDatei, error) {
 		if err != nil {
 			return err
 		}
-		stand[rel] = entwurfDatei{Groesse: int64(len(inhalt)), Hash: hex.EncodeToString(summe[:8])}
+		stand[rel] = draftFile{Size: int64(len(inhalt)), Hash: hex.EncodeToString(summe[:8])}
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
@@ -182,10 +182,10 @@ func entwurfStand(bauRoot, raum string) (map[string]entwurfDatei, error) {
 	return stand, nil
 }
 
-// berichteEntwurf stellt Vorher und Nachher gegenüber und liefert die
+// reportDrafts stellt Vorher und Nachher gegenüber und liefert die
 // neuen Dateien zurück. Geänderte zählen nicht dazu: eine bestehende
 // Datei zu überschreiben ist ein Befund, kein Ergebnis.
-func berichteEntwurf(w io.Writer, raum string, vorher, nachher map[string]entwurfDatei) []string {
+func reportDrafts(w io.Writer, raum string, vorher, nachher map[string]draftFile) []string {
 	var neu, geaendert []string
 	for pfad, n := range nachher {
 		v, gabs := vorher[pfad]
@@ -205,11 +205,11 @@ func berichteEntwurf(w io.Writer, raum string, vorher, nachher map[string]entwur
 		return nil
 	}
 	for _, p := range neu {
-		fmt.Fprintf(w, "  neu        %s (%d Bytes)\n", p, nachher[p].Groesse)
+		fmt.Fprintf(w, "  neu        %s (%d Bytes)\n", p, nachher[p].Size)
 	}
 	for _, p := range geaendert {
-		fmt.Fprintf(w, "  GEÄNDERT   %s (%d → %d Bytes) — hier lag schon ein Entwurf\n",
-			p, vorher[p].Groesse, nachher[p].Groesse)
+		fmt.Fprintf(w, "  GEÄNDERT   %s (%d → %d Bytes) — hier lag schon ein Draft\n",
+			p, vorher[p].Size, nachher[p].Size)
 	}
 	if unveraendert := len(nachher) - len(neu) - len(geaendert); unveraendert > 0 {
 		fmt.Fprintf(w, "  unverändert: %d Datei(en)\n", unveraendert)
@@ -217,16 +217,16 @@ func berichteEntwurf(w io.Writer, raum string, vorher, nachher map[string]entwur
 	return neu
 }
 
-// pruefeEntwurf lässt die Syntax neuer Skripte prüfen. Der Baumeister
+// checkDrafts lässt die Syntax neuer Skripte prüfen. Der Baumeister
 // kann das nicht selbst — er hat kein bash (§6, und Hasen-Templates
-// dürfen Rechte nur verengen), sein Entwurf ist also konstruktions-
+// dürfen Rechte nur verengen), sein Draft ist also konstruktions-
 // bedingt ungetestet. Parsen ist kein Ausführen: weder `ast.parse` noch
 // `sh -n` führt eine Zeile des Skripts aus.
 //
 // ast.parse und nicht py_compile: das legt ein __pycache__/ neben den
-// Entwurf, und der Bau ist ein Git-Repo — im Diff soll der Entwurf
+// Draft, und der Bau ist ein Git-Repo — im Diff soll der Draft
 // stehen, nicht sein Bytecode.
-func pruefeEntwurf(bauRoot string, dateien []string) []string {
+func checkDrafts(bauRoot string, dateien []string) []string {
 	const pySyntax = `import ast,sys; ast.parse(open(sys.argv[1],encoding="utf-8").read(), sys.argv[1])`
 
 	var meldungen []string

@@ -24,7 +24,7 @@ Hasen-Template an die eigene Provider-Config des Baus anpassen.
 
 Der Baumeister ist kein Sonderfall im Code, sondern genau so ein
 Auftrag — nur dass sein Material Läufe sind statt PDFs. Sein Gang zieht
-den Trace (`hasenbau graben`), sein Hase verdichtet ihn zu einem
+den Trace (`hasenbau dig`), sein Hase verdichtet ihn zu einem
 Gang-Entwurf in `gaenge/entwurf/`.
 
 ```bash
