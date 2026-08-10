@@ -49,6 +49,11 @@ const statusInterval = 15 * time.Second
 // hält.
 const progressInterval = 2 * time.Minute
 
+// DefaultHaseTimeout gilt, wenn weder der Auftrag (`hase_timeout:`,
+// §6) noch der Runner ein Limit setzt. Exportiert, damit die CLI
+// dieselbe Zahl anzeigt, die tatsächlich greift.
+const DefaultHaseTimeout = 30 * time.Minute
+
 // traceMax ist die Kappungsgrenze pro Feld für den abgelegten Trace.
 // Ein einzelnes read-Tool kann Megabytes ausgeben; für die Verdichtung
 // zählen Werkzeug, Argumente und Status, nicht der Volltext.
@@ -66,7 +71,8 @@ type Runner struct {
 	// StatusInterval ist der Takt der Statusabfrage während eines
 	// Laufs; 0 = statusInterval. Nur Tests setzen das.
 	StatusInterval time.Duration
-	// HaseTimeout begrenzt den LLM-Schritt. 0 = 30m — ein Lauf darf
+	// HaseTimeout ist die Vorgabe für den LLM-Schritt; 0 = 30m. Ein
+	// Auftrag mit eigenem `hase_timeout:` sticht sie (§6). Ein Lauf darf
 	// lange dauern, aber nie für immer hängen (Backstop gegen verlorene
 	// idle-Events und hängende Sessions).
 	HaseTimeout time.Duration
@@ -207,9 +213,16 @@ func (h haseResult) alsErgebnis() store.LaufResult {
 // statt abgewartet werden zu müssen, und deshalb der einzige, der ein
 // verlorenes Ereignis überlebt (Hasenbau-0f4).
 func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt string, logf func(string, ...any)) (haseResult, error) {
-	timeout := r.HaseTimeout
+	// Der Auftrag gewinnt gegen die Vorgabe: er weiß, was seine Arbeit
+	// kostet. Für einen Einsortier-Lauf sind 30 Minuten großzügig, ein
+	// Baumeister auf einem großen Trace lief damit ins Limit
+	// (Hasenbau-uh0).
+	timeout := a.HaseTimeout
 	if timeout == 0 {
-		timeout = 30 * time.Minute
+		timeout = r.HaseTimeout
+	}
+	if timeout == 0 {
+		timeout = DefaultHaseTimeout
 	}
 	oben := ctx // ohne Zeitlimit: unterscheidet Timeout von Strg-C
 	ctx, cancel := context.WithTimeout(ctx, timeout)

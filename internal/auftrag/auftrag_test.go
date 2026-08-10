@@ -180,6 +180,9 @@ func TestParseFehler(t *testing.T) {
 		{"nachher ohne Pfeil", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- move: $INPUT raeume/archiv/"), "VON -> NACH"},
 		{"nachher unbekannt", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- verbrenne: $INPUT"), "unbekannte Aktion"},
 		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "ungültiger Hasen-Name"},
+		{"hase_timeout null", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 0s"), "0 ist kein Zeitlimit"},
+		{"hase_timeout negativ", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: -5m"), "negative Dauer"},
+		{"hase_timeout kaputt", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: eine Stunde"), "ungültige Dauer"},
 		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manual: true"), "schließen sich aus"},
 		{"debounce bei manuell", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "manual: true"), "debounce gilt nur für watch"},
 		// $INPUT eines manuell-Auftrags ist ein Argument, kein Pfad.
@@ -282,5 +285,26 @@ func TestLoadLeererBau(t *testing.T) {
 	auftraege, err := Load(root)
 	if err != nil || len(auftraege) != 0 {
 		t.Errorf("leerer Bau: auftraege=%v err=%v", auftraege, err)
+	}
+}
+
+// Hasenbau-uh0: Das Zeitlimit des LLM-Schritts gehört dem Auftrag.
+// Ohne Angabe bleibt es 0 — dann entscheidet der Runner.
+func TestParseHaseTimeout(t *testing.T) {
+	mit := ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 90m")
+	a, err := Parse("pdf-einlagern", []byte(mit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.HaseTimeout != 90*time.Minute {
+		t.Errorf("HaseTimeout = %v, erwartet 90m", a.HaseTimeout)
+	}
+
+	ohne, err := Parse("pdf-einlagern", []byte(beispiel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ohne.HaseTimeout != 0 {
+		t.Errorf("ohne Angabe: HaseTimeout = %v, erwartet 0", ohne.HaseTimeout)
 	}
 }

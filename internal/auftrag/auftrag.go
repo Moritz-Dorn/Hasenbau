@@ -27,6 +27,14 @@ type Auftrag struct {
 	Gaenge  []Gang
 	Hase    string            // Name des Templates in hasen/
 	Raeume  map[string]string // Rolle → Bau-relativer Pfad
+
+	// HaseTimeout begrenzt den LLM-Schritt dieses Auftrags; 0 = der
+	// Vorgabewert des Runners. Ein Wert pro Auftrag, weil ein einziger
+	// nicht beides sein kann: für einen Einsortier-Lauf sind 30 Minuten
+	// großzügig, ein Baumeister auf einem großen Trace braucht mehr
+	// (gemessen: 12m und >30m für dasselbe Material, Hasenbau-uh0).
+	HaseTimeout time.Duration
+
 	Context []Context
 	After   []After
 	Body    string // Prompt-Kern
@@ -121,10 +129,11 @@ type header struct {
 		Run     string   `yaml:"run"`
 		Timeout duration `yaml:"timeout"`
 	} `yaml:"gaenge"`
-	Hase    string            `yaml:"hase"`
-	CWD     string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
-	Raeume  map[string]string `yaml:"raeume"`
-	Context []struct {
+	Hase        string            `yaml:"hase"`
+	HaseTimeout *duration         `yaml:"hase_timeout"`
+	CWD         string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
+	Raeume      map[string]string `yaml:"raeume"`
+	Context     []struct {
 		File          string `yaml:"file"`
 		LastSummaries *int   `yaml:"last_summaries"`
 	} `yaml:"context"`
@@ -205,6 +214,15 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	}
 	if !namePattern.MatchString(a.Hase) {
 		return nil, fehler("ungültiger Hasen-Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", a.Hase)
+	}
+	// „kein Zeitlimit" gibt es nicht: ein Lauf darf lange dauern, aber
+	// nie für immer hängen. Wer 0s schreibt, meint vermutlich genau das
+	// — deshalb ein Fehler statt eines stillen Rückfalls auf die Vorgabe.
+	if fm.HaseTimeout != nil {
+		if *fm.HaseTimeout == 0 {
+			return nil, fehler("hase_timeout: 0 ist kein Zeitlimit — Feld weglassen für die Vorgabe des Runners")
+		}
+		a.HaseTimeout = time.Duration(*fm.HaseTimeout)
 	}
 
 	// Sessions ankern immer am Bau-Root: Räume dürfen eigene Git-Repos

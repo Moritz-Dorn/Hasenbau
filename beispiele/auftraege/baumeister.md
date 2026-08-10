@@ -14,6 +14,11 @@ gaenge:
 
 hase: baumeister
 
+# Verdichten dauert. Gemessen am selben Trace: einmal 12 Minuten, einmal
+# über 30 — dazwischen eine Denkpause von 17 Minuten ohne einen einzigen
+# Tool-Call. Die Vorgabe von 30 Minuten ist dafür zu knapp.
+hase_timeout: 60m
+
 raeume:
   work: raeume/baumeister/work/
   # Das Schreibrecht des Baumeisters entsteht ausschließlich hier:

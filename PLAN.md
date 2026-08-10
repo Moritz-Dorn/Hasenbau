@@ -365,6 +365,7 @@ gaenge:                            # deterministisch, läuft VOR dem Hasen
     timeout: 120s
 
 hase: archivar                     # → Template hasen/archivar.md
+# hase_timeout: 60m                # Zeitlimit des LLM-Schritts; Vorgabe 30m
 
 raeume:
   input: raeume/laderampe/sources/
@@ -387,6 +388,17 @@ Dateiname: `YYYY-MM-DD-<slug>.md`
 ```
 
 Der Hase sieht das PDF nie — er kriegt Markdown. Das ist der Punkt.
+
+**`hase_timeout:` begrenzt den LLM-Schritt dieses Auftrags** (Vorgabe:
+30 Minuten). Nicht zu verwechseln mit dem `timeout:` eines Gangs, das
+einen einzelnen Vorverarbeitungs-Schritt begrenzt. Ein Wert pro Auftrag,
+weil ein einziger nicht beides sein kann: derselbe Baumeister auf
+demselben Trace war einmal nach 12 Minuten fertig und lief einmal nach
+30 in die Vorgabe (Hasenbau-uh0) — dazwischen lag eine Denkpause von
+17 Minuten ohne einen einzigen Tool-Call. Für `pdf-einlagern` wären
+dieselben 30 Minuten dagegen absurd großzügig. `hase_timeout: 0` ist
+ein Ladefehler und kein „unbegrenzt": ein Lauf darf lange dauern, nie
+für immer.
 
 ### Hasen-Templates und generierte Agenten
 

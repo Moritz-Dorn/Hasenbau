@@ -17,6 +17,7 @@ import (
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
+	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
@@ -170,6 +171,11 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 		}
 	}
 	ab.field("Hase", "%s  →  Agent %s", a.Hase, hase.AgentName(a))
+	if a.HaseTimeout > 0 {
+		ab.field("Zeitlimit", "%s für den LLM-Schritt (hase_timeout)", a.HaseTimeout)
+	} else {
+		ab.field("Zeitlimit", "%s (Vorgabe; hase_timeout: nicht gesetzt)", runner.DefaultHaseTimeout)
+	}
 	ab.done()
 
 	if len(a.Gaenge) > 0 {

@@ -397,3 +397,29 @@ func TestStatusabfrageBeendetKeinenLaufOhneBusy(t *testing.T) {
 		t.Fatalf("erwartet: Lauf läuft in den Timeout statt sich fertig zu glauben, bekam %v", err)
 	}
 }
+
+// Hasenbau-uh0: Das Zeitlimit des Auftrags sticht die Vorgabe des
+// Runners. Sichtbar wird es an der Meldung, die das Limit nennt.
+func TestAuftragsZeitlimitSchlaegtVorgabe(t *testing.T) {
+	f, srv := neuerFake(t, nil, nachrichtenOK)
+	root, a, st := bauMitAuftrag(t)
+	a.HaseTimeout = 300 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	funnel := opencode.NewFunnel(func() string { return srv.URL }, t.Logf)
+	funnel.Start(ctx)
+	<-f.streamDa
+
+	r := &Runner{
+		Root: root, BaseURL: func() string { return srv.URL },
+		Store: st, Funnel: funnel,
+		StatusInterval: 50 * time.Millisecond,
+		HaseTimeout:    time.Hour, // würde den Test hängen lassen, wenn sie gälte
+		Logf:           t.Logf,
+	}
+	_, err := r.Execute(ctx, a, "manual", "")
+	if err == nil || !strings.Contains(err.Error(), "300ms") {
+		t.Fatalf("erwartet: Abbruch nach dem Limit des Auftrags, bekam %v", err)
+	}
+}

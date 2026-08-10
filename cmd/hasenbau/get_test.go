@@ -229,3 +229,45 @@ func TestAlterLaeufeBefehlWeistWeiter(t *testing.T) {
 		t.Errorf("Wegweiser fehlt: %q", errw.String())
 	}
 }
+
+// Hasenbau-uh0: `describe auftrag` nennt das Zeitlimit des LLM-Schritts
+// und sagt dazu, ob es aus dem Auftrag kommt oder die Vorgabe ist.
+func TestDescribeAuftragZeigtZeitlimit(t *testing.T) {
+	bau := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bau, "auftraege"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(bau, "hasen"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bau, "hasen", "testhase.md"),
+		[]byte("---\ndescription: t\n---\nTu was.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	schreibe := func(name, timeoutZeile string) {
+		src := "---\ntrigger:\n  manual: true\nhase: testhase\n" + timeoutZeile +
+			"raeume:\n  work: raeume/w/\n---\nMach.\n"
+		if err := os.WriteFile(filepath.Join(bau, "auftraege", name+".md"), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schreibe("mit", "hase_timeout: 90m\n")
+	schreibe("ohne", "")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "describe", "auftrag", "mit"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "1h30m0s") || !strings.Contains(out.String(), "hase_timeout") {
+		t.Errorf("Zeitlimit des Auftrags fehlt:\n%s", out.String())
+	}
+
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "describe", "auftrag", "ohne"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "30m0s") || !strings.Contains(out.String(), "Vorgabe") {
+		t.Errorf("Vorgabe fehlt:\n%s", out.String())
+	}
+}
