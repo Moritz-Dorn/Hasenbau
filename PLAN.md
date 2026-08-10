@@ -662,6 +662,21 @@ Server-Start auf das laufende Binary setzt. Der generierte Agent bringt
 den Absatz mit, der die Werkzeuge erklärt — ohne ihn ruft sie kein Hase.
 Zur Lauf-Zuordnung §11.7)*
 
+**Ein Rückkanal, der nicht hochkommt, hält den Lauf an.** Scheitert der
+MCP-Client, sagt opencode nichts: der Server startet normal, loggt keine
+Zeile, und der Hase bekommt die Werkzeuge einfach nicht. Sein Prompt
+verspricht sie ihm trotzdem, also schreibt er die Meldung als Fließtext
+in seine Antwort — die Summary kommt aus dem Fallback, Notizen entstehen
+gar keine, und der Lauf steht als `ok` in der Datenbank. Genau so lief
+Lauf 10 im Test-Bau (2026-08-10, Hasenbau-08u); der Hase hielt im
+Reasoning selbst fest, dass ihm die `hasenbau_*`-Werkzeuge fehlen.
+Deshalb fragt der Hasenbau nach dem Server-Start den Zustand über `/mcp`
+ab und lässt weder Daemon noch Einzellauf los, solange der Eintrag nicht
+`connected` meldet. Kein Widerspruch zu „der Rückkanal ist ein besserer
+Weg, kein Zwang": dass ein Hase `summary()` nicht *ruft*, bleibt seine
+Sache — dass die Werkzeuge gar nicht erst ankommen, ist ein Defekt des
+Baus.
+
 Die Summary aus dem Rückkanal gewinnt gegen den Fallback: `LaufBeende`
 überschreibt eine schon gesetzte Summary nicht. Ruft ein Hase
 `summary()` nie auf, bleibt es bei der letzten Assistant-Message — der
