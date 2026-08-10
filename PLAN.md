@@ -59,6 +59,8 @@ englisch in der DB und in der Ausgabe.
                         (sst/opencode-sdk-go)
 ```
 
+Die CLI desselben Binaries folgt dem `kubectl`-Schema (§12).
+
 Ein Prozess, ein Binary, `Restart=always`. Der opencode-Server ist ein
 Kind des Daemons und stirbt mit ihm — er hängt nie als offener Endpoint
 herum. Der Daemon bindet ihn an `127.0.0.1` auf einem freien Port
@@ -735,6 +737,28 @@ Der Name ist englisch wie alles außer den sieben Begriffen aus §1 —
 in der Prosa heißt die Sache weiter Befund, so wie `dig` einen Trace
 gräbt.
 
+**Stufe 2: der Baumeister arbeitet einen Befund aus, keinen Trace** ✅
+*(2026-08-10, Hasenbau-4cx.4)*. `hasenbau baumeister -finding <n>
+<auftrag>` setzt ihn auf einen ausgewählten Befund an. Der Code ändert
+sich dabei kaum — genau dafür ist der Baumeister in Stufe 1 ein ganz
+normaler Auftrag geworden: sein Gang ruft weiter `hasenbau dig
+"$INPUT"`, nur ist `$INPUT` jetzt entweder eine Lauf-ID oder ein
+Befund-Selektor `<auftrag>#<n>`. Ein Gang bekommt genau eine Variable
+mit (§6), also trägt der Selektor beides.
+
+`dig` liefert für einen Selektor den gerechneten Befund und darunter
+die Traces der Läufe, auf denen er beruht — höchstens die drei
+jüngsten. Vier vollständige Traces sind über zweitausend Zeilen, und
+der Befund darüber ginge in der Mitte verloren; der gerechnete Befund
+*ist* die Verdichtung, die Traces sind Belege. Der Prompt sagt dem
+Baumeister dazu den entscheidenden Satz: **glaub den Zahlen mehr als
+deinem Eindruck aus den Traces** — was dort `VARIIERT` heißt, ist ein
+Parameter, auch wenn es in einem einzelnen Trace konstant aussieht.
+
+Stufe 1 bleibt daneben stehen. Solange ein Auftrag zu wenige
+ausgewertete Läufe hat, gibt es keine Befunde — und ein Trace ist mehr
+als nichts.
+
 **Bekannte Grenze:** Aus *einem* Trace ist prinzipiell nicht
 entscheidbar, was Parameter und was Konstante war. Das Modell antwortet
 trotzdem plausibel und schreibt die Eigenheiten des ersten Materials als
@@ -1053,3 +1077,48 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
      Hase sieht `hasenbau_notiz` und `hasenbau_summary` (intern lautet
      der Schlüssel `hasenbau:notiz`, am Modell kommt der Unterstrich
      an — im echten Lauf bestätigt).
+
+---
+
+## 12. Die CLI
+
+Angelehnt an `kubectl`, entschieden 2026-08-10 (Hasenbau-ha0). Die
+Befehle waren gewachsen und mischten Verben mit Substantiven; das hier
+ist die Regel, an der sich jeder neue misst.
+
+| Verb | Bedeutung |
+|---|---|
+| `get <ressource> [name]` | **eine Zeile pro Objekt**, Spalten, listenfähig |
+| `describe <ressource> <name>` | **ein Objekt**, gerenderte Abschnitte, inklusive abgeleiteter Information und Querbezüge |
+| `new <ressource> <name>` | ein Objekt **anlegen** — kommentiertes Gerüst, nie überschreibend |
+| `lauf`, `baumeister`, `daemon`, `dig`, `findings`, `provider fetch`, `init` | **tun** etwas |
+
+**`describe` ist kein `cat`.** Es gibt nie eine Datei im Volltext aus;
+wer die will, nimmt `cat` — `describe` nennt ihm den Pfad und die
+Zeilenzahl. Bei Aufträgen und Hasen heißt das: Frontmatter gerendert,
+plus was der Hasenbau daraus ableitet (effektive Permissions,
+Benutzungen, letzte Läufe), aber der Markdown-Body nur als Verweis. Der
+Prompt ist Fließtext, dafür ist ein Editor da; sonst wäre `describe` ein
+`cat` mit Kopfzeilen.
+
+**Zwei Fragen, zwei Befehle.** `describe bau` **prüft** — Layout,
+Git-Commit, Bau-Config, Rückkanal-Binary, generierte Agenten,
+liegengebliebene `$WORK`-Reste. `status` **zeigt** nur: was der Bau
+kennt, wie viele Läufe es gab, die jüngsten davon. Der Unterschied ist
+nicht kosmetisch: ein Dashboard, das mahnt, liest sich niemand mehr
+freiwillig an. Die beiden wertvollsten Prüfungen sind die
+unauffälligsten — ein Bau ohne Git-Commit bekommt keine eigene
+Projekt-ID (§11.5), ein Rückkanal-Eintrag auf ein verschwundenes Binary
+nimmt den Hasen still ihre Werkzeuge weg (Hasenbau-2nq/08u). Beides
+merkt man sonst erst an einem Lauf, der komisch aussieht.
+
+**Die Sprache folgt §1.** Befehle und Ressourcen sind englisch, außer
+den sieben Domänen-Begriffen: `lauf`, `hase`, `gang`, `auftrag`,
+`baumeister`, `bau` bleiben deutsch, weil sie die Sache benennen. Alles
+andere nicht — `graben` wurde zu `dig`, und die Befund-Analyse heißt
+`findings`, obwohl die Prosa weiter von Befunden spricht.
+
+**Ein Substantiv darf zweimal vorkommen.** `hasenbau lauf <auftrag>`
+löst aus, `hasenbau get lauf <id>` zeigt an. Das ist bewusst in Kauf
+genommen: der `get`-Präfix macht den Unterschied deutlich genug, und
+`lauf` als Auslöse-Befehl war zuerst da.

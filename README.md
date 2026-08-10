@@ -68,16 +68,18 @@ hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
 hasenbau get laeufe        # Historie
+hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
 hasenbau describe hase <name>     # effektive Permissions je Auftrag
 hasenbau describe gang <datei>    # Zweck und alle Aufträge, die ihn rufen
 hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
-hasenbau dig <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau describe provider <id>   # Endpoint, Schlüssel, und die Modelle des Baus
+hasenbau dig <ziel>     # Material für den Baumeister: <lauf-id> oder <auftrag>#<n>
 hasenbau findings <auftrag>  # was sich über die Läufe rechnen lässt (kein Modell)
-hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
+hasenbau baumeister [-finding N] <ziel>  # Baumeister ansetzen
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
 hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
-hasenbau status            # Zustand des Baus
+hasenbau status            # Dashboard: was liegt hier, was ist passiert
 ```
 
 Der Referenz-Auftrag zum Übernehmen liegt in [`beispiele/`](beispiele/).
@@ -91,7 +93,10 @@ und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
 
 `hasenbau baumeister <lauf-id|auftrag>` setzt den Baumeister auf einen
 Lauf an: er liest dessen Trace und schreibt daraus einen Gang-Entwurf
-nach `gaenge/entwurf/`. Der Baumeister ist dabei kein Sonderfall im
+nach `gaenge/entwurf/`. Mit `-finding <n>` bekommt er stattdessen einen
+Befund aus `hasenbau findings` — dann steht schon gerechnet da, welche
+Argument-Position über die Läufe variiert, und er muss es nicht aus
+einem einzelnen Trace raten. Der Baumeister ist dabei kein Sonderfall im
 Code, sondern selbst ein Auftrag mit einem Hasen — sein Material sind
 nur Läufe statt PDFs, und sein Gang ist `hasenbau dig`. Sein
 Schreibrecht entsteht ausschließlich aus dem `out`-Raum seines
@@ -121,8 +126,17 @@ eine Zeile pro Objekt (`get laeufe`, `get lauf <id>`, `get provider`),
 **`describe`** ein Objekt im Detail samt allem, was der Hasenbau darüber
 weiß — bei einem Lauf also auch die Notizen aus dem Rückkanal. `describe`
 ist dabei kein `cat`: Dateien werden nie im Volltext ausgegeben, wohl
-aber ihr Pfad genannt. Die Verben zum Auslösen — `lauf`, `baumeister`,
-`daemon` — bleiben davon unberührt.
+aber ihr Pfad genannt. `new` legt ein Objekt an. Die Verben zum
+Auslösen — `lauf`, `baumeister`, `daemon` — bleiben davon unberührt.
+
+Zwei Fragen, zwei Befehle: **`describe bau`** prüft (Layout, Git-Commit,
+Bau-Config, Rückkanal-Binary, generierte Agenten, liegengebliebene
+$WORK-Reste), **`status`** zeigt nur. Die zwei Prüfungen, die am
+meisten wert sind, sind die unauffälligsten: ein Bau ohne Git-Commit
+bekommt bei opencode keine eigene Projekt-ID, und ohne die greifen die
+Raum-Permissions nicht; ein Rückkanal-Eintrag auf ein verschwundenes
+Binary nimmt den Hasen still ihre Werkzeuge weg. Beides merkt man sonst
+erst an einem Lauf, der komisch aussieht.
 
 Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
 die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,

@@ -22,9 +22,10 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
-const describeUsage = `Aufruf: hasenbau describe <ressource> <name>
+const describeUsage = `Aufruf: hasenbau describe <ressource> [name]
 
 Ressourcen:
+  bau              Diagnose: ist dieser Bau in Ordnung?
   auftrag <name>   Trigger, Gänge, Räume, Schreibrechte, letzte Läufe
   gang <datei>     ein Gang-Skript und alle Aufträge, die es rufen
   hase <name>      Template und die effektiven Permissions je Auftrag
@@ -38,6 +39,8 @@ func cmdDescribe(root string, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "bau":
+		return describeBau(root, args[1:], out, errw)
 	case "lauf":
 		return describeLauf(root, args[1:], out, errw)
 	case "auftrag":
