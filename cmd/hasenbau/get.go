@@ -5,17 +5,24 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
+	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
 const getUsage = `Aufruf: hasenbau get <ressource>
 
 Ressourcen:
-  provider   Provider der Bau-Config: Endpoint, Modelle, Schlüssel
+  laeufe [-n N]   die letzten Läufe
+  lauf <id>       ein Lauf (Details: hasenbau describe lauf <id>)
+  provider        Provider der Bau-Config: Endpoint, Modelle, Schlüssel
 `
 
 func cmdGet(root string, args []string, out, errw io.Writer) int {
@@ -26,10 +33,132 @@ func cmdGet(root string, args []string, out, errw io.Writer) int {
 	switch args[0] {
 	case "provider", "providers":
 		return getProvider(root, args[1:], out, errw)
+	case "laeufe":
+		return getLaeufe(root, args[1:], out, errw)
+	case "lauf":
+		return getLauf(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau get: unbekannte Ressource %q\n\n%s", args[0], getUsage)
 		return 2
 	}
+}
+
+func getLaeufe(root string, args []string, out, errw io.Writer) int {
+	fs := flag.NewFlagSet("get laeufe", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	n := fs.Int("n", 20, "Anzahl Läufe")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get laeufe [-n N]")
+		return 2
+	}
+
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	defer st.Close()
+
+	laeufe, err := st.LetzteLaeufe(*n)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(laeufe) == 0 {
+		fmt.Fprintln(out, "keine Läufe")
+		return 0
+	}
+	schreibeLaufTabelle(out, laeufe)
+	return 0
+}
+
+func getLauf(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get lauf <id>")
+		return 2
+	}
+	st, l, code := oeffneLauf(root, args[0], errw)
+	if st != nil {
+		defer st.Close()
+	}
+	if code != 0 {
+		return code
+	}
+	schreibeLaufTabelle(out, []store.Lauf{*l})
+	return 0
+}
+
+// oeffneLauf öffnet die DB und löst eine Lauf-ID auf — der gemeinsame
+// Vorspann von `get lauf` und `describe lauf`.
+func oeffneLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, int) {
+	id, err := strconv.ParseInt(arg, 10, 64)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau: ungültige Lauf-ID %q\n", arg)
+		return nil, nil, 2
+	}
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return nil, nil, 1
+	}
+	l, err := st.LaufNachID(id)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau: %v\n", err)
+		return st, nil, 1
+	}
+	return st, l, 0
+}
+
+func schreibeLaufTabelle(out io.Writer, laeufe []store.Lauf) {
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tGESTARTET\tDAUER\tKOSTEN\tSUMMARY")
+	for _, l := range laeufe {
+		summary := l.Summary
+		if l.Status == "fehler" && l.Fehler != "" {
+			summary = l.Fehler
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			l.ID, l.Auftrag, l.Trigger, l.Status,
+			l.Gestartet.Local().Format("2006-01-02 15:04"),
+			laufDauer(l), kosten(l.KostenCent), kuerze(einzeilig(summary), 70))
+	}
+	w.Flush()
+}
+
+func laufDauer(l store.Lauf) string {
+	if l.Beendet == nil {
+		return "läuft"
+	}
+	return l.Beendet.Sub(l.Gestartet).Round(time.Second).String()
+}
+
+// kosten zeigt kosten_cent so, wie es gemeint ist: Cent, und bei einem
+// lokalen Modell schlicht nichts.
+func kosten(cent int64) string {
+	if cent == 0 {
+		return "—"
+	}
+	return strconv.FormatInt(cent, 10) + " ct"
+}
+
+// einzeilig hält eine Tabellenzelle einzeilig — die Summary hält der
+// Store zwar auf einer Zeile (§5), der Fehlertext eines Laufs nicht.
+func einzeilig(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// kuerze hält eine Tabelle lesbar. Eine Summary darf 500 Zeichen lang
+// sein (§5), und wenn sie aus dem Fallback stammt, ist sie es auch —
+// vollständig steht sie in `describe lauf`.
+func kuerze(s string, max int) string {
+	runen := []rune(s)
+	if len(runen) <= max {
+		return s
+	}
+	return strings.TrimRight(string(runen[:max]), " ") + "…"
 }
 
 // getProvider beantwortet die Frage, die `provider fetch <id>` stellt,

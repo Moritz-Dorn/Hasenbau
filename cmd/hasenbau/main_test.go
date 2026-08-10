@@ -119,12 +119,12 @@ func TestGrabenAusDerDBOhneServer(t *testing.T) {
 	}
 }
 
-func TestLaeufeUndStatus(t *testing.T) {
+func TestGetLaeufeUndStatus(t *testing.T) {
 	bau := t.TempDir()
 
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", bau, "laeufe"}, &out, &errw); code != 0 {
-		t.Fatalf("laeufe (leer): exit %d, stderr %q", code, errw.String())
+	if code := run([]string{"-bau", bau, "get", "laeufe"}, &out, &errw); code != 0 {
+		t.Fatalf("get laeufe (leer): exit %d, stderr %q", code, errw.String())
 	}
 	if !strings.Contains(out.String(), "keine Läufe") {
 		t.Errorf("Leer-Ausgabe: %q", out.String())
@@ -134,8 +134,8 @@ func TestLaeufeUndStatus(t *testing.T) {
 	seed(t, filepath.Join(bau, "state", "hasenbau.db"))
 
 	out.Reset()
-	if code := run([]string{"-bau", bau, "laeufe"}, &out, &errw); code != 0 {
-		t.Fatalf("laeufe: exit %d, stderr %q", code, errw.String())
+	if code := run([]string{"-bau", bau, "get", "laeufe"}, &out, &errw); code != 0 {
+		t.Fatalf("get laeufe: exit %d, stderr %q", code, errw.String())
 	}
 	if !strings.Contains(out.String(), "pdf-einlagern") || !strings.Contains(out.String(), "watch") {
 		t.Errorf("Lauf fehlt in Ausgabe: %q", out.String())

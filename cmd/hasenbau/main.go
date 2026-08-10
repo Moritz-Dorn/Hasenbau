@@ -39,12 +39,12 @@ Befehle:
   daemon                Daemon starten (Trigger + opencode-Server)
   lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
                         auslösende Datei (Bau-relativ, nur watch)
-  laeufe [-n N]         letzte Läufe zeigen
+  get <ressource>       zeigen, was der Bau kennt (laeufe, lauf, provider)
+  describe <res> <name> ein Objekt im Detail (lauf)
   graben [-json] <id>   Trace eines Laufs ziehen (Baumeister-Input)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
                         Auftrag (dann dessen letzter Lauf)
-  get <ressource>       zeigen, was der Bau kennt (bisher: provider)
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
@@ -96,8 +96,13 @@ func run(args []string, out, errw io.Writer) int {
 			input = rest[2]
 		}
 		return cmdLauf(bau, rest[1], input, errw)
+	case "describe":
+		return cmdDescribe(bau, rest[1:], out, errw)
 	case "laeufe":
-		return cmdLaeufe(bau, rest[1:], out, errw)
+		// Harter Schnitt zugunsten des get-Schemas (Hasenbau-ha0). Der
+		// alte Name bleibt nur als Wegweiser stehen.
+		fmt.Fprintln(errw, "hasenbau laeufe heißt jetzt `hasenbau get laeufe`")
+		return 2
 	case "graben":
 		return cmdGraben(bau, rest[1:], out, errw)
 	case "baumeister":
@@ -508,50 +513,6 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		return 1
 	}
 	fmt.Fprintf(out, "geschrieben: %s\n", conf.Pfad)
-	return 0
-}
-
-func cmdLaeufe(bau string, args []string, out, errw io.Writer) int {
-	fs := flag.NewFlagSet("laeufe", flag.ContinueOnError)
-	fs.SetOutput(errw)
-	n := fs.Int("n", 20, "Anzahl Läufe")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-
-	st, err := store.Open(dbPath(bau))
-	if err != nil {
-		fmt.Fprintln(errw, err)
-		return 1
-	}
-	defer st.Close()
-
-	laeufe, err := st.LetzteLaeufe(*n)
-	if err != nil {
-		fmt.Fprintln(errw, err)
-		return 1
-	}
-	if len(laeufe) == 0 {
-		fmt.Fprintln(out, "keine Läufe")
-		return 0
-	}
-
-	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tGESTARTET\tDAUER\tSUMMARY")
-	for _, l := range laeufe {
-		dauer := "läuft"
-		if l.Beendet != nil {
-			dauer = l.Beendet.Sub(l.Gestartet).Round(time.Second).String()
-		}
-		summary := l.Summary
-		if l.Status == "fehler" && l.Fehler != "" {
-			summary = l.Fehler
-		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			l.ID, l.Auftrag, l.Trigger, l.Status,
-			l.Gestartet.Local().Format("2006-01-02 15:04"), dauer, summary)
-	}
-	w.Flush()
 	return 0
 }
 

@@ -62,7 +62,8 @@ ihres Auftrags.
 hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config)
 hasenbau daemon            # Trigger scharf schalten (cron + watch)
 hasenbau lauf <auftrag>    # Auftrag manuell triggern
-hasenbau laeufe            # Historie
+hasenbau get laeufe        # Historie
+hasenbau describe lauf <id>   # ein Lauf mit Notizen, Fehlern, Kosten
 hasenbau graben <lauf-id>  # Trace eines Laufs — Input für den Baumeister
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
@@ -97,10 +98,13 @@ beim Start die Läufe ab, deren Prozess nicht mehr lebt — sie werden als
 `abgebrochen` mit Grund geschlossen. Ein gleichzeitig laufender zweiter
 Hasenbau-Prozess bleibt unangetastet; im Zweifel wird nichts abgeräumt.
 
-`get` ist das lesende Verb (nach dem Vorbild von `kubectl`): es zeigt,
-was der Bau kennt, und ändert nichts. Bisher gibt es `get provider`;
-weitere Ressourcen kommen dazu. Die Verben zum Auslösen — `lauf`,
-`baumeister`, `daemon` — bleiben davon unberührt.
+Die lesenden Befehle folgen dem Vorbild von `kubectl`: **`get`** zeigt
+eine Zeile pro Objekt (`get laeufe`, `get lauf <id>`, `get provider`),
+**`describe`** ein Objekt im Detail samt allem, was der Hasenbau darüber
+weiß — bei einem Lauf also auch die Notizen aus dem Rückkanal. `describe`
+ist dabei kein `cat`: Dateien werden nie im Volltext ausgegeben, wohl
+aber ihr Pfad genannt. Die Verben zum Auslösen — `lauf`, `baumeister`,
+`daemon` — bleiben davon unberührt.
 
 Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
 die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,
