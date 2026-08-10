@@ -17,6 +17,7 @@ import (
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
+	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
 	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
@@ -28,6 +29,7 @@ Ressourcen:
   gang <datei>     ein Gang-Skript und alle Aufträge, die es rufen
   hase <name>      Template und die effektiven Permissions je Auftrag
   lauf <id>        ein Lauf mit Notizen, Fehlern, Tokens und Kosten
+  provider <id>    Endpoint, Schlüssel, und die Modelle des Baus
 `
 
 func cmdDescribe(root string, args []string, out, errw io.Writer) int {
@@ -44,6 +46,8 @@ func cmdDescribe(root string, args []string, out, errw io.Writer) int {
 		return describeHase(root, args[1:], out, errw)
 	case "gang":
 		return describeGang(root, args[1:], out, errw)
+	case "provider":
+		return describeProvider(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau describe: unbekannte Ressource %q\n\n%s", args[0], describeUsage)
 		return 2
@@ -135,6 +139,88 @@ func (a *section) done() { a.w.Flush() }
 // indent hängt mehrzeilige Werte unter ihre erste Zeile.
 func indent(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n  ")
+}
+
+// describeProvider zeigt einen Provider im Detail — vor allem seine
+// Modelle (Hasenbau-ha0.7). Der praktische Nutzen: hier steht der
+// `model:`-String, den ein Hasen-Template braucht, ohne dass jemand die
+// opencode.json öffnen muss.
+//
+// Der Schlüssel selbst bleibt draußen. Gezeigt wird nur, ob es einen
+// gibt; er liegt in auth.json und gehört dorthin (PLAN.md §3).
+func describeProvider(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau describe provider <id>")
+		return 2
+	}
+	conf, err := provider.LoadConfig(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	d, ok := conf.Detail(args[0])
+	if !ok {
+		fmt.Fprintf(errw, "hasenbau describe provider: %s kennt keinen Provider %q\n", conf.Pfad, args[0])
+		var ids []string
+		for _, e := range conf.List() {
+			ids = append(ids, e.ID)
+		}
+		if len(ids) > 0 {
+			fmt.Fprintf(errw, "  vorhanden: %s\n", strings.Join(ids, ", "))
+		}
+		return 1
+	}
+	schluessel, err := provider.KeyIDs()
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+
+	a := newSection(out)
+	a.field("Provider", "%s", d.ID)
+	if d.Name != "" {
+		a.field("Name", "%s", d.Name)
+	}
+	a.field("Definiert", "%s", jaNein(d.Definiert, "im provider:-Block", "NUR in enabled_providers — Tippfehler?"))
+	a.field("Aktiv", "%s", jaNein(d.Aktiv, "steht in enabled_providers",
+		"fehlt in enabled_providers — der Server ignoriert die Definition"))
+	if d.NPM != "" {
+		a.field("Adapter", "%s", d.NPM)
+	}
+	if d.BaseURL != "" {
+		a.field("Endpoint", "%s", d.BaseURL)
+	} else {
+		a.field("Endpoint", "—  (eingebaut, oder das Gerüst ist unvollständig)")
+	}
+	a.field("Schlüssel", "%s", jaNein(schluessel[d.ID], "in auth.json", "fehlt — `opencode auth login`"))
+	a.field("Datei", "%s", conf.Pfad)
+	a.done()
+
+	fmt.Fprintf(out, "\nModelle (%d)\n", len(d.Modelle))
+	if len(d.Modelle) == 0 {
+		fmt.Fprintln(out, "  keine in der Bau-Config — `hasenbau provider fetch "+d.ID+"` holt die Liste")
+		return 0
+	}
+	m := newSection(out)
+	for _, modell := range d.Modelle {
+		name := modell.Name
+		if name == "" {
+			name = "—"
+		}
+		// Der String, den ein Hasen-Template als model: braucht.
+		m.field("  "+d.ID+"/"+modell.ID, "%s", name)
+	}
+	m.done()
+	return 0
+}
+
+// jaNein rendert ein Flag samt Begründung — der Zustand allein sagt
+// niemandem, was er bedeutet.
+func jaNein(b bool, ja, nein string) string {
+	if b {
+		return "ja  (" + ja + ")"
+	}
+	return "NEIN  (" + nein + ")"
 }
 
 func describeAuftrag(root string, args []string, out, errw io.Writer) int {

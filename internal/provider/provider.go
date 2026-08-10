@@ -284,6 +284,53 @@ func (c *Config) List() []Entry {
 	return out
 }
 
+// Detail ist die Einzelsicht auf einen Provider (Hasenbau-ha0.7). Der
+// praktische Nutzen ist die Modell-Liste: so findet man den
+// `model:`-String für ein Hasen-Template, ohne die opencode.json zu
+// öffnen.
+type Detail struct {
+	Entry
+	NPM       string  // npm-Paket des Adapters
+	Name      string  // Anzeigename aus der Config
+	Modelle   []Model // ID und Name, wie sie im Bau stehen
+	Definiert bool    // steht im provider:-Block, nicht nur in enabled_providers
+}
+
+// Detail liefert die Einzelsicht. ok=false heißt: diese ID kennt der
+// Bau überhaupt nicht — weder als Definition noch als aktiviert.
+func (c *Config) Detail(id string) (Detail, bool) {
+	var d Detail
+	for _, e := range c.List() {
+		if e.ID == id {
+			d.Entry = e
+		}
+	}
+	if d.Entry.ID == "" {
+		return Detail{}, false
+	}
+
+	p, ok := c.provider()[id].(map[string]any)
+	if !ok {
+		// Nur in enabled_providers: genau der Tippfehler, der einen
+		// Provider still abschaltet.
+		return d, true
+	}
+	d.Definiert = true
+	d.NPM, _ = p["npm"].(string)
+	d.Name, _ = p["name"].(string)
+	if m, ok := p["models"].(map[string]any); ok {
+		for mid, roh := range m {
+			modell := Model{ID: mid}
+			if e, ok := roh.(map[string]any); ok {
+				modell.Name, _ = e["name"].(string)
+			}
+			d.Modelle = append(d.Modelle, modell)
+		}
+		sort.Slice(d.Modelle, func(i, j int) bool { return d.Modelle[i].ID < d.Modelle[j].ID })
+	}
+	return d, true
+}
+
 func (c *Config) provider() map[string]any {
 	p, ok := c.roh["provider"].(map[string]any)
 	if !ok {

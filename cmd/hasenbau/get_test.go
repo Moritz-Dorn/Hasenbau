@@ -271,3 +271,50 @@ func TestDescribeAuftragZeigtZeitlimit(t *testing.T) {
 		t.Errorf("Vorgabe fehlt:\n%s", out.String())
 	}
 }
+
+// Hasenbau-ha0.7: Der praktische Nutzen von `describe provider` ist der
+// model:-String für ein Hasen-Template — und dass der Schlüssel nicht
+// dabei ist.
+func TestDescribeProvider(t *testing.T) {
+	root := baueProviderBau(t, "https://beispiel.invalid/api/v1")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "describe", "provider", "scc"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	got := out.String()
+	for _, muss := range []string{
+		"Provider", "scc", "@ai-sdk/openai-compatible",
+		"https://beispiel.invalid/api/v1",
+		"Schlüssel", "Modelle (1)",
+		"scc/alt", "Alt", // genau so gehört es ins Template
+	} {
+		if !strings.Contains(got, muss) {
+			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
+		}
+	}
+	if strings.Contains(got, `"k"`) {
+		t.Errorf("Schlüssel in der Ausgabe:\n%s", got)
+	}
+	// Die Fixture steht nicht in enabled_providers — das ist der stille
+	// Fehler, den der Befehl laut machen soll.
+	if !strings.Contains(got, "fehlt in enabled_providers") {
+		t.Errorf("nicht aktivierter Provider nicht erkennbar:\n%s", got)
+	}
+}
+
+func TestDescribeProviderFehlerpfade(t *testing.T) {
+	root := baueProviderBau(t, "https://beispiel.invalid/api/v1")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "describe", "provider", "gibtsnicht"}, &out, &errw); code != 1 {
+		t.Errorf("exit %d, erwartet 1", code)
+	}
+	if !strings.Contains(errw.String(), "vorhanden: scc") {
+		t.Errorf("Meldung zählt nicht auf, was es gibt: %q", errw.String())
+	}
+	errw.Reset()
+	if code := run([]string{"-bau", root, "describe", "provider"}, &out, &errw); code != 2 {
+		t.Errorf("ohne ID: exit %d, erwartet 2", code)
+	}
+}
