@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/Moritz-Dorn/Hasenbau/internal/prozess"
 )
 
 // Lauf ist eine Ausführung eines Auftrags (PLAN.md §1, §5).
@@ -25,7 +27,9 @@ type Lauf struct {
 
 // LaufBeginne legt die laeufe-Zeile an (status 'laeuft') und stempelt
 // auftrag_state.letzter_lauf. Die ID identifiziert den Lauf bis zum
-// LaufBeende.
+// LaufBeende. Mit in die Zeile geht der Wirt — der Prozess, der den Lauf
+// hält: nur an ihm ist später zu erkennen, ob die Zeile noch lebt
+// (verwaist.go).
 func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
 	switch trigger {
 	case "cron", "watch", "manuell":
@@ -39,10 +43,11 @@ func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
+	pid, pidGestartet := prozess.Ich()
 	res, err := tx.Exec(
-		`INSERT INTO laeufe (auftrag, "trigger", ausloeser, gestartet, status)
-		 VALUES (?, ?, ?, ?, 'laeuft')`,
-		auftrag, trigger, ausloeser, now)
+		`INSERT INTO laeufe (auftrag, "trigger", ausloeser, gestartet, status, pid, pid_gestartet)
+		 VALUES (?, ?, ?, ?, 'laeuft', ?, ?)`,
+		auftrag, trigger, ausloeser, now, pid, nullZeit(pidGestartet))
 	if err != nil {
 		return 0, fmt.Errorf("store: Lauf beginnen: %w", err)
 	}

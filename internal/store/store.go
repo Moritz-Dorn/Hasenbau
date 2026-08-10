@@ -66,6 +66,14 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX idx_notizen_lauf ON notizen(lauf, id)`,
 	},
+	{
+		// Wer hält den Lauf? Ohne den Wirt ist nach einem harten
+		// Abbruch nicht zu unterscheiden, ob eine 'laeuft'-Zeile einem
+		// lebenden Prozess gehört oder eine Leiche ist (verwaist.go).
+		// Die PID allein reicht nicht — sie wird recycelt.
+		`ALTER TABLE laeufe ADD COLUMN pid INTEGER`,
+		`ALTER TABLE laeufe ADD COLUMN pid_gestartet TIMESTAMP`,
+	},
 }
 
 // Store ist die Datenbank des Baus (state/hasenbau.db).

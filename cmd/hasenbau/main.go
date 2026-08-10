@@ -171,6 +171,23 @@ func rueckkanalEintragen(root string, logf func(string, ...any)) error {
 	return nil
 }
 
+// laeufeAufraeumen schließt die Läufe ab, deren Prozess gestorben ist,
+// bevor dieser hier selbst welche anlegt. Ohne das zählt `hasenbau
+// status` für immer falsch und der Rückkanal findet keinen eindeutigen
+// aktiven Lauf mehr (PLAN.md §5, §11.7).
+func laeufeAufraeumen(st *store.Store, logf func(string, ...any)) error {
+	leichen, err := st.LaeufeAufraeumen()
+	if err != nil {
+		return err
+	}
+	for _, l := range leichen {
+		logf("Lauf %d (%s, %s, seit %s) aufgeräumt: %s",
+			l.ID, l.Auftrag, l.Trigger,
+			l.Gestartet.Local().Format("2006-01-02 15:04"), l.Fehler)
+	}
+	return nil
+}
+
 // ladeUndGeneriere lädt die Aufträge und schreibt die generierten
 // Agenten (§6: beim Laden der Definitionen, nicht pro Lauf). Läuft vor
 // dem Server-Start — dispose braucht es hier deshalb nicht.
@@ -218,6 +235,10 @@ func cmdDaemon(root string, errw io.Writer) int {
 	}
 	defer st.Close()
 
+	if err := laeufeAufraeumen(st, logger.Printf); err != nil {
+		logger.Print(err)
+		return 1
+	}
 	auftraege, err := ladeUndGeneriere(root)
 	if err != nil {
 		logger.Print(err)
@@ -459,6 +480,10 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 	}
 	defer st.Close()
 
+	if err := laeufeAufraeumen(st, logger.Printf); err != nil {
+		logger.Print(err)
+		return 1
+	}
 	auftraege, err := ladeUndGeneriere(root)
 	if err != nil {
 		logger.Print(err)

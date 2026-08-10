@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,11 +20,16 @@ var (
 
 // AktiverLauf liefert den einzigen Lauf mit status='laeuft'. Bei keinem
 // oder mehreren Treffern kommt ErrKeinAktiverLauf bzw. ErrMehrdeutig —
-// letzterer mit den Kandidaten im Text, damit man verwaiste Zeilen
-// eines abgestürzten Daemons erkennt.
+// letzterer mit den Kandidaten im Text.
+//
+// Zeilen, deren Wirt nicht mehr lebt, zählen nicht mit (verwaist.go):
+// sie gehören zu keinem laufenden Hasen, können den Aufrufer also auch
+// nicht meinen. So bleibt der Rückkanal auch in der Lücke zwischen
+// einem Absturz und dem nächsten Aufräumen benutzbar.
 func (s *Store) AktiverLauf() (*Lauf, error) {
 	rows, err := s.db.Query(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet
+		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
+		       pid, pid_gestartet
 		FROM laeufe WHERE status = 'laeuft' ORDER BY gestartet, id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: aktive Läufe lesen: %w", err)
@@ -33,8 +39,14 @@ func (s *Store) AktiverLauf() (*Lauf, error) {
 	var aktive []Lauf
 	for rows.Next() {
 		var l Lauf
-		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser, &l.Gestartet); err != nil {
+		var pid sql.NullInt64
+		var pidGestartet sql.NullTime
+		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser,
+			&l.Gestartet, &pid, &pidGestartet); err != nil {
 			return nil, fmt.Errorf("store: aktiven Lauf scannen: %w", err)
+		}
+		if verwaist(pid, pidGestartet) {
+			continue
 		}
 		l.Status = "laeuft"
 		aktive = append(aktive, l)

@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -111,6 +113,63 @@ func TestLaeufeUndStatus(t *testing.T) {
 	}
 	if !strings.Contains(got, "FEHLERSERIE") || !strings.Contains(got, "pdf-einlagern") {
 		t.Errorf("Auftrag-Zustand fehlt: %q", got)
+	}
+}
+
+// TestVerwaisteZeileWirdBeimStartAufgeraeumt bildet den Fall nach, für
+// den es das Kriterium gibt: der Daemon starb mitten im Lauf, seine
+// Zeile steht noch auf 'laeuft'. Der nächste Prozess, der selbst Läufe
+// anlegt, muss sie schließen — hier `lauf`, weil es dafür (anders als
+// `daemon`) keinen opencode-Server braucht.
+func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("ohne /proc kein Lebendkriterium (GOOS=%s)", runtime.GOOS)
+	}
+	bau := t.TempDir()
+	dbFile := filepath.Join(bau, "state", "hasenbau.db")
+	seed(t, dbFile)
+
+	// Ein Prozess, den es nicht mehr gibt — die Leiche des Daemons.
+	cmd := exec.Command("/bin/sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	totePID := cmd.Process.Pid
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", "file:"+dbFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO laeufe (auftrag, "trigger", gestartet, status, pid, pid_gestartet)
+		VALUES ('tagesbericht', 'cron', datetime('now','-1 hour'), 'laeuft', ?, datetime('now','-1 hour'))`,
+		totePID); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	var out, errw strings.Builder
+	// Der Auftrag existiert nicht — aufgeräumt wird trotzdem, es
+	// passiert vor allem anderen.
+	if code := run([]string{"-bau", bau, "lauf", "tagesbericht"}, &out, &errw); code != 1 {
+		t.Fatalf("exit %d, erwartet 1 (unbekannter Auftrag), stderr %q", code, errw.String())
+	}
+	if !strings.Contains(errw.String(), "aufgeräumt") {
+		t.Errorf("keine Log-Zeile zum aufgeräumten Lauf: %q", errw.String())
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", bau, "status"}, &out, &errw); code != 0 {
+		t.Fatalf("status: exit %d", code)
+	}
+	if strings.Contains(out.String(), "laeuft") {
+		t.Errorf("Status zählt immer noch einen laufenden Lauf: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "1 abgebrochen") {
+		t.Errorf("abgebrochener Lauf fehlt im Status: %q", out.String())
 	}
 }
 
