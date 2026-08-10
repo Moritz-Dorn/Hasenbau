@@ -19,3 +19,36 @@ cp -f beispiele/gaenge/pdf_to_md.py        <bau>/gaenge/
 
 `pdf_to_md.py` braucht `pdftotext` (poppler) im PATH. Das `model:` im
 Hasen-Template an die eigene Provider-Config des Baus anpassen.
+
+## Der Baumeister
+
+Der Baumeister ist kein Sonderfall im Code, sondern genau so ein
+Auftrag — nur dass sein Material Läufe sind statt PDFs. Sein Gang zieht
+den Trace (`hasenbau graben`), sein Hase verdichtet ihn zu einem
+Gang-Entwurf in `gaenge/entwurf/`.
+
+```bash
+cp -f beispiele/auftraege/baumeister.md <bau>/auftraege/
+cp -f beispiele/hasen/baumeister.md     <bau>/hasen/
+# in <bau>/hasenbau.yaml eintragen:
+#   baumeister: baumeister
+
+hasenbau -bau <bau> baumeister 8               # Trace von Lauf 8
+hasenbau -bau <bau> baumeister pdf-einlagern   # letzter Lauf des Auftrags
+```
+
+Sein Schreibrecht entsteht **ausschließlich** aus `raeume: out:` —
+daraus wird das einzige erlaubte `edit`-Pattern des generierten Agenten
+(PLAN.md §6). Wer den out-Raum ändert, ändert damit, was der Baumeister
+anfassen darf; `internal/hase` hat dafür einen Golden-Test, der auf
+genau diese Dateien schaut. `gaenge/entwurf/` statt `gaenge/`, damit
+kein Lauf einen benutzten Gang überschreiben kann.
+
+Mehrere Baumeister-Varianten dürfen nebeneinander in `hasen/` liegen
+(`baumeister-streng.md`, `baumeister-python.md`) — `hasenbau.yaml`
+benennt genau einen Auftrag, und dessen `hase:` entscheidet, welche
+Variante läuft.
+
+Ein Entwurf ist ein Entwurf: der Hasenbau trägt nie selbst etwas in
+einen Auftrag ein (§8/§10). Lesen, prüfen, selbst eintragen — die
+vorgeschlagene `run:`-Zeile steht im Kopf des Skripts.

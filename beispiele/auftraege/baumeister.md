@@ -1,0 +1,37 @@
+---
+# Der Baumeister ist ein ganz normaler Auftrag — sein Material sind
+# keine PDFs, sondern Läufe. Gestartet wird er auf Zuruf:
+#   hasenbau baumeister <lauf-id|auftrag>
+trigger:
+  manuell: true
+
+gaenge:
+  # $INPUT ist hier die Lauf-ID, kein Pfad. Die run-Zeile muss in
+  # einfache Anführungszeichen, weil sie mit einem doppelten beginnt.
+  - name: trace-ziehen
+    run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'
+    timeout: 60s
+
+hase: baumeister
+
+raeume:
+  work: raeume/baumeister/work/
+  # Das Schreibrecht des Baumeisters entsteht ausschließlich hier:
+  # der out-Raum wird zum einzigen erlaubten edit-Pattern des
+  # generierten Agenten (PLAN.md §6). entwurf/ und nicht gaenge/,
+  # damit kein Lauf einen benutzten Gang überschreiben kann.
+  out: gaenge/entwurf/
+
+kontext:
+  - datei: $WORK/trace.md
+---
+
+Im Kontext unten steht der Trace eines einzelnen Laufs: was der Hase
+vorhatte, was er tat, was fehlschlug.
+
+Finde darin den deterministischen Teil — die Schritte, die bei jedem
+Lauf dieses Auftrags gleich abgelaufen wären — und schreib daraus
+**einen** Gang-Entwurf in deinen out-Raum.
+
+Bleibt nichts Deterministisches übrig, schreib keine Datei und sag in
+deiner Summary, warum.
