@@ -1,10 +1,10 @@
 // verwaist.go: die Leichen eines hart abgebrochenen Prozesses —
-// laeufe-Zeilen, die für immer auf status='laeuft' stehen bleiben.
+// laeufe-Zeilen, die für immer auf status='running' stehen bleiben.
 // Folgen: `hasenbau status` zählt falsch, und der Rückkanal findet
 // keinen eindeutigen aktiven Lauf mehr, schreibt also gar nicht
 // (PLAN.md §11.7).
 //
-// „Beim Start alles auf 'laeuft' als abgebrochen markieren" wäre zu
+// „Beim Start alles auf 'running' als abgebrochen markieren" wäre zu
 // grob: ein paralleles `hasenbau lauf` ist ausdrücklich erlaubt
 // (eigener Server, geteilte DB im WAL-Modus) und würde mit abgeräumt.
 // Das Kriterium ist deshalb der Wirt — der Prozess, der den Lauf hält.
@@ -21,37 +21,37 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/prozess"
 )
 
-// nullZeit macht aus einer Nullzeit ein SQL NULL — die Startzeit des
+// nullTime macht aus einer Nullzeit ein SQL NULL — die Startzeit des
 // Wirts kennt nicht jede Plattform.
-func nullZeit(t time.Time) sql.NullTime {
+func nullTime(t time.Time) sql.NullTime {
 	return sql.NullTime{Time: t, Valid: !t.IsZero()}
 }
 
-// verwaist entscheidet über eine 'laeuft'-Zeile: gehört sie einem
+// orphaned entscheidet über eine 'running'-Zeile: gehört sie einem
 // lebenden Prozess oder ist sie eine Leiche?
-func verwaist(pid sql.NullInt64, pidGestartet sql.NullTime) bool {
+func orphaned(pid sql.NullInt64, pidStarted sql.NullTime) bool {
 	if !pid.Valid {
 		// Zeile aus der Zeit vor der Wirt-Spalte: nicht zuzuordnen,
 		// also aufräumen. Seit der Migration trägt jeder lebende Lauf
 		// seine PID.
 		return true
 	}
-	return !prozess.Lebt(int(pid.Int64), pidGestartet.Time)
+	return !prozess.Lebt(int(pid.Int64), pidStarted.Time)
 }
 
-// LaeufeAufraeumen schließt die Läufe ab, deren Wirt gestorben ist:
-// status 'abgebrochen', der Grund in fehler. Zurück kommen die
+// CleanupLaeufe schließt die Läufe ab, deren Wirt gestorben ist:
+// status 'aborted', der Grund in error. Zurück kommen die
 // aufgeräumten Läufe — beim Daemon-Start gehört jeder in eine Log-Zeile,
 // sonst verschwindet ein abgestürzter Lauf lautlos.
 //
 // beendet wird auf jetzt gesetzt, nicht auf den (unbekannten)
 // Todeszeitpunkt: die Dauer einer solchen Zeile ist die Zeit bis zum
-// Aufräumen, nicht die Laufzeit. Wer es genauer braucht, liest fehler.
+// Aufräumen, nicht die Laufzeit. Wer es genauer braucht, liest error.
 //
 // Aufzurufen beim Start jedes Prozesses, der selbst Läufe anlegt
 // (daemon, lauf) — nie mittendrin: ein gerade beginnender Lauf einer
 // anderen Inkarnation soll seine Zeile behalten.
-func (s *Store) LaeufeAufraeumen() ([]Lauf, error) {
+func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("store: verwaiste Läufe aufräumen: %w", err)
@@ -59,9 +59,9 @@ func (s *Store) LaeufeAufraeumen() ([]Lauf, error) {
 	defer tx.Rollback()
 
 	rows, err := tx.Query(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
-		       pid, pid_gestartet
-		FROM laeufe WHERE status = 'laeuft' ORDER BY id`)
+		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
+		       pid, pid_started
+		FROM laeufe WHERE status = 'running' ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: verwaiste Läufe suchen: %w", err)
 	}
@@ -69,20 +69,20 @@ func (s *Store) LaeufeAufraeumen() ([]Lauf, error) {
 	for rows.Next() {
 		var l Lauf
 		var pid sql.NullInt64
-		var pidGestartet sql.NullTime
-		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser,
-			&l.Gestartet, &pid, &pidGestartet); err != nil {
+		var pidStarted sql.NullTime
+		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Input,
+			&l.Started, &pid, &pidStarted); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("store: verwaisten Lauf scannen: %w", err)
 		}
-		if !verwaist(pid, pidGestartet) {
+		if !orphaned(pid, pidStarted) {
 			continue
 		}
-		l.Status = "abgebrochen"
+		l.Status = "aborted"
 		if pid.Valid {
-			l.Fehler = fmt.Sprintf("Prozess %d ist gestorben, ohne den Lauf zu beenden — beim Start aufgeräumt", pid.Int64)
+			l.Error = fmt.Sprintf("Prozess %d ist gestorben, ohne den Lauf zu beenden — beim Start aufgeräumt", pid.Int64)
 		} else {
-			l.Fehler = "Lauf ohne Wirt in der Zeile (älteres Binary) — beim Start aufgeräumt"
+			l.Error = "Lauf ohne Wirt in der Zeile (älteres Binary) — beim Start aufgeräumt"
 		}
 		leichen = append(leichen, l)
 	}
@@ -93,22 +93,22 @@ func (s *Store) LaeufeAufraeumen() ([]Lauf, error) {
 
 	now := time.Now().UTC()
 	for i, l := range leichen {
-		// status='laeuft' in der WHERE-Klausel: hat der Lauf sich
+		// status='running' in der WHERE-Klausel: hat der Lauf sich
 		// zwischen Query und Update selbst beendet, gewinnt er.
 		if _, err := tx.Exec(
-			`UPDATE laeufe SET beendet = ?, status = 'abgebrochen', fehler = ?
-			 WHERE id = ? AND status = 'laeuft'`,
-			now, l.Fehler, l.ID); err != nil {
+			`UPDATE laeufe SET ended = ?, status = 'aborted', error = ?
+			 WHERE id = ? AND status = 'running'`,
+			now, l.Error, l.ID); err != nil {
 			return nil, fmt.Errorf("store: Lauf %d aufräumen: %w", l.ID, err)
 		}
-		// Wie bei jedem nicht-ok-Ende (LaufBeende): der Lauf ist
+		// Wie bei jedem nicht-ok-Ende (EndLauf): der Lauf ist
 		// gescheitert, die Serie zählt hoch.
 		if _, err := tx.Exec(
-			`UPDATE auftrag_state SET fehler_serie = fehler_serie + 1 WHERE auftrag = ?`,
+			`UPDATE auftrag_state SET error_streak = error_streak + 1 WHERE auftrag = ?`,
 			l.Auftrag); err != nil {
 			return nil, fmt.Errorf("store: Auftrag-Zustand pflegen: %w", err)
 		}
-		leichen[i].Beendet = &now
+		leichen[i].Ended = &now
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("store: verwaiste Läufe aufräumen: %w", err)

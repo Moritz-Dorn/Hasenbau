@@ -14,23 +14,23 @@ import (
 // einer läuft. Beide Fälle sind für den Hasen sichtbare Fehler, nie
 // ein geratener Schreibvorgang.
 var (
-	ErrKeinAktiverLauf = errors.New("store: kein aktiver Lauf")
-	ErrMehrdeutig      = errors.New("store: mehrere aktive Läufe")
+	ErrNoActiveLauf = errors.New("store: kein aktiver Lauf")
+	ErrAmbiguous    = errors.New("store: mehrere aktive Läufe")
 )
 
-// AktiverLauf liefert den einzigen Lauf mit status='laeuft'. Bei keinem
-// oder mehreren Treffern kommt ErrKeinAktiverLauf bzw. ErrMehrdeutig —
+// ActiveLauf liefert den einzigen Lauf mit status='running'. Bei keinem
+// oder mehreren Treffern kommt ErrNoActiveLauf bzw. ErrAmbiguous —
 // letzterer mit den Kandidaten im Text.
 //
 // Zeilen, deren Wirt nicht mehr lebt, zählen nicht mit (verwaist.go):
 // sie gehören zu keinem laufenden Hasen, können den Aufrufer also auch
 // nicht meinen. So bleibt der Rückkanal auch in der Lücke zwischen
 // einem Absturz und dem nächsten Aufräumen benutzbar.
-func (s *Store) AktiverLauf() (*Lauf, error) {
+func (s *Store) ActiveLauf() (*Lauf, error) {
 	rows, err := s.db.Query(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
-		       pid, pid_gestartet
-		FROM laeufe WHERE status = 'laeuft' ORDER BY gestartet, id`)
+		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
+		       pid, pid_started
+		FROM laeufe WHERE status = 'running' ORDER BY started, id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: aktive Läufe lesen: %w", err)
 	}
@@ -40,15 +40,15 @@ func (s *Store) AktiverLauf() (*Lauf, error) {
 	for rows.Next() {
 		var l Lauf
 		var pid sql.NullInt64
-		var pidGestartet sql.NullTime
-		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser,
-			&l.Gestartet, &pid, &pidGestartet); err != nil {
+		var pidStarted sql.NullTime
+		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Input,
+			&l.Started, &pid, &pidStarted); err != nil {
 			return nil, fmt.Errorf("store: aktiven Lauf scannen: %w", err)
 		}
-		if verwaist(pid, pidGestartet) {
+		if orphaned(pid, pidStarted) {
 			continue
 		}
-		l.Status = "laeuft"
+		l.Status = "running"
 		aktive = append(aktive, l)
 	}
 	if err := rows.Err(); err != nil {
@@ -59,31 +59,31 @@ func (s *Store) AktiverLauf() (*Lauf, error) {
 	case 1:
 		return &aktive[0], nil
 	case 0:
-		return nil, ErrKeinAktiverLauf
+		return nil, ErrNoActiveLauf
 	default:
 		var kandidaten []string
 		for _, l := range aktive {
 			kandidaten = append(kandidaten, fmt.Sprintf("%d (%s, seit %s)",
-				l.ID, l.Auftrag, l.Gestartet.Local().Format("2006-01-02 15:04")))
+				l.ID, l.Auftrag, l.Started.Local().Format("2006-01-02 15:04")))
 		}
-		return nil, fmt.Errorf("%w: %s", ErrMehrdeutig, strings.Join(kandidaten, ", "))
+		return nil, fmt.Errorf("%w: %s", ErrAmbiguous, strings.Join(kandidaten, ", "))
 	}
 }
 
-// NotizSchreibe hängt eine Notiz des Hasen an den Lauf.
-func (s *Store) NotizSchreibe(lauf int64, text string) error {
+// WriteNote hängt eine Notiz des Hasen an den Lauf.
+func (s *Store) WriteNote(lauf int64, text string) error {
 	if _, err := s.db.Exec(
-		`INSERT INTO notizen (lauf, geschrieben, text) VALUES (?, ?, ?)`,
+		`INSERT INTO notes (lauf, written, text) VALUES (?, ?, ?)`,
 		lauf, time.Now().UTC(), text); err != nil {
 		return fmt.Errorf("store: Notiz zu Lauf %d: %w", lauf, err)
 	}
 	return nil
 }
 
-// SummaryZeile presst einen Text in eine Summary-Zeile (§5: „eine
+// SummaryLine presst einen Text in eine Summary-Zeile (§5: „eine
 // Zeile: was ist passiert") und kappt Ausschweifungen. Der Store hält
 // die Invariante für beide Wege — Rückkanal wie Fallback.
-func SummaryZeile(s string) string {
+func SummaryLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	const max = 500
 	if runen := []rune(s); len(runen) > max {
@@ -92,11 +92,11 @@ func SummaryZeile(s string) string {
 	return s
 }
 
-// SummarySchreibe setzt die Summary eines laufenden Laufs. Der Hase
+// WriteSummary setzt die Summary eines laufenden Laufs. Der Hase
 // darf sich korrigieren — der letzte Aufruf gewinnt; LaufBeende
 // überschreibt eine so gesetzte Summary nicht mehr (§5).
-func (s *Store) SummarySchreibe(lauf int64, text string) error {
-	res, err := s.db.Exec(`UPDATE laeufe SET summary = ? WHERE id = ?`, SummaryZeile(text), lauf)
+func (s *Store) WriteSummary(lauf int64, text string) error {
+	res, err := s.db.Exec(`UPDATE laeufe SET summary = ? WHERE id = ?`, SummaryLine(text), lauf)
 	if err != nil {
 		return fmt.Errorf("store: Summary zu Lauf %d: %w", lauf, err)
 	}
@@ -110,25 +110,25 @@ func (s *Store) SummarySchreibe(lauf int64, text string) error {
 	return nil
 }
 
-// Notiz ist eine Notiz des Hasen zu einem Lauf.
-type Notiz struct {
-	Geschrieben time.Time
-	Text        string
+// Note ist eine Notiz des Hasen zu einem Lauf.
+type Note struct {
+	Written time.Time
+	Text    string
 }
 
-// Notizen liefert die Notizen eines Laufs in Schreibreihenfolge.
-func (s *Store) Notizen(lauf int64) ([]Notiz, error) {
+// Notes liefert die Notizen eines Laufs in Schreibreihenfolge.
+func (s *Store) Notes(lauf int64) ([]Note, error) {
 	rows, err := s.db.Query(
-		`SELECT geschrieben, text FROM notizen WHERE lauf = ? ORDER BY id`, lauf)
+		`SELECT written, text FROM notes WHERE lauf = ? ORDER BY id`, lauf)
 	if err != nil {
 		return nil, fmt.Errorf("store: Notizen zu Lauf %d lesen: %w", lauf, err)
 	}
 	defer rows.Close()
 
-	var out []Notiz
+	var out []Note
 	for rows.Next() {
-		var n Notiz
-		if err := rows.Scan(&n.Geschrieben, &n.Text); err != nil {
+		var n Note
+		if err := rows.Scan(&n.Written, &n.Text); err != nil {
 			return nil, fmt.Errorf("store: Notiz scannen: %w", err)
 		}
 		out = append(out, n)

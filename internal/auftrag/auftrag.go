@@ -22,28 +22,28 @@ import (
 
 // Auftrag ist eine geparste, validierte Job-Definition.
 type Auftrag struct {
-	Name    string            // Dateiname ohne .md — wird Teil des generierten Agent-Namens (§6)
+	Name    string // Dateiname ohne .md — wird Teil des generierten Agent-Namens (§6)
 	Trigger Trigger
 	Gaenge  []Gang
 	Hase    string            // Name des Templates in hasen/
 	Raeume  map[string]string // Rolle → Bau-relativer Pfad
-	Kontext []Kontext
-	Nachher []Nachher
+	Context []Context
+	After   []After
 	Body    string // Prompt-Kern
 }
 
 // Trigger-Arten (§6). Genau eine gilt pro Auftrag.
 const (
-	TriggerWatch   = "watch"
-	TriggerCron    = "cron"
-	TriggerManuell = "manuell"
+	TriggerWatch  = "watch"
+	TriggerCron   = "cron"
+	TriggerManual = "manual"
 )
 
 // Trigger ist genau eines von dreien: Datei-Watch, Cron oder manuell.
 type Trigger struct {
 	Watch    string        // Glob, Bau-relativ
 	Cron     string        // Standard-Cron (5 Felder)
-	Manuell  bool          // läuft nur auf Zuruf (hasenbau lauf / hasenbau baumeister)
+	Manual   bool          // läuft nur auf Zuruf (hasenbau lauf / hasenbau baumeister)
 	Debounce time.Duration // nur bei Watch
 }
 
@@ -51,12 +51,12 @@ type Trigger struct {
 // Trigger einer laeufe-Zeile (§5): ein watch-Auftrag, den `hasenbau
 // lauf` startet, läuft als DB-Trigger 'manuell' — seine Art bleibt
 // 'watch', und daran hängt die Pfad-Semantik von $INPUT.
-func (t Trigger) Art() string {
+func (t Trigger) Kind() string {
 	switch {
 	case t.Cron != "":
 		return TriggerCron
-	case t.Manuell:
-		return TriggerManuell
+	case t.Manual:
+		return TriggerManual
 	default:
 		return TriggerWatch
 	}
@@ -71,27 +71,27 @@ type Gang struct {
 
 // Kontext ist eine Prompt-Quelle: entweder eine Datei oder die letzten
 // N Lauf-Summaries dieses Auftrags.
-type Kontext struct {
-	Datei           string
-	LetzteSummaries int
+type Context struct {
+	File          string
+	LastSummaries int
 }
 
 // Nachher ist ein Aufräum-Schritt nach erfolgreichem Lauf. Die
 // Ausführung (inkl. Variablen-Substitution) übernimmt der Runner.
-type Nachher struct {
-	Aktion string // "move", "copy" oder "delete"
-	Von    string
-	Nach   string // leer bei delete
+type After struct {
+	Action string // "move", "copy" oder "delete"
+	From   string
+	To     string // leer bei delete
 }
 
-// namensMuster gilt für Auftrags- und Hasen-Namen: beide landen im
+// namePattern gilt für Auftrags- und Hasen-Namen: beide landen im
 // Dateinamen des generierten Agenten (<auftrag>__<hase>.md, §6).
-var namensMuster = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // dauer parst YAML-Strings wie "5s" oder "120s" nach time.Duration.
-type dauer time.Duration
+type duration time.Duration
 
-func (d *dauer) UnmarshalYAML(node *yaml.Node) error {
+func (d *duration) UnmarshalYAML(node *yaml.Node) error {
 	var s string
 	if err := node.Decode(&s); err != nil {
 		return fmt.Errorf("dauer erwartet einen String wie \"5s\", Zeile %d", node.Line)
@@ -103,32 +103,32 @@ func (d *dauer) UnmarshalYAML(node *yaml.Node) error {
 	if v < 0 {
 		return fmt.Errorf("negative Dauer %q, Zeile %d", s, node.Line)
 	}
-	*d = dauer(v)
+	*d = duration(v)
 	return nil
 }
 
 // kopfdaten spiegelt das Frontmatter-YAML aus §6. Pointer-Felder
 // unterscheiden „fehlt" von „leer"; Unbekanntes lehnt der Decoder ab.
-type kopfdaten struct {
+type header struct {
 	Trigger *struct {
-		Watch    string `yaml:"watch"`
-		Cron     string `yaml:"cron"`
-		Manuell  bool   `yaml:"manuell"`
-		Debounce dauer  `yaml:"debounce"`
+		Watch    string   `yaml:"watch"`
+		Cron     string   `yaml:"cron"`
+		Manual   bool     `yaml:"manual"`
+		Debounce duration `yaml:"debounce"`
 	} `yaml:"trigger"`
 	Gaenge []struct {
-		Name    string `yaml:"name"`
-		Run     string `yaml:"run"`
-		Timeout dauer  `yaml:"timeout"`
+		Name    string   `yaml:"name"`
+		Run     string   `yaml:"run"`
+		Timeout duration `yaml:"timeout"`
 	} `yaml:"gaenge"`
 	Hase    string            `yaml:"hase"`
 	CWD     string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
 	Raeume  map[string]string `yaml:"raeume"`
-	Kontext []struct {
-		Datei           string `yaml:"datei"`
-		LetzteSummaries *int   `yaml:"letzte_summaries"`
-	} `yaml:"kontext"`
-	Nachher []map[string]string `yaml:"nachher"`
+	Context []struct {
+		File          string `yaml:"file"`
+		LastSummaries *int   `yaml:"last_summaries"`
+	} `yaml:"context"`
+	After []map[string]string `yaml:"after"`
 }
 
 // Parse zerlegt eine Auftrags-Datei in Frontmatter und Body und
@@ -138,7 +138,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		return fmt.Errorf("auftrag %s: %s", name, fmt.Sprintf(format, args...))
 	}
 
-	if !namensMuster.MatchString(name) {
+	if !namePattern.MatchString(name) {
 		return nil, fehler("ungültiger Name (erlaubt: Buchstaben, Ziffern, . _ -)")
 	}
 
@@ -149,7 +149,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 
 	dec := yaml.NewDecoder(bytes.NewReader(kopf))
 	dec.KnownFields(true)
-	var fm kopfdaten
+	var fm header
 	if err := dec.Decode(&fm); err != nil && !errors.Is(err, io.EOF) { // EOF = leer; die Pflichtfeld-Prüfungen melden das präziser
 		return nil, fehler("frontmatter: %v", err)
 	}
@@ -168,11 +168,11 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	a.Trigger = Trigger{
 		Watch:    fm.Trigger.Watch,
 		Cron:     fm.Trigger.Cron,
-		Manuell:  fm.Trigger.Manuell,
+		Manual:   fm.Trigger.Manual,
 		Debounce: time.Duration(fm.Trigger.Debounce),
 	}
 	gesetzt := 0
-	for _, an := range []bool{a.Trigger.Watch != "", a.Trigger.Cron != "", a.Trigger.Manuell} {
+	for _, an := range []bool{a.Trigger.Watch != "", a.Trigger.Cron != "", a.Trigger.Manual} {
 		if an {
 			gesetzt++
 		}
@@ -182,7 +182,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		return nil, fehler("trigger braucht genau eines von watch, cron oder manuell")
 	case gesetzt > 1:
 		return nil, fehler("trigger: watch, cron und manuell schließen sich aus")
-	case a.Trigger.Manuell:
+	case a.Trigger.Manual:
 		if a.Trigger.Debounce != 0 {
 			return nil, fehler("debounce gilt nur für watch-Trigger")
 		}
@@ -194,7 +194,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("debounce gilt nur für watch-Trigger")
 		}
 	default:
-		if err := BauRelativ(a.Trigger.Watch); err != nil {
+		if err := BauRelative(a.Trigger.Watch); err != nil {
 			return nil, fehler("trigger.watch: %v", err)
 		}
 	}
@@ -203,7 +203,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	if a.Hase == "" {
 		return nil, fehler("hase fehlt")
 	}
-	if !namensMuster.MatchString(a.Hase) {
+	if !namePattern.MatchString(a.Hase) {
 		return nil, fehler("ungültiger Hasen-Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", a.Hase)
 	}
 
@@ -219,7 +219,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		if rolle == "" || pfad == "" {
 			return nil, fehler("raeume: Rolle und Pfad dürfen nicht leer sein")
 		}
-		if err := BauRelativ(pfad); err != nil {
+		if err := BauRelative(pfad); err != nil {
 			return nil, fehler("raum %s: %v", rolle, err)
 		}
 	}
@@ -239,42 +239,42 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		a.Gaenge = append(a.Gaenge, Gang{Name: g.Name, Run: g.Run, Timeout: time.Duration(g.Timeout)})
 	}
 
-	for i, k := range fm.Kontext {
+	for i, k := range fm.Context {
 		switch {
-		case k.Datei != "" && k.LetzteSummaries != nil:
-			return nil, fehler("kontext %d: datei und letzte_summaries schließen sich aus", i+1)
-		case k.Datei == "" && k.LetzteSummaries == nil:
-			return nil, fehler("kontext %d: braucht datei oder letzte_summaries", i+1)
-		case k.LetzteSummaries != nil && *k.LetzteSummaries <= 0:
+		case k.File != "" && k.LastSummaries != nil:
+			return nil, fehler("kontext %d: file und last_summaries schließen sich aus", i+1)
+		case k.File == "" && k.LastSummaries == nil:
+			return nil, fehler("kontext %d: braucht file oder last_summaries", i+1)
+		case k.LastSummaries != nil && *k.LastSummaries <= 0:
 			return nil, fehler("kontext %d: letzte_summaries muss > 0 sein", i+1)
-		case k.LetzteSummaries != nil:
-			a.Kontext = append(a.Kontext, Kontext{LetzteSummaries: *k.LetzteSummaries})
+		case k.LastSummaries != nil:
+			a.Context = append(a.Context, Context{LastSummaries: *k.LastSummaries})
 		default:
-			a.Kontext = append(a.Kontext, Kontext{Datei: k.Datei})
+			a.Context = append(a.Context, Context{File: k.File})
 		}
 	}
 
-	for i, n := range fm.Nachher {
-		schritt, err := parseNachher(n)
+	for i, n := range fm.After {
+		schritt, err := parseAfter(n)
 		if err != nil {
 			return nil, fehler("nachher %d: %v", i+1, err)
 		}
-		a.Nachher = append(a.Nachher, schritt)
+		a.After = append(a.After, schritt)
 	}
 
 	// $INPUT eines manuell-Auftrags ist ein freies Argument von der
 	// Kommandozeile, kein Pfad — wer es als Datei liest oder verschiebt,
 	// arbeitet auf einer Datei, die es nie gab. Lieber hier ablehnen als
 	// mitten im Lauf danebengreifen.
-	if a.Trigger.Manuell {
-		for i, k := range a.Kontext {
-			if enthaeltInput(k.Datei) {
+	if a.Trigger.Manual {
+		for i, k := range a.Context {
+			if containsInput(k.File) {
 				return nil, fehler("kontext %d: $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1)
 			}
 		}
-		for i, n := range a.Nachher {
-			if enthaeltInput(n.Von) || enthaeltInput(n.Nach) {
-				return nil, fehler("nachher %d (%s): $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1, n.Aktion)
+		for i, n := range a.After {
+			if containsInput(n.From) || containsInput(n.To) {
+				return nil, fehler("nachher %d (%s): $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1, n.Action)
 			}
 		}
 	}
@@ -285,11 +285,11 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	return a, nil
 }
 
-// inputMuster trifft $INPUT, aber nicht $INPUTS o.ä. — dieselbe
+// inputPattern trifft $INPUT, aber nicht $INPUTS o.ä. — dieselbe
 // Wortgrenze, die lauf.Ersetze zieht.
-var inputMuster = regexp.MustCompile(`\$INPUT([^A-Za-z0-9_]|$)`)
+var inputPattern = regexp.MustCompile(`\$INPUT([^A-Za-z0-9_]|$)`)
 
-func enthaeltInput(s string) bool { return inputMuster.MatchString(s) }
+func containsInput(s string) bool { return inputPattern.MatchString(s) }
 
 // Load liest alle Aufträge unter <root>/auftraege/*.md und prüft, dass
 // jeder referenzierte Hase ein Template unter <root>/hasen/ hat.
@@ -320,11 +320,11 @@ func Load(root string) ([]*Auftrag, error) {
 	return auftraege, nil
 }
 
-// parseNachher zerlegt einen Schritt wie {move: "$INPUT -> raeume/archiv/"}.
+// parseAfter zerlegt einen Schritt wie {move: "$INPUT -> raeume/archiv/"}.
 // Pfade dürfen Variablen enthalten; substituiert wird erst im Runner.
-func parseNachher(schritt map[string]string) (Nachher, error) {
+func parseAfter(schritt map[string]string) (After, error) {
 	if len(schritt) != 1 {
-		return Nachher{}, fmt.Errorf("genau eine Aktion pro Schritt (move, copy oder delete)")
+		return After{}, fmt.Errorf("genau eine Aktion pro Schritt (move, copy oder delete)")
 	}
 	for aktion, wert := range schritt {
 		switch aktion {
@@ -332,24 +332,24 @@ func parseNachher(schritt map[string]string) (Nachher, error) {
 			von, nach, ok := strings.Cut(wert, "->")
 			von, nach = strings.TrimSpace(von), strings.TrimSpace(nach)
 			if !ok || von == "" || nach == "" {
-				return Nachher{}, fmt.Errorf("%s braucht die Form \"VON -> NACH\", bekam %q", aktion, wert)
+				return After{}, fmt.Errorf("%s braucht die Form \"VON -> NACH\", bekam %q", aktion, wert)
 			}
-			return Nachher{Aktion: aktion, Von: von, Nach: nach}, nil
+			return After{Action: aktion, From: von, To: nach}, nil
 		case "delete":
 			if strings.TrimSpace(wert) == "" {
-				return Nachher{}, fmt.Errorf("delete braucht einen Pfad")
+				return After{}, fmt.Errorf("delete braucht einen Pfad")
 			}
-			return Nachher{Aktion: aktion, Von: strings.TrimSpace(wert)}, nil
+			return After{Action: aktion, From: strings.TrimSpace(wert)}, nil
 		default:
-			return Nachher{}, fmt.Errorf("unbekannte Aktion %q (erlaubt: move, copy, delete)", aktion)
+			return After{}, fmt.Errorf("unbekannte Aktion %q (erlaubt: move, copy, delete)", aktion)
 		}
 	}
-	return Nachher{}, fmt.Errorf("leerer Schritt")
+	return After{}, fmt.Errorf("leerer Schritt")
 }
 
-// BauRelativ erzwingt die Isolations-Invariante aus §3: Pfade in
+// BauRelative erzwingt die Isolations-Invariante aus §3: Pfade in
 // Aufträgen bleiben im Bau — relativ, ohne Ausbruch nach oben.
-func BauRelativ(p string) error {
+func BauRelative(p string) error {
 	if filepath.IsAbs(p) {
 		return fmt.Errorf("pfad %q muss Bau-relativ sein, nicht absolut", p)
 	}

@@ -98,7 +98,7 @@ selbst ein. Aus einem einzelnen Trace ist nicht sicher zu erkennen, was
 Parameter und was Konstante war; ein Entwurf ist deshalb eine
 Gesprächsgrundlage, kein fertiger Gang.
 
-Ein Hasen-Template kann Hintergrundwissen anfordern: `kennt_hasenbau:
+Ein Hasen-Template kann Hintergrundwissen anfordern: `knows_hasenbau:
 true` bindet eine mitgelieferte Einführung in den Hasenbau ein (Begriffe,
 Ablauf, Trace-Aufbau, Grenzen), `wissen: [pfade]` eigene Dateien aus dem
 Bau. Beides landet im generierten Agenten und gilt damit nur für diesen

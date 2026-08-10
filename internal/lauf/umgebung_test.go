@@ -78,7 +78,7 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 	root := t.TempDir()
 	a := &auftrag.Auftrag{
 		Name: "baumeister", Hase: "baumeister",
-		Trigger: auftrag.Trigger{Manuell: true},
+		Trigger: auftrag.Trigger{Manual: true},
 		Raeume:  map[string]string{"work": "raeume/baumeister/work/", "out": "gaenge/entwurf/"},
 	}
 
@@ -87,7 +87,7 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ohne.TriggerArt != auftrag.TriggerManuell {
+	if ohne.TriggerArt != auftrag.TriggerManual {
 		t.Errorf("TriggerArt = %q", ohne.TriggerArt)
 	}
 	if _, err := ohne.Ersetze("graben $INPUT"); err == nil {

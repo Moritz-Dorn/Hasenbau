@@ -32,9 +32,9 @@ import (
 
 // Store ist die Schreibsicht des Rückkanals; *store.Store erfüllt sie.
 type Store interface {
-	AktiverLauf() (*store.Lauf, error)
-	NotizSchreibe(lauf int64, text string) error
-	SummarySchreibe(lauf int64, text string) error
+	ActiveLauf() (*store.Lauf, error)
+	WriteNote(lauf int64, text string) error
+	WriteSummary(lauf int64, text string) error
 }
 
 const (
@@ -67,7 +67,7 @@ func Server(st Store, version string) *server.MCPServer {
 			mcp.Description("Die Notiz, in ganzen Sätzen."),
 		),
 	), handler(st, "notiert", func(st Store, lauf int64, text string) error {
-		return st.NotizSchreibe(lauf, text)
+		return st.WriteNote(lauf, text)
 	}))
 
 	s.AddTool(mcp.NewTool("summary",
@@ -80,7 +80,7 @@ func Server(st Store, version string) *server.MCPServer {
 			mcp.Description("Eine Zeile: was ist passiert."),
 		),
 	), handler(st, "Summary gesetzt", func(st Store, lauf int64, text string) error {
-		return st.SummarySchreibe(lauf, text)
+		return st.WriteSummary(lauf, text)
 	}))
 
 	return s
@@ -99,12 +99,12 @@ func handler(st Store, getan string, schreibe func(Store, int64, string) error) 
 			return mcp.NewToolResultError("text ist leer"), nil
 		}
 
-		l, err := st.AktiverLauf()
+		l, err := st.ActiveLauf()
 		switch {
-		case errors.Is(err, store.ErrKeinAktiverLauf):
+		case errors.Is(err, store.ErrNoActiveLauf):
 			return mcp.NewToolResultError("kein Lauf aktiv — der Rückkanal " +
 				"schreibt nur während eines Laufs."), nil
-		case errors.Is(err, store.ErrMehrdeutig):
+		case errors.Is(err, store.ErrAmbiguous):
 			return mcp.NewToolResultError("mehrere Läufe gleichzeitig aktiv, " +
 				"der Rückkanal kann den richtigen nicht bestimmen: " +
 				strings.TrimPrefix(err.Error(), "store: ") +

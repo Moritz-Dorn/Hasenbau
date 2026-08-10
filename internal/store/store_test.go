@@ -22,7 +22,7 @@ func TestOpenMigriertUndIstIdempotent(t *testing.T) {
 		t.Errorf("journal_mode = %q, erwartet wal", mode)
 	}
 
-	for _, tbl := range []string{"laeufe", "auftrag_state", "gesehen"} {
+	for _, tbl := range []string{"laeufe", "auftrag_state", "seen", "notes", "trace"} {
 		var n int
 		if err := s.db.QueryRow(
 			"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", tbl,
@@ -48,7 +48,7 @@ func TestOpenMigriertUndIstIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Zweites Open auf derselben Datei: Migrationen dürfen nicht erneut
+	// Zweites Open auf derselben File: Migrationen dürfen nicht erneut
 	// laufen (CREATE TABLE würde knallen) und nichts verlieren.
 	s2, err := Open(path)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestTriggerSpalteIstBenutzbar(t *testing.T) {
 	defer s.Close()
 
 	if _, err := s.db.Exec(
-		`INSERT INTO laeufe (auftrag, "trigger", gestartet, status) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO laeufe (auftrag, "trigger", started, status) VALUES (?, ?, ?, ?)`,
 		"pdf-einlagern", "watch", time.Now().UTC(), "laeuft",
 	); err != nil {
 		t.Fatalf("Insert: %v", err)
@@ -97,7 +97,7 @@ func TestLetzteSummaries(t *testing.T) {
 	einfuegen := func(auftrag, summary string, minuten int) {
 		t.Helper()
 		if _, err := s.db.Exec(
-			`INSERT INTO laeufe (auftrag, "trigger", gestartet, status, summary) VALUES (?, ?, ?, ?, ?)`,
+			`INSERT INTO laeufe (auftrag, "trigger", started, status, summary) VALUES (?, ?, ?, ?, ?)`,
 			auftrag, "watch", basis.Add(time.Duration(minuten)*time.Minute), "ok", summary,
 		); err != nil {
 			t.Fatal(err)
@@ -109,19 +109,19 @@ func TestLetzteSummaries(t *testing.T) {
 	einfuegen("pdf-einlagern", "zweiter", 3)
 	einfuegen("pdf-einlagern", "dritter", 4)
 
-	got, err := s.LetzteSummaries("pdf-einlagern", 2)
+	got, err := s.RecentSummaries("pdf-einlagern", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Die jüngsten 2, chronologisch (älteste zuerst) für den Prompt.
 	if len(got) != 2 || got[0] != "zweiter" || got[1] != "dritter" {
-		t.Errorf("LetzteSummaries = %v", got)
+		t.Errorf("LastSummaries = %v", got)
 	}
 
-	if got, err := s.LetzteSummaries("pdf-einlagern", 0); err != nil || got != nil {
+	if got, err := s.RecentSummaries("pdf-einlagern", 0); err != nil || got != nil {
 		t.Errorf("n=0: %v, %v", got, err)
 	}
-	if got, err := s.LetzteSummaries("unbekannt", 3); err != nil || len(got) != 0 {
+	if got, err := s.RecentSummaries("unbekannt", 3); err != nil || len(got) != 0 {
 		t.Errorf("unbekannter Auftrag: %v, %v", got, err)
 	}
 }
@@ -133,20 +133,20 @@ func TestGesehenBackstop(t *testing.T) {
 	}
 	defer s.Close()
 
-	if ok, err := s.IstGesehen("pdf-einlagern", "abc123"); err != nil || ok {
+	if ok, err := s.IsSeen("pdf-einlagern", "abc123"); err != nil || ok {
 		t.Errorf("frisch: ok=%v err=%v", ok, err)
 	}
-	if err := s.MerkeGesehen("pdf-einlagern", "abc123"); err != nil {
+	if err := s.MarkSeen("pdf-einlagern", "abc123"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MerkeGesehen("pdf-einlagern", "abc123"); err != nil {
-		t.Errorf("MerkeGesehen nicht idempotent: %v", err)
+	if err := s.MarkSeen("pdf-einlagern", "abc123"); err != nil {
+		t.Errorf("MarkSeen nicht idempotent: %v", err)
 	}
-	if ok, err := s.IstGesehen("pdf-einlagern", "abc123"); err != nil || !ok {
+	if ok, err := s.IsSeen("pdf-einlagern", "abc123"); err != nil || !ok {
 		t.Errorf("nach Merken: ok=%v err=%v", ok, err)
 	}
 	// Hash ist pro Auftrag — ein anderer Auftrag darf denselben Input sehen.
-	if ok, err := s.IstGesehen("anderer", "abc123"); err != nil || ok {
+	if ok, err := s.IsSeen("anderer", "abc123"); err != nil || ok {
 		t.Errorf("fremder Auftrag: ok=%v err=%v", ok, err)
 	}
 }
@@ -158,62 +158,62 @@ func TestLaufBeginneUndBeende(t *testing.T) {
 	}
 	defer s.Close()
 
-	id, err := s.LaufBeginne("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
+	id, err := s.StartLauf("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	laeufe, err := s.LetzteLaeufe(10)
+	laeufe, err := s.RecentLaeufe(10)
 	if err != nil || len(laeufe) != 1 {
 		t.Fatalf("nach Beginne: %v, %v", laeufe, err)
 	}
 	l := laeufe[0]
-	if l.ID != id || l.Status != "laeuft" || l.Beendet != nil || l.Ausloeser != "raeume/laderampe/sources/a.pdf" {
+	if l.ID != id || l.Status != "running" || l.Ended != nil || l.Input != "raeume/laderampe/sources/a.pdf" {
 		t.Errorf("Lauf = %+v", l)
 	}
 	states, err := s.AuftragStates()
-	if err != nil || len(states) != 1 || states[0].LetzterLauf == nil || states[0].LetzterOk != nil {
+	if err != nil || len(states) != 1 || states[0].LastLauf == nil || states[0].LastOk != nil {
 		t.Errorf("nach Beginne: states=%+v err=%v", states, err)
 	}
 
-	if err := s.LaufBeende(id, LaufErgebnis{
+	if err := s.EndLauf(id, LaufResult{
 		Status: "ok", SessionID: "ses_1", Summary: "einsortiert",
-		TokensIn: 100, TokensOut: 20, KostenCent: 3,
+		TokensIn: 100, TokensOut: 20, CostCent: 3,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	laeufe, _ = s.LetzteLaeufe(10)
+	laeufe, _ = s.RecentLaeufe(10)
 	l = laeufe[0]
-	if l.Status != "ok" || l.Beendet == nil || l.SessionID != "ses_1" ||
-		l.Summary != "einsortiert" || l.TokensIn != 100 || l.TokensOut != 20 || l.KostenCent != 3 {
+	if l.Status != "ok" || l.Ended == nil || l.SessionID != "ses_1" ||
+		l.Summary != "einsortiert" || l.TokensIn != 100 || l.TokensOut != 20 || l.CostCent != 3 {
 		t.Errorf("Lauf nach Beende = %+v", l)
 	}
 	states, _ = s.AuftragStates()
-	if states[0].LetzterOk == nil || states[0].FehlerSerie != 0 {
+	if states[0].LastOk == nil || states[0].ErrorStreak != 0 {
 		t.Errorf("nach ok: state=%+v", states[0])
 	}
 
 	// Zwei Fehlläufe zählen die Serie hoch; ein ok setzt sie zurück.
 	for i := 0; i < 2; i++ {
-		id, err := s.LaufBeginne("pdf-einlagern", "cron", "")
+		id, err := s.StartLauf("pdf-einlagern", "cron", "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.LaufBeende(id, LaufErgebnis{Status: "fehler", Fehler: "gang kaputt"}); err != nil {
+		if err := s.EndLauf(id, LaufResult{Status: "failed", Error: "gang kaputt"}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	states, _ = s.AuftragStates()
-	if states[0].FehlerSerie != 2 {
-		t.Errorf("FehlerSerie = %d, erwartet 2", states[0].FehlerSerie)
+	if states[0].ErrorStreak != 2 {
+		t.Errorf("ErrorStreak = %d, erwartet 2", states[0].ErrorStreak)
 	}
-	id, _ = s.LaufBeginne("pdf-einlagern", "manuell", "")
-	if err := s.LaufBeende(id, LaufErgebnis{Status: "ok"}); err != nil {
+	id, _ = s.StartLauf("pdf-einlagern", "manual", "")
+	if err := s.EndLauf(id, LaufResult{Status: "ok"}); err != nil {
 		t.Fatal(err)
 	}
 	states, _ = s.AuftragStates()
-	if states[0].FehlerSerie != 0 {
-		t.Errorf("FehlerSerie nach ok = %d", states[0].FehlerSerie)
+	if states[0].ErrorStreak != 0 {
+		t.Errorf("ErrorStreak nach ok = %d", states[0].ErrorStreak)
 	}
 }
 
@@ -224,17 +224,17 @@ func TestLaufValidiert(t *testing.T) {
 	}
 	defer s.Close()
 
-	if _, err := s.LaufBeginne("x", "gedanke", ""); err == nil {
+	if _, err := s.StartLauf("x", "gedanke", ""); err == nil {
 		t.Error("unbekannter Trigger muss fehlschlagen")
 	}
-	id, err := s.LaufBeginne("x", "cron", "")
+	id, err := s.StartLauf("x", "cron", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LaufBeende(id, LaufErgebnis{Status: "laeuft"}); err == nil {
-		t.Error("'laeuft' ist kein Endstatus")
+	if err := s.EndLauf(id, LaufResult{Status: "laeuft"}); err == nil {
+		t.Error("'running' ist kein Endstatus")
 	}
-	if err := s.LaufBeende(999, LaufErgebnis{Status: "ok"}); err == nil {
+	if err := s.EndLauf(999, LaufResult{Status: "ok"}); err == nil {
 		t.Error("unbekannte Lauf-ID muss fehlschlagen")
 	}
 }

@@ -20,9 +20,9 @@ import (
 // danach in quarantaene/ (wenn der Auftrag den Raum kennt) oder
 // unverändert am Ursprung — niemals in archiv/ (§7).
 type GangFehler struct {
-	Gang       string
-	Grund      string // "exit 3" oder "timeout nach 2m0s"
-	LogPfad    string // Bau-relativ
+	Gang        string
+	Grund       string // "exit 3" oder "timeout nach 2m0s"
+	LogPfad     string // Bau-relativ
 	Quarantaene string // Bau-relativer Zielpfad, leer wenn Input blieb
 }
 
@@ -129,7 +129,7 @@ func verschiebeInQuarantaene(u *lauf.Umgebung, a *auftrag.Auftrag) string {
 	if u.TriggerArt != auftrag.TriggerWatch {
 		return ""
 	}
-	raum, ok := a.Raeume["quarantaene"]
+	raum, ok := a.Raeume["quarantine"]
 	if !ok || u.Input == "" {
 		return ""
 	}

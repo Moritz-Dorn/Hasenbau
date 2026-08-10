@@ -12,7 +12,7 @@ import (
 func TestNachherMoveInVerzeichnis(t *testing.T) {
 	a := testAuftrag()
 	a.Raeume["done"] = "raeume/archiv/"
-	a.Nachher = []auftrag.Nachher{{Aktion: "move", Von: "$INPUT", Nach: "raeume/archiv/"}}
+	a.After = []auftrag.After{{Action: "move", From: "$INPUT", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 
 	if err := FuehreNachherAus(u, a); err != nil {
@@ -28,7 +28,7 @@ func TestNachherMoveInVerzeichnis(t *testing.T) {
 
 func TestNachherMoveKollisionUeberschreibtNie(t *testing.T) {
 	a := testAuftrag()
-	a.Nachher = []auftrag.Nachher{{Aktion: "move", Von: "$INPUT", Nach: "raeume/archiv/"}}
+	a.After = []auftrag.After{{Action: "move", From: "$INPUT", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 
 	if err := os.MkdirAll(filepath.Join(u.Bau, "raeume/archiv"), 0o755); err != nil {
@@ -53,9 +53,9 @@ func TestNachherMoveKollisionUeberschreibtNie(t *testing.T) {
 
 func TestNachherCopyUndDelete(t *testing.T) {
 	a := testAuftrag()
-	a.Nachher = []auftrag.Nachher{
-		{Aktion: "copy", Von: "$INPUT", Nach: "raeume/work/sicherung.txt"},
-		{Aktion: "delete", Von: "$INPUT"},
+	a.After = []auftrag.After{
+		{Action: "copy", From: "$INPUT", To: "raeume/work/sicherung.txt"},
+		{Action: "delete", From: "$INPUT"},
 	}
 	u := testUmgebung(t, a)
 
@@ -72,24 +72,24 @@ func TestNachherCopyUndDelete(t *testing.T) {
 }
 
 func TestNachherBleibtImBau(t *testing.T) {
-	faelle := []auftrag.Nachher{
-		{Aktion: "move", Von: "$INPUT", Nach: "../draussen/"},
-		{Aktion: "delete", Von: "/etc/passwd"},
-		{Aktion: "copy", Von: "$INPUT", Nach: "$BAU/raeume/archiv/"}, // $BAU ist absolut ⇒ tabu
+	faelle := []auftrag.After{
+		{Action: "move", From: "$INPUT", To: "../draussen/"},
+		{Action: "delete", From: "/etc/passwd"},
+		{Action: "copy", From: "$INPUT", To: "$BAU/raeume/archiv/"}, // $BAU ist absolut ⇒ tabu
 	}
 	for _, n := range faelle {
 		a := testAuftrag()
-		a.Nachher = []auftrag.Nachher{n}
+		a.After = []auftrag.After{n}
 		u := testUmgebung(t, a)
 		if err := FuehreNachherAus(u, a); err == nil {
-			t.Errorf("%s %s -> %s: muss scheitern", n.Aktion, n.Von, n.Nach)
+			t.Errorf("%s %s -> %s: muss scheitern", n.Action, n.From, n.To)
 		}
 	}
 }
 
 func TestNachherFehlendeQuelle(t *testing.T) {
 	a := testAuftrag()
-	a.Nachher = []auftrag.Nachher{{Aktion: "move", Von: "raeume/eingang/gibtsnicht.txt", Nach: "raeume/archiv/"}}
+	a.After = []auftrag.After{{Action: "move", From: "raeume/eingang/gibtsnicht.txt", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 	if err := FuehreNachherAus(u, a); err == nil || !strings.Contains(err.Error(), "gibtsnicht") {
 		t.Errorf("fehlende Quelle: %v", err)

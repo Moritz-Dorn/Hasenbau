@@ -21,13 +21,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// hasenbauWissen erklärt einem Hasen das System, in dem er läuft. Der
+// hasenbauKnowledge erklärt einem Hasen das System, in dem er läuft. Der
 // Text liegt im Binary statt im Bau: eine kopierte Datei driftet, sobald
 // der Hasenbau sich ändert, und dann erzählt der Hase von einem System,
 // das es so nicht mehr gibt. Eingebunden wird er über `kennt_hasenbau`.
 //
 //go:embed wissen/hasenbau.md
-var hasenbauWissen string
+var hasenbauKnowledge string
 
 // Template ist eine geparste Hasen-Definition aus hasen/<name>.md.
 type Template struct {
@@ -41,15 +41,15 @@ type Template struct {
 	// Wissen sind die Texte, die dem Prompt beigelegt werden — aus
 	// `kennt_hasenbau` und `wissen:`. Lade füllt sie, damit Generiere
 	// keine Dateien mehr anfassen muss.
-	Wissen []WissenStueck
+	Knowledge []Knowledge
 }
 
-// WissenStueck ist ein beigelegter Text mit seiner Herkunft; die
+// Knowledge ist ein beigelegter Text mit seiner Herkunft; die
 // Herkunft steht als Überschrift im generierten Agenten, damit im Trace
 // erkennbar bleibt, woher eine Anweisung kam.
-type WissenStueck struct {
-	Herkunft string
-	Text     string
+type Knowledge struct {
+	Origin string
+	Text   string
 }
 
 // Regel ist ein Permission-Eintrag (Aktion ist immer "deny" —
@@ -66,8 +66,8 @@ type tplFrontmatter struct {
 	Model         string    `yaml:"model"`
 	Temperature   *float64  `yaml:"temperature"`
 	Permission    yaml.Node `yaml:"permission"`
-	KenntHasenbau bool      `yaml:"kennt_hasenbau"`
-	Wissen        []string  `yaml:"wissen"`
+	KnowsHasenbau bool      `yaml:"knows_hasenbau"`
+	Wissen        []string  `yaml:"knowledge"`
 }
 
 // Lade liest das Template hasen/<name>.md unter root.
@@ -107,24 +107,24 @@ func Lade(root, name string) (*Template, error) {
 	if err != nil {
 		return nil, fehler("%v", err)
 	}
-	t.Wissen, err = ladeWissen(root, fm.KenntHasenbau, fm.Wissen)
+	t.Knowledge, err = loadKnowledge(root, fm.KnowsHasenbau, fm.Wissen)
 	if err != nil {
 		return nil, fehler("%v", err)
 	}
 	return t, nil
 }
 
-// ladeWissen sammelt die beigelegten Texte: erst das mitgelieferte
+// loadKnowledge sammelt die beigelegten Texte: erst das mitgelieferte
 // Wissen über den Hasenbau, dann die eigenen Dateien des Nutzers.
 // Gelesen wird hier, nicht beim Generieren — so bleibt Generiere eine
 // reine Funktion über das, was schon im Speicher steht.
-func ladeWissen(root string, kenntHasenbau bool, muster []string) ([]WissenStueck, error) {
-	var out []WissenStueck
-	if kenntHasenbau {
-		out = append(out, WissenStueck{Herkunft: "Der Hasenbau", Text: strings.TrimSpace(hasenbauWissen)})
+func loadKnowledge(root string, knowsHasenbau bool, muster []string) ([]Knowledge, error) {
+	var out []Knowledge
+	if knowsHasenbau {
+		out = append(out, Knowledge{Origin: "Der Hasenbau", Text: strings.TrimSpace(hasenbauKnowledge)})
 	}
 	for _, m := range muster {
-		if err := auftrag.BauRelativ(m); err != nil {
+		if err := auftrag.BauRelative(m); err != nil {
 			return nil, fmt.Errorf("wissen %q: %v", m, err)
 		}
 		treffer, err := filepath.Glob(filepath.Join(root, m))
@@ -144,7 +144,7 @@ func ladeWissen(root string, kenntHasenbau bool, muster []string) ([]WissenStuec
 			if err != nil {
 				rel = datei
 			}
-			out = append(out, WissenStueck{Herkunft: rel, Text: strings.TrimSpace(string(roh))})
+			out = append(out, Knowledge{Origin: rel, Text: strings.TrimSpace(string(roh))})
 		}
 	}
 	return out, nil
@@ -281,8 +281,8 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 	// er tun soll, dann das Nachschlagewerk. Die Herkunft steht als
 	// Überschrift dabei — sonst ist im Trace nicht zu erkennen, woher
 	// eine Anweisung kam.
-	for _, w := range t.Wissen {
-		fmt.Fprintf(&b, "\n## Wissen: %s\n\n%s\n", w.Herkunft, w.Text)
+	for _, w := range t.Knowledge {
+		fmt.Fprintf(&b, "\n## Wissen: %s\n\n%s\n", w.Origin, w.Text)
 	}
 	// Injektionspunkt: was das Framework jedem Hasen mitgibt,
 	// unabhängig vom Template. Bisher nur der Rückkanal.

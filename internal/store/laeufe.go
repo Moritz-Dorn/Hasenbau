@@ -10,29 +10,29 @@ import (
 
 // Lauf ist eine Ausführung eines Auftrags (PLAN.md §1, §5).
 type Lauf struct {
-	ID         int64
-	Auftrag    string
-	Trigger    string // 'cron' | 'watch' | 'manuell'
-	Ausloeser  string
-	Gestartet  time.Time
-	Beendet    *time.Time
-	Status     string // 'laeuft' | 'ok' | 'fehler' | 'abgebrochen'
-	SessionID  string
-	Summary    string
-	Fehler     string
-	TokensIn   int64
-	TokensOut  int64
-	KostenCent int64
+	ID        int64
+	Auftrag   string
+	Trigger   string // 'cron' | 'watch' | 'manual'
+	Input     string
+	Started   time.Time
+	Ended     *time.Time
+	Status    string // 'running' | 'ok' | 'failed' | 'aborted'
+	SessionID string
+	Summary   string
+	Error     string
+	TokensIn  int64
+	TokensOut int64
+	CostCent  int64
 }
 
-// LaufBeginne legt die laeufe-Zeile an (status 'laeuft') und stempelt
-// auftrag_state.letzter_lauf. Die ID identifiziert den Lauf bis zum
-// LaufBeende. Mit in die Zeile geht der Wirt — der Prozess, der den Lauf
+// StartLauf legt die laeufe-Zeile an (status 'running') und stempelt
+// auftrag_state.last_lauf. Die ID identifiziert den Lauf bis zum
+// EndLauf. Mit in die Zeile geht der Wirt — der Prozess, der den Lauf
 // hält: nur an ihm ist später zu erkennen, ob die Zeile noch lebt
 // (verwaist.go).
-func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
+func (s *Store) StartLauf(auftrag, trigger, input string) (int64, error) {
 	switch trigger {
-	case "cron", "watch", "manuell":
+	case "cron", "watch", "manual":
 	default:
 		return 0, fmt.Errorf("store: unbekannter Trigger %q", trigger)
 	}
@@ -43,11 +43,11 @@ func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
-	pid, pidGestartet := prozess.Ich()
+	pid, pidStarted := prozess.Ich()
 	res, err := tx.Exec(
-		`INSERT INTO laeufe (auftrag, "trigger", ausloeser, gestartet, status, pid, pid_gestartet)
-		 VALUES (?, ?, ?, ?, 'laeuft', ?, ?)`,
-		auftrag, trigger, ausloeser, now, pid, nullZeit(pidGestartet))
+		`INSERT INTO laeufe (auftrag, "trigger", input, started, status, pid, pid_started)
+		 VALUES (?, ?, ?, ?, 'running', ?, ?)`,
+		auftrag, trigger, input, now, pid, nullTime(pidStarted))
 	if err != nil {
 		return 0, fmt.Errorf("store: Lauf beginnen: %w", err)
 	}
@@ -56,8 +56,8 @@ func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
 		return 0, fmt.Errorf("store: Lauf beginnen: %w", err)
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO auftrag_state (auftrag, letzter_lauf) VALUES (?, ?)
-		 ON CONFLICT (auftrag) DO UPDATE SET letzter_lauf = excluded.letzter_lauf`,
+		`INSERT INTO auftrag_state (auftrag, last_lauf) VALUES (?, ?)
+		 ON CONFLICT (auftrag) DO UPDATE SET last_lauf = excluded.last_lauf`,
 		auftrag, now); err != nil {
 		return 0, fmt.Errorf("store: Auftrag-Zustand stempeln: %w", err)
 	}
@@ -67,27 +67,27 @@ func (s *Store) LaufBeginne(auftrag, trigger, ausloeser string) (int64, error) {
 	return id, nil
 }
 
-// LaufErgebnis ist der Endzustand eines Laufs für LaufBeende.
-type LaufErgebnis struct {
-	Status     string // 'ok' | 'fehler' | 'abgebrochen'
-	SessionID  string
-	Summary    string
-	Fehler     string
-	TokensIn   int64
-	TokensOut  int64
-	KostenCent int64
+// LaufResult ist der Endzustand eines Laufs für EndLauf.
+type LaufResult struct {
+	Status    string // 'ok' | 'failed' | 'aborted'
+	SessionID string
+	Summary   string
+	Error     string
+	TokensIn  int64
+	TokensOut int64
+	CostCent  int64
 }
 
-// LaufBeende schreibt den Endzustand und pflegt auftrag_state:
-// ok setzt letzter_ok und die Fehlerserie zurück, alles andere zählt
+// EndLauf schreibt den Endzustand und pflegt auftrag_state:
+// ok setzt last_ok und die Fehlerserie zurück, alles andere zählt
 // sie hoch.
 //
 // e.Summary ist nur der Fallback (letzte Assistant-Message): hat der
 // Hase seine Summary schon über den Rückkanal geschrieben, bleibt sie
 // stehen (§5, §8 Phase 2).
-func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
+func (s *Store) EndLauf(id int64, e LaufResult) error {
 	switch e.Status {
-	case "ok", "fehler", "abgebrochen":
+	case "ok", "failed", "aborted":
 	default:
 		return fmt.Errorf("store: unbekannter Endstatus %q", e.Status)
 	}
@@ -103,21 +103,21 @@ func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
 	}
 	now := time.Now().UTC()
 	if _, err := tx.Exec(
-		`UPDATE laeufe SET beendet = ?, status = ?, session_id = ?,
+		`UPDATE laeufe SET ended = ?, status = ?, session_id = ?,
 		        summary = CASE WHEN summary IS NULL OR summary = '' THEN ? ELSE summary END,
-		        fehler = ?, tokens_in = ?, tokens_out = ?, kosten_cent = ?
+		        error = ?, tokens_in = ?, tokens_out = ?, cost_cent = ?
 		 WHERE id = ?`,
-		now, e.Status, e.SessionID, SummaryZeile(e.Summary), e.Fehler,
-		e.TokensIn, e.TokensOut, e.KostenCent, id); err != nil {
+		now, e.Status, e.SessionID, SummaryLine(e.Summary), e.Error,
+		e.TokensIn, e.TokensOut, e.CostCent, id); err != nil {
 		return fmt.Errorf("store: Lauf %d beenden: %w", id, err)
 	}
 	if e.Status == "ok" {
 		_, err = tx.Exec(
-			`UPDATE auftrag_state SET letzter_ok = ?, fehler_serie = 0 WHERE auftrag = ?`,
+			`UPDATE auftrag_state SET last_ok = ?, error_streak = 0 WHERE auftrag = ?`,
 			now, auftrag)
 	} else {
 		_, err = tx.Exec(
-			`UPDATE auftrag_state SET fehler_serie = fehler_serie + 1 WHERE auftrag = ?`,
+			`UPDATE auftrag_state SET error_streak = error_streak + 1 WHERE auftrag = ?`,
 			auftrag)
 	}
 	if err != nil {
@@ -129,59 +129,59 @@ func (s *Store) LaufBeende(id int64, e LaufErgebnis) error {
 	return nil
 }
 
-// LaufNachID liefert einen einzelnen Lauf — z.B. für graben, das über
+// LaufByID liefert einen einzelnen Lauf — z.B. für graben, das über
 // die session_id an den Trace kommt (§8 Phase 2).
-func (s *Store) LaufNachID(id int64) (*Lauf, error) {
+func (s *Store) LaufByID(id int64) (*Lauf, error) {
 	var l Lauf
-	var beendet sql.NullTime
+	var ended sql.NullTime
 	err := s.db.QueryRow(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
-		       beendet, status, COALESCE(session_id,''), COALESCE(summary,''),
-		       COALESCE(fehler,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
-		       COALESCE(kosten_cent,0)
+		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
+		       ended, status, COALESCE(session_id,''), COALESCE(summary,''),
+		       COALESCE(error,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
+		       COALESCE(cost_cent,0)
 		FROM laeufe WHERE id = ?`, id).Scan(
-		&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser, &l.Gestartet, &beendet,
-		&l.Status, &l.SessionID, &l.Summary, &l.Fehler, &l.TokensIn,
-		&l.TokensOut, &l.KostenCent)
+		&l.ID, &l.Auftrag, &l.Trigger, &l.Input, &l.Started, &ended,
+		&l.Status, &l.SessionID, &l.Summary, &l.Error, &l.TokensIn,
+		&l.TokensOut, &l.CostCent)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("store: kein Lauf mit ID %d", id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("store: Lauf %d lesen: %w", id, err)
 	}
-	if beendet.Valid {
-		t := beendet.Time
-		l.Beendet = &t
+	if ended.Valid {
+		t := ended.Time
+		l.Ended = &t
 	}
 	return &l, nil
 }
 
-// LetzterLaufNachAuftrag liefert den jüngsten Lauf eines Auftrags, der
+// LastLaufByAuftrag liefert den jüngsten Lauf eines Auftrags, der
 // eine Session hat — nur an so einem hängt ein Trace, und nur damit
 // kann der Baumeister etwas anfangen (§8 Phase 2).
-func (s *Store) LetzterLaufNachAuftrag(auftrag string) (*Lauf, error) {
+func (s *Store) LastLaufByAuftrag(auftrag string) (*Lauf, error) {
 	var id int64
 	err := s.db.QueryRow(`
 		SELECT id FROM laeufe
 		WHERE auftrag = ? AND session_id IS NOT NULL AND session_id != ''
-		ORDER BY gestartet DESC, id DESC LIMIT 1`, auftrag).Scan(&id)
+		ORDER BY started DESC, id DESC LIMIT 1`, auftrag).Scan(&id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("store: kein Lauf des Auftrags %q mit Session", auftrag)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("store: letzten Lauf von %q lesen: %w", auftrag, err)
 	}
-	return s.LaufNachID(id)
+	return s.LaufByID(id)
 }
 
-// LetzteLaeufe liefert die jüngsten Läufe, neueste zuerst.
-func (s *Store) LetzteLaeufe(limit int) ([]Lauf, error) {
+// RecentLaeufe liefert die jüngsten Läufe, neueste zuerst.
+func (s *Store) RecentLaeufe(limit int) ([]Lauf, error) {
 	rows, err := s.db.Query(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
-		       beendet, status, COALESCE(session_id,''), COALESCE(summary,''),
-		       COALESCE(fehler,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
-		       COALESCE(kosten_cent,0)
-		FROM laeufe ORDER BY gestartet DESC, id DESC LIMIT ?`, limit)
+		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
+		       ended, status, COALESCE(session_id,''), COALESCE(summary,''),
+		       COALESCE(error,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
+		       COALESCE(cost_cent,0)
+		FROM laeufe ORDER BY started DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: Läufe lesen: %w", err)
 	}
@@ -194,32 +194,32 @@ func scanLaeufe(rows *sql.Rows) ([]Lauf, error) {
 	var out []Lauf
 	for rows.Next() {
 		var l Lauf
-		var beendet sql.NullTime
-		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Ausloeser,
-			&l.Gestartet, &beendet, &l.Status, &l.SessionID, &l.Summary,
-			&l.Fehler, &l.TokensIn, &l.TokensOut, &l.KostenCent); err != nil {
+		var ended sql.NullTime
+		if err := rows.Scan(&l.ID, &l.Auftrag, &l.Trigger, &l.Input,
+			&l.Started, &ended, &l.Status, &l.SessionID, &l.Summary,
+			&l.Error, &l.TokensIn, &l.TokensOut, &l.CostCent); err != nil {
 			return nil, fmt.Errorf("store: Lauf scannen: %w", err)
 		}
-		if beendet.Valid {
-			t := beendet.Time
-			l.Beendet = &t
+		if ended.Valid {
+			t := ended.Time
+			l.Ended = &t
 		}
 		out = append(out, l)
 	}
 	return out, rows.Err()
 }
 
-// LetzteLaeufeNachAuftrag liefert die jüngsten Läufe eines Auftrags,
-// neueste zuerst — anders als LetzterLaufNachAuftrag auch die ohne
+// RecentLaeufeByAuftrag liefert die jüngsten Läufe eines Auftrags,
+// neueste zuerst — anders als LastLaufByAuftrag auch die ohne
 // Session, denn gerade die gescheiterten sind interessant.
-func (s *Store) LetzteLaeufeNachAuftrag(auftrag string, n int) ([]Lauf, error) {
+func (s *Store) RecentLaeufeByAuftrag(auftrag string, n int) ([]Lauf, error) {
 	rows, err := s.db.Query(`
-		SELECT id, auftrag, "trigger", COALESCE(ausloeser,''), gestartet,
-		       beendet, status, COALESCE(session_id,''), COALESCE(summary,''),
-		       COALESCE(fehler,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
-		       COALESCE(kosten_cent,0)
+		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
+		       ended, status, COALESCE(session_id,''), COALESCE(summary,''),
+		       COALESCE(error,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
+		       COALESCE(cost_cent,0)
 		FROM laeufe WHERE auftrag = ?
-		ORDER BY gestartet DESC, id DESC LIMIT ?`, auftrag, n)
+		ORDER BY started DESC, id DESC LIMIT ?`, auftrag, n)
 	if err != nil {
 		return nil, fmt.Errorf("store: Läufe von %q lesen: %w", auftrag, err)
 	}
@@ -227,17 +227,17 @@ func (s *Store) LetzteLaeufeNachAuftrag(auftrag string, n int) ([]Lauf, error) {
 	return scanLaeufe(rows)
 }
 
-// LetzteSummaries liefert die jüngsten nicht-leeren Summaries eines
+// RecentSummaries liefert die jüngsten nicht-leeren Summaries eines
 // Auftrags in chronologischer Reihenfolge (älteste zuerst) — so wandern
 // sie direkt in den Prompt (§6, Kontext-Schicht).
-func (s *Store) LetzteSummaries(auftrag string, n int) ([]string, error) {
+func (s *Store) RecentSummaries(auftrag string, n int) ([]string, error) {
 	if n <= 0 {
 		return nil, nil
 	}
 	rows, err := s.db.Query(`
 		SELECT summary FROM laeufe
 		WHERE auftrag = ? AND summary IS NOT NULL AND summary != ''
-		ORDER BY gestartet DESC, id DESC LIMIT ?`, auftrag, n)
+		ORDER BY started DESC, id DESC LIMIT ?`, auftrag, n)
 	if err != nil {
 		return nil, fmt.Errorf("store: Summaries lesen: %w", err)
 	}
@@ -260,8 +260,8 @@ func (s *Store) LetzteSummaries(auftrag string, n int) ([]string, error) {
 	return neueste, nil
 }
 
-// StatusZaehler liefert die Anzahl Läufe je Status.
-func (s *Store) StatusZaehler() (map[string]int, error) {
+// StatusCounts liefert die Anzahl Läufe je Status.
+func (s *Store) StatusCounts() (map[string]int, error) {
 	rows, err := s.db.Query(`SELECT status, count(*) FROM laeufe GROUP BY status`)
 	if err != nil {
 		return nil, fmt.Errorf("store: Status zählen: %w", err)
@@ -283,15 +283,15 @@ func (s *Store) StatusZaehler() (map[string]int, error) {
 // AuftragState ist der aggregierte Zustand eines Auftrags (§5).
 type AuftragState struct {
 	Auftrag     string
-	LetzterLauf *time.Time
-	LetzterOk   *time.Time
-	FehlerSerie int
+	LastLauf    *time.Time
+	LastOk      *time.Time
+	ErrorStreak int
 }
 
 // AuftragStates liefert den Zustand aller bekannten Aufträge.
 func (s *Store) AuftragStates() ([]AuftragState, error) {
 	rows, err := s.db.Query(`
-		SELECT auftrag, letzter_lauf, letzter_ok, fehler_serie
+		SELECT auftrag, last_lauf, last_ok, error_streak
 		FROM auftrag_state ORDER BY auftrag`)
 	if err != nil {
 		return nil, fmt.Errorf("store: Auftrag-Zustände lesen: %w", err)
@@ -302,16 +302,16 @@ func (s *Store) AuftragStates() ([]AuftragState, error) {
 	for rows.Next() {
 		var a AuftragState
 		var lauf, ok sql.NullTime
-		if err := rows.Scan(&a.Auftrag, &lauf, &ok, &a.FehlerSerie); err != nil {
+		if err := rows.Scan(&a.Auftrag, &lauf, &ok, &a.ErrorStreak); err != nil {
 			return nil, err
 		}
 		if lauf.Valid {
 			t := lauf.Time
-			a.LetzterLauf = &t
+			a.LastLauf = &t
 		}
 		if ok.Valid {
 			t := ok.Time
-			a.LetzterOk = &t
+			a.LastOk = &t
 		}
 		out = append(out, a)
 	}

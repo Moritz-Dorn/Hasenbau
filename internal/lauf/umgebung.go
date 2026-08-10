@@ -67,7 +67,7 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, err
 		Bau:        root,
 		Input:      input,
 		Raeume:     a.Raeume,
-		TriggerArt: a.Trigger.Art(),
+		TriggerArt: a.Trigger.Kind(),
 		Hasenbau:   exe,
 	}
 	for rolle, pfad := range a.Raeume {

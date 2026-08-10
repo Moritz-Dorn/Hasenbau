@@ -21,29 +21,29 @@ import (
 	"time"
 )
 
-// TraceSchreibe legt den Trace eines Laufs ab. Ein zweiter Aufruf
+// WriteTrace legt den Trace eines Laufs ab. Ein zweiter Aufruf
 // ersetzt den ersten: der Lazy-Backfill in `graben` darf eine bereits
 // vorhandene Zeile überschreiben, ohne vorher zu fragen.
-func (s *Store) TraceSchreibe(lauf int64, sessionID string, roh []byte) error {
+func (s *Store) WriteTrace(lauf int64, sessionID string, roh []byte) error {
 	if sessionID == "" {
 		return fmt.Errorf("store: Trace zu Lauf %d ohne Session-ID", lauf)
 	}
 	if _, err := s.db.Exec(`
-		INSERT INTO trace (lauf, session_id, json, geschrieben) VALUES (?, ?, ?, ?)
+		INSERT INTO trace (lauf, session_id, json, written) VALUES (?, ?, ?, ?)
 		ON CONFLICT (lauf) DO UPDATE SET
 			session_id = excluded.session_id,
 			json = excluded.json,
-			geschrieben = excluded.geschrieben`,
+			written = excluded.written`,
 		lauf, sessionID, string(roh), time.Now().UTC()); err != nil {
 		return fmt.Errorf("store: Trace zu Lauf %d: %w", lauf, err)
 	}
 	return nil
 }
 
-// TraceLies liefert den abgelegten Trace. da=false heißt: für diesen
+// ReadTrace liefert den abgelegten Trace. da=false heißt: für diesen
 // Lauf wurde keiner aufgezeichnet (Altlauf oder gescheitert vor dem
 // Hasen) — dann bleibt der Weg über den Server.
-func (s *Store) TraceLies(lauf int64) (roh []byte, da bool, err error) {
+func (s *Store) ReadTrace(lauf int64) (roh []byte, da bool, err error) {
 	var j string
 	switch err := s.db.QueryRow(`SELECT json FROM trace WHERE lauf = ?`, lauf).Scan(&j); {
 	case err == sql.ErrNoRows:

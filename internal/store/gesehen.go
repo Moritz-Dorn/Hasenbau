@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-// IstGesehen prüft, ob dieser Input (sha256) für den Auftrag schon
+// IsSeen prüft, ob dieser Input (sha256) für den Auftrag schon
 // erfolgreich verarbeitet wurde.
-func (s *Store) IstGesehen(auftrag, hash string) (bool, error) {
+func (s *Store) IsSeen(auftrag, hash string) (bool, error) {
 	var n int
 	err := s.db.QueryRow(
-		`SELECT count(*) FROM gesehen WHERE auftrag = ? AND quelle_hash = ?`,
+		`SELECT count(*) FROM seen WHERE auftrag = ? AND source_hash = ?`,
 		auftrag, hash,
 	).Scan(&n)
 	if err != nil {
@@ -21,12 +21,12 @@ func (s *Store) IstGesehen(auftrag, hash string) (bool, error) {
 	return n > 0, nil
 }
 
-// MerkeGesehen registriert einen erfolgreich verarbeiteten Input.
+// MarkSeen registriert einen erfolgreich verarbeiteten Input.
 // Idempotent: derselbe Hash darf mehrfach gemeldet werden.
-func (s *Store) MerkeGesehen(auftrag, hash string) error {
+func (s *Store) MarkSeen(auftrag, hash string) error {
 	_, err := s.db.Exec(
-		`INSERT INTO gesehen (auftrag, quelle_hash, gesehen_am) VALUES (?, ?, ?)
-		 ON CONFLICT (auftrag, quelle_hash) DO NOTHING`,
+		`INSERT INTO seen (auftrag, source_hash, seen_at) VALUES (?, ?, ?)
+		 ON CONFLICT (auftrag, source_hash) DO NOTHING`,
 		auftrag, hash, time.Now().UTC(),
 	)
 	if err != nil {

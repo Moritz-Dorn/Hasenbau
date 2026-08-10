@@ -345,7 +345,7 @@ trigger:
   watch: raeume/laderampe/sources/*.pdf
   debounce: 5s
   # alternativ:  cron: "0 7 * * *"
-  # alternativ:  manuell: true      # läuft nur auf Zuruf
+  # alternativ:  manual: true      # läuft nur auf Zuruf
 
 gaenge:                            # deterministisch, läuft VOR dem Hasen
   - name: pdf-zu-markdown
@@ -359,13 +359,13 @@ raeume:
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
-  quarantaene: raeume/quarantaene/ # Gang-Fehler ⇒ Input landet hier (§7)
+  quarantine: raeume/quarantaene/ # Gang-Fehler ⇒ Input landet hier (§7)
 
-kontext:                           # Push: was kommt in den Prompt
-  - datei: $WORK/extrakt.md
-  - letzte_summaries: 3
+context:                           # Push: was kommt in den Prompt
+  - file: $WORK/extrakt.md
+  - last_summaries: 3
 
-nachher:
+after:
   - move: $INPUT -> raeume/archiv/
 ---
 
@@ -423,7 +423,7 @@ kein eigenes `instructions`-Feld (zulässig sind `model`, `variant`,
 agentenspezifische Weg ist `prompt` — und den generiert der Hasenbau
 ohnehin selbst. Zwei Template-Felder nutzen das:
 
-- **`kennt_hasenbau: true`** bindet einen Text ein, der **im Binary**
+- **`knows_hasenbau: true`** bindet einen Text ein, der **im Binary**
   liegt: Begriffe, Ablauf eines Laufs, wie ein Trace zu lesen ist,
   Permissions und Grenzen. Nicht im Bau, und das ist der Punkt — eine
   kopierte Datei driftet, sobald der Hasenbau sich ändert, und dann
@@ -605,7 +605,7 @@ trigger:  {manuell: true}
 gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'}]
 hase:     baumeister
 raeume:   {work: raeume/baumeister/work/, out: gaenge/entwurf/}
-kontext:  [{datei: $WORK/trace.md}]
+context:  [{datei: $WORK/trace.md}]
 ```
 
 Damit frisst der Hasenbau sein eigenes Hundefutter: die Verdichtung

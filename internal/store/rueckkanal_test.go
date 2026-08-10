@@ -20,15 +20,15 @@ func neuerStore(t *testing.T) *Store {
 func TestAktiverLauf(t *testing.T) {
 	s := neuerStore(t)
 
-	if _, err := s.AktiverLauf(); !errors.Is(err, ErrKeinAktiverLauf) {
-		t.Errorf("ohne Lauf: err = %v, erwartet ErrKeinAktiverLauf", err)
+	if _, err := s.ActiveLauf(); !errors.Is(err, ErrNoActiveLauf) {
+		t.Errorf("ohne Lauf: err = %v, erwartet ErrNoActiveLauf", err)
 	}
 
-	id, err := s.LaufBeginne("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
+	id, err := s.StartLauf("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := s.AktiverLauf()
+	l, err := s.ActiveLauf()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,13 +37,13 @@ func TestAktiverLauf(t *testing.T) {
 	}
 
 	// Zweiter Auftrag parallel: der Rückkanal darf jetzt nicht raten.
-	zweite, err := s.LaufBeginne("tagesbericht", "cron", "")
+	zweite, err := s.StartLauf("tagesbericht", "cron", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.AktiverLauf()
-	if !errors.Is(err, ErrMehrdeutig) {
-		t.Fatalf("bei zwei Läufen: err = %v, erwartet ErrMehrdeutig", err)
+	_, err = s.ActiveLauf()
+	if !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("bei zwei Läufen: err = %v, erwartet ErrAmbiguous", err)
 	}
 	// Die Kandidaten stehen im Text — sonst sieht niemand die
 	// verwaiste Zeile eines abgestürzten Daemons.
@@ -52,10 +52,10 @@ func TestAktiverLauf(t *testing.T) {
 	}
 
 	// Endet einer, ist der andere wieder eindeutig.
-	if err := s.LaufBeende(zweite, LaufErgebnis{Status: "ok"}); err != nil {
+	if err := s.EndLauf(zweite, LaufResult{Status: "ok"}); err != nil {
 		t.Fatal(err)
 	}
-	l, err = s.AktiverLauf()
+	l, err = s.ActiveLauf()
 	if err != nil || l.ID != id {
 		t.Errorf("nach Ende des zweiten: %+v, %v", l, err)
 	}
@@ -63,56 +63,56 @@ func TestAktiverLauf(t *testing.T) {
 
 func TestNotizenSchreibenUndLesen(t *testing.T) {
 	s := neuerStore(t)
-	id, err := s.LaufBeginne("pdf-einlagern", "manuell", "")
+	id, err := s.StartLauf("pdf-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, text := range []string{"Rechnung ohne Datum", "Scan war schief"} {
-		if err := s.NotizSchreibe(id, text); err != nil {
+		if err := s.WriteNote(id, text); err != nil {
 			t.Fatal(err)
 		}
 	}
-	notizen, err := s.Notizen(id)
+	notizen, err := s.Notes(id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(notizen) != 2 || notizen[0].Text != "Rechnung ohne Datum" || notizen[1].Text != "Scan war schief" {
 		t.Fatalf("Notizen = %+v", notizen)
 	}
-	if notizen[0].Geschrieben.IsZero() {
+	if notizen[0].Written.IsZero() {
 		t.Error("Zeitstempel fehlt")
 	}
 
 	// Notizen hängen am Lauf, nicht am Auftrag.
-	andere, err := s.LaufBeginne("tagesbericht", "cron", "")
+	andere, err := s.StartLauf("tagesbericht", "cron", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, err := s.Notizen(andere); err != nil || len(n) != 0 {
+	if n, err := s.Notes(andere); err != nil || len(n) != 0 {
 		t.Errorf("fremder Lauf hat Notizen: %+v, %v", n, err)
 	}
 }
 
 // Der Rückkanal gewinnt gegen den Fallback: was der Hase selbst
-// gemeldet hat, überschreibt LaufBeende nicht (§5, Bead-Kriterium).
+// gemeldet hat, überschreibt EndLauf nicht (§5, Bead-Kriterium).
 func TestSummaryVomHasenSchlaegtFallback(t *testing.T) {
 	s := neuerStore(t)
-	id, err := s.LaufBeginne("pdf-einlagern", "manuell", "")
+	id, err := s.StartLauf("pdf-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SummarySchreibe(id, "3 Rechnungen einsortiert, eine ohne Datum"); err != nil {
+	if err := s.WriteSummary(id, "3 Rechnungen einsortiert, eine ohne Datum"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LaufBeende(id, LaufErgebnis{
+	if err := s.EndLauf(id, LaufResult{
 		Status:  "ok",
 		Summary: "Ich habe die Dateien verarbeitet. Sag Bescheid, wenn ich helfen kann!",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	l, err := s.LaufNachID(id)
+	l, err := s.LaufByID(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,14 +124,14 @@ func TestSummaryVomHasenSchlaegtFallback(t *testing.T) {
 // Ohne summary()-Aufruf bleibt der Fallback funktionsfähig.
 func TestOhneRueckkanalGreiftFallback(t *testing.T) {
 	s := neuerStore(t)
-	id, err := s.LaufBeginne("pdf-einlagern", "manuell", "")
+	id, err := s.StartLauf("pdf-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LaufBeende(id, LaufErgebnis{Status: "ok", Summary: "Alles  einsortiert.\nFertig."}); err != nil {
+	if err := s.EndLauf(id, LaufResult{Status: "ok", Summary: "Alles  einsortiert.\nFertig."}); err != nil {
 		t.Fatal(err)
 	}
-	l, err := s.LaufNachID(id)
+	l, err := s.LaufByID(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,14 +142,14 @@ func TestOhneRueckkanalGreiftFallback(t *testing.T) {
 
 func TestSummarySchreibePresstInEineZeile(t *testing.T) {
 	s := neuerStore(t)
-	id, err := s.LaufBeginne("pdf-einlagern", "manuell", "")
+	id, err := s.StartLauf("pdf-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SummarySchreibe(id, "Zeile eins\n\tZeile   zwei\n"); err != nil {
+	if err := s.WriteSummary(id, "Zeile eins\n\tZeile   zwei\n"); err != nil {
 		t.Fatal(err)
 	}
-	l, err := s.LaufNachID(id)
+	l, err := s.LaufByID(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,22 +158,22 @@ func TestSummarySchreibePresstInEineZeile(t *testing.T) {
 	}
 
 	// Der letzte Aufruf gewinnt — der Hase darf sich korrigieren.
-	if err := s.SummarySchreibe(id, "Doch nur zwei Dateien"); err != nil {
+	if err := s.WriteSummary(id, "Doch nur zwei Dateien"); err != nil {
 		t.Fatal(err)
 	}
-	l, _ = s.LaufNachID(id)
+	l, _ = s.LaufByID(id)
 	if l.Summary != "Doch nur zwei Dateien" {
 		t.Errorf("Korrektur nicht übernommen: %q", l.Summary)
 	}
 
-	if err := s.SummarySchreibe(9999, "nirgendwo"); err == nil {
+	if err := s.WriteSummary(9999, "nirgendwo"); err == nil {
 		t.Error("Summary auf unbekannten Lauf blieb ohne Fehler")
 	}
 }
 
-func TestSummaryZeileKapptAusschweifungen(t *testing.T) {
+func TestSummaryLineKapptAusschweifungen(t *testing.T) {
 	lang := strings.Repeat("wort ", 200)
-	got := SummaryZeile(lang)
+	got := SummaryLine(lang)
 	if runen := []rune(got); len(runen) != 501 || !strings.HasSuffix(got, "…") {
 		t.Errorf("Länge = %d, Ende = %q", len([]rune(got)), got[len(got)-3:])
 	}

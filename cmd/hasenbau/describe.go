@@ -66,13 +66,13 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	a.feld("Lauf", "%d", l.ID)
 	a.feld("Auftrag", "%s", l.Auftrag)
 	a.feld("Trigger", "%s", l.Trigger)
-	if l.Ausloeser != "" {
-		a.feld("Auslöser", "%s", l.Ausloeser)
+	if l.Input != "" {
+		a.feld("Auslöser", "%s", l.Input)
 	}
 	a.feld("Status", "%s", l.Status)
-	a.feld("Gestartet", "%s", l.Gestartet.Local().Format("2006-01-02 15:04:05"))
-	if l.Beendet != nil {
-		a.feld("Beendet", "%s  (%s)", l.Beendet.Local().Format("2006-01-02 15:04:05"), laufDauer(*l))
+	a.feld("Gestartet", "%s", l.Started.Local().Format("2006-01-02 15:04:05"))
+	if l.Ended != nil {
+		a.feld("Beendet", "%s  (%s)", l.Ended.Local().Format("2006-01-02 15:04:05"), laufDauer(*l))
 	} else {
 		a.feld("Beendet", "läuft noch")
 	}
@@ -82,7 +82,7 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	if l.TokensIn > 0 || l.TokensOut > 0 {
 		a.feld("Tokens", "%d ein, %d aus", l.TokensIn, l.TokensOut)
 	}
-	a.feld("Kosten", "%s", kosten(l.KostenCent))
+	a.feld("Kosten", "%s", kosten(l.CostCent))
 	if l.Summary != "" {
 		a.feld("Summary", "%s", l.Summary)
 	}
@@ -91,11 +91,11 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 
 	// Der Fehler eines Laufs ist mehrzeilig und der Grund, warum man
 	// überhaupt hinsieht — hier steht er vollständig, nicht gekürzt.
-	if l.Fehler != "" {
-		fmt.Fprintf(out, "\nFehler\n%s\n", einruecken(l.Fehler))
+	if l.Error != "" {
+		fmt.Fprintf(out, "\nFehler\n%s\n", einruecken(l.Error))
 	}
 
-	notizen, err := st.Notizen(l.ID)
+	notizen, err := st.Notes(l.ID)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -103,7 +103,7 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	if len(notizen) > 0 {
 		fmt.Fprint(out, "\nNotizen des Hasen\n")
 		for _, n := range notizen {
-			fmt.Fprintf(out, "  %s  %s\n", n.Geschrieben.Local().Format("15:04:05"), einruecken(n.Text))
+			fmt.Fprintf(out, "  %s  %s\n", n.Written.Local().Format("15:04:05"), einruecken(n.Text))
 		}
 	}
 
@@ -203,23 +203,23 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 		r.fertig()
 	}
 
-	if len(a.Kontext) > 0 {
+	if len(a.Context) > 0 {
 		fmt.Fprint(out, "\nKontext\n")
-		for _, k := range a.Kontext {
-			if k.Datei != "" {
-				fmt.Fprintf(out, "  Datei %s\n", k.Datei)
+		for _, k := range a.Context {
+			if k.File != "" {
+				fmt.Fprintf(out, "  Datei %s\n", k.File)
 			} else {
-				fmt.Fprintf(out, "  die letzten %d Summaries\n", k.LetzteSummaries)
+				fmt.Fprintf(out, "  die letzten %d Summaries\n", k.LastSummaries)
 			}
 		}
 	}
-	if len(a.Nachher) > 0 {
+	if len(a.After) > 0 {
 		fmt.Fprint(out, "\nNachher\n")
-		for _, n := range a.Nachher {
-			if n.Nach == "" {
-				fmt.Fprintf(out, "  %s %s\n", n.Aktion, n.Von)
+		for _, n := range a.After {
+			if n.To == "" {
+				fmt.Fprintf(out, "  %s %s\n", n.Action, n.From)
 			} else {
-				fmt.Fprintf(out, "  %s %s -> %s\n", n.Aktion, n.Von, n.Nach)
+				fmt.Fprintf(out, "  %s %s -> %s\n", n.Action, n.From, n.To)
 			}
 		}
 	}
@@ -241,7 +241,7 @@ func letzteLaeufe(root, auftragName string, out, errw io.Writer) int {
 		return 1
 	}
 	defer st.Close()
-	laeufe, err := st.LetzteLaeufeNachAuftrag(auftragName, 5)
+	laeufe, err := st.RecentLaeufeByAuftrag(auftragName, 5)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -282,11 +282,11 @@ func describeHase(root string, args []string, out, errw io.Writer) int {
 	}
 	ab.fertig()
 
-	if len(t.Wissen) > 0 {
+	if len(t.Knowledge) > 0 {
 		fmt.Fprint(out, "\nBeigelegtes Wissen (steht in jedem Prompt dieses Hasen)\n")
-		for _, w := range t.Wissen {
+		for _, w := range t.Knowledge {
 			zeilen := len(strings.Split(w.Text, "\n"))
-			quelle := w.Herkunft
+			quelle := w.Origin
 			if quelle == "Der Hasenbau" {
 				quelle += "  (mitgeliefert, passt zur installierten Version)"
 			}

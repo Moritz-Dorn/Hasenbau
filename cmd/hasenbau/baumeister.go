@@ -92,7 +92,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	laufFehler := k.Runner.FuehreAus(k.Ctx, ziel, "manuell", strconv.FormatInt(quelle.ID, 10))
+	laufFehler := k.Runner.FuehreAus(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
 	if laufFehler != nil {
 		logger.Print(laufFehler)
 	}
@@ -129,9 +129,9 @@ func zielLauf(st *store.Store, ziel string) (*store.Lauf, error) {
 	var l *store.Lauf
 	var err error
 	if id, e := strconv.ParseInt(ziel, 10, 64); e == nil {
-		l, err = st.LaufNachID(id)
+		l, err = st.LaufByID(id)
 	} else {
-		l, err = st.LetzterLaufNachAuftrag(ziel)
+		l, err = st.LastLaufByAuftrag(ziel)
 	}
 	if err != nil {
 		return nil, err

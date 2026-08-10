@@ -84,6 +84,43 @@ var migrations = [][]string{
 			geschrieben   TIMESTAMP NOT NULL
 		)`,
 	},
+	{
+		// Alles, was kein Domänen-Eigenname ist, wird englisch (PLAN.md
+		// §1). Die Eigennamen bleiben: laeufe, lauf, auftrag, gaenge,
+		// raeume. Die Migrationen darüber bleiben unangetastet — der
+		// Stand von damals ist der Stand von damals.
+		`ALTER TABLE laeufe RENAME COLUMN ausloeser TO input`,
+		`ALTER TABLE laeufe RENAME COLUMN gestartet TO started`,
+		`ALTER TABLE laeufe RENAME COLUMN beendet TO ended`,
+		`ALTER TABLE laeufe RENAME COLUMN fehler TO error`,
+		`ALTER TABLE laeufe RENAME COLUMN output_pfad TO output_path`,
+		`ALTER TABLE laeufe RENAME COLUMN kosten_cent TO cost_cent`,
+		`ALTER TABLE laeufe RENAME COLUMN pid_gestartet TO pid_started`,
+		`ALTER TABLE auftrag_state RENAME COLUMN letzter_lauf TO last_lauf`,
+		`ALTER TABLE auftrag_state RENAME COLUMN letzter_ok TO last_ok`,
+		`ALTER TABLE auftrag_state RENAME COLUMN fehler_serie TO error_streak`,
+		`ALTER TABLE notizen RENAME TO notes`,
+		`ALTER TABLE notes RENAME COLUMN geschrieben TO written`,
+		`ALTER TABLE gesehen RENAME TO seen`,
+		`ALTER TABLE seen RENAME COLUMN quelle_hash TO source_hash`,
+		`ALTER TABLE seen RENAME COLUMN gesehen_am TO seen_at`,
+		`ALTER TABLE trace RENAME COLUMN geschrieben TO written`,
+		`DROP INDEX idx_notizen_lauf`,
+		`CREATE INDEX idx_notes_lauf ON notes(lauf, id)`,
+
+		// Auch die Zustandswerte selbst — sonst stünde in der Spalte
+		// weiter Deutsch, und der Code müsste beides kennen.
+		`UPDATE laeufe SET status = 'running' WHERE status = 'laeuft'`,
+		`UPDATE laeufe SET status = 'failed' WHERE status = 'fehler'`,
+		`UPDATE laeufe SET status = 'aborted' WHERE status = 'abgebrochen'`,
+		`UPDATE laeufe SET "trigger" = 'manual' WHERE "trigger" = 'manuell'`,
+
+		// Die Trace-JSON-Schlüssel wandern mit (art→kind, rolle→role,
+		// fehler→error, ende→end, schritte→steps). Bestehende Zeilen
+		// wären danach unlesbar; sie fliegen raus, und `hasenbau dig`
+		// holt den Trace bei Bedarf wieder vom Server.
+		`DELETE FROM trace`,
+	},
 }
 
 // Store ist die Datenbank des Baus (state/hasenbau.db).

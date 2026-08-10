@@ -117,19 +117,19 @@ func laufMitNotizen(t *testing.T, bau string) *store.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.LaufBeginne("notiz-einlagern", "watch", "raeume/laderampe/sources/a.txt")
+	id, err := st.StartLauf("notiz-einlagern", "watch", "raeume/laderampe/sources/a.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.NotizSchreibe(id, "31. Februar existiert nicht"); err != nil {
+	if err := st.WriteNote(id, "31. Februar existiert nicht"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.NotizSchreibe(id, "zweite Beobachtung"); err != nil {
+	if err := st.WriteNote(id, "zweite Beobachtung"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.LaufBeende(id, store.LaufErgebnis{
+	if err := st.EndLauf(id, store.LaufResult{
 		Status: "ok", SessionID: "ses_t", Summary: "Notiz abgelegt",
-		TokensIn: 2100, TokensOut: 360, KostenCent: 12,
+		TokensIn: 2100, TokensOut: 360, CostCent: 12,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -194,13 +194,13 @@ func TestDescribeLaufOhneSessionUndMitFehler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.LaufBeginne("pdf-einlagern", "watch", "kaputt.pdf")
+	id, err := st.StartLauf("pdf-einlagern", "watch", "kaputt.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.LaufBeende(id, store.LaufErgebnis{
-		Status: "fehler",
-		Fehler: "gang pdf-zu-markdown: exit 1\n(log: raeume/laderampe/work/…/gang.log)",
+	if err := st.EndLauf(id, store.LaufResult{
+		Status: "failed",
+		Error:  "gang pdf-zu-markdown: exit 1\n(log: raeume/laderampe/work/…/gang.log)",
 	}); err != nil {
 		t.Fatal(err)
 	}

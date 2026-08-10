@@ -73,7 +73,7 @@ func getLaeufe(root string, args []string, out, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	laeufe, err := st.LetzteLaeufe(*n)
+	laeufe, err := st.RecentLaeufe(*n)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -115,7 +115,7 @@ func oeffneLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, in
 		fmt.Fprintln(errw, err)
 		return nil, nil, 1
 	}
-	l, err := st.LaufNachID(id)
+	l, err := st.LaufByID(id)
 	if err != nil {
 		fmt.Fprintf(errw, "hasenbau: %v\n", err)
 		return st, nil, 1
@@ -128,22 +128,22 @@ func schreibeLaufTabelle(out io.Writer, laeufe []store.Lauf) {
 	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tGESTARTET\tDAUER\tKOSTEN\tSUMMARY")
 	for _, l := range laeufe {
 		summary := l.Summary
-		if l.Status == "fehler" && l.Fehler != "" {
-			summary = l.Fehler
+		if l.Status == "fehler" && l.Error != "" {
+			summary = l.Error
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			l.ID, l.Auftrag, l.Trigger, l.Status,
-			l.Gestartet.Local().Format("2006-01-02 15:04"),
-			laufDauer(l), kosten(l.KostenCent), kuerze(einzeilig(summary), 70))
+			l.Started.Local().Format("2006-01-02 15:04"),
+			laufDauer(l), kosten(l.CostCent), kuerze(einzeilig(summary), 70))
 	}
 	w.Flush()
 }
 
 func laufDauer(l store.Lauf) string {
-	if l.Beendet == nil {
+	if l.Ended == nil {
 		return "läuft"
 	}
-	return l.Beendet.Sub(l.Gestartet).Round(time.Second).String()
+	return l.Ended.Sub(l.Started).Round(time.Second).String()
 }
 
 // kosten zeigt kosten_cent so, wie es gemeint ist: Cent, und bei einem
@@ -273,12 +273,12 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 	for _, a := range auftraege {
 		s := stand[a.Name]
 		letzter := "—"
-		if s.LetzterLauf != nil {
-			letzter = s.LetzterLauf.Local().Format("2006-01-02 15:04")
+		if s.LastLauf != nil {
+			letzter = s.LastLauf.Local().Format("2006-01-02 15:04")
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\n",
 			a.Name, triggerKurz(a.Trigger), a.Hase,
-			len(a.Gaenge), len(a.Raeume), letzter, s.FehlerSerie)
+			len(a.Gaenge), len(a.Raeume), letzter, s.ErrorStreak)
 	}
 	w.Flush()
 	return 0
@@ -286,11 +286,11 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 
 // triggerKurz fasst den Trigger für eine Tabellenzelle zusammen.
 func triggerKurz(t auftrag.Trigger) string {
-	switch t.Art() {
+	switch t.Kind() {
 	case auftrag.TriggerCron:
 		return "cron " + t.Cron
-	case auftrag.TriggerManuell:
-		return "manuell"
+	case auftrag.TriggerManual:
+		return "manual"
 	default:
 		return "watch " + t.Watch
 	}

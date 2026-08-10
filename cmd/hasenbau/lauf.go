@@ -126,7 +126,7 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
-	if err := k.Runner.FuehreAus(k.Ctx, ziel, "manuell", input); err != nil {
+	if err := k.Runner.FuehreAus(k.Ctx, ziel, "manual", input); err != nil {
 		logger.Print(err)
 		return 1
 	}

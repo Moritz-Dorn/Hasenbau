@@ -15,13 +15,13 @@ raeume:
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
-  quarantaene: raeume/quarantaene/
+  quarantine: raeume/quarantaene/
 
-kontext:
-  - datei: $WORK/extrakt.md
-  - letzte_summaries: 3
+context:
+  - file: $WORK/extrakt.md
+  - last_summaries: 3
 
-nachher:
+after:
   - move: $INPUT -> raeume/archiv/
 ---
 

@@ -15,7 +15,7 @@ type fakeSummaries struct {
 	gefragt   int
 }
 
-func (f *fakeSummaries) LetzteSummaries(auftrag string, n int) ([]string, error) {
+func (f *fakeSummaries) RecentSummaries(auftrag string, n int) ([]string, error) {
 	f.gefragt = n
 	if n < len(f.summaries) {
 		return f.summaries[len(f.summaries)-n:], nil
@@ -26,9 +26,9 @@ func (f *fakeSummaries) LetzteSummaries(auftrag string, n int) ([]string, error)
 func TestBauePrompt(t *testing.T) {
 	a := testAuftrag()
 	a.Body = "Sortiere den Extrakt ein."
-	a.Kontext = []auftrag.Kontext{
-		{Datei: "$WORK/extrakt.md"},
-		{LetzteSummaries: 2},
+	a.Context = []auftrag.Context{
+		{File: "$WORK/extrakt.md"},
+		{LastSummaries: 2},
 	}
 	u := testUmgebung(t, a)
 	if err := os.WriteFile(filepath.Join(u.Bau, u.Work, "extrakt.md"), []byte("# Rechnung\nBetrag: 42€\n"), 0o644); err != nil {
@@ -62,14 +62,14 @@ func TestBauePrompt(t *testing.T) {
 		pos = i
 	}
 	if quelle.gefragt != 2 {
-		t.Errorf("LetzteSummaries mit n=%d statt 2 gefragt", quelle.gefragt)
+		t.Errorf("LastSummaries mit n=%d statt 2 gefragt", quelle.gefragt)
 	}
 }
 
 func TestBauePromptOhneVergangenheit(t *testing.T) {
 	a := testAuftrag()
 	a.Body = "Erster Lauf."
-	a.Kontext = []auftrag.Kontext{{LetzteSummaries: 3}}
+	a.Context = []auftrag.Context{{LastSummaries: 3}}
 	u := testUmgebung(t, a)
 
 	prompt, err := BauePrompt(u, a, &fakeSummaries{})
@@ -87,19 +87,19 @@ func TestBauePromptOhneVergangenheit(t *testing.T) {
 func TestBauePromptFehlendeDatei(t *testing.T) {
 	a := testAuftrag()
 	a.Body = "Body."
-	a.Kontext = []auftrag.Kontext{{Datei: "$WORK/extrakt.md"}}
+	a.Context = []auftrag.Context{{File: "$WORK/extrakt.md"}}
 	u := testUmgebung(t, a)
 
 	_, err := BauePrompt(u, a, &fakeSummaries{})
 	if err == nil || !strings.Contains(err.Error(), "extrakt.md fehlt") {
-		t.Errorf("fehlende Kontext-Datei: %v", err)
+		t.Errorf("fehlende Kontext-File: %v", err)
 	}
 }
 
 func TestBauePromptDateiAusserhalbDesBaus(t *testing.T) {
 	a := testAuftrag()
 	a.Body = "Body."
-	a.Kontext = []auftrag.Kontext{{Datei: "../geheim.txt"}}
+	a.Context = []auftrag.Context{{File: "../geheim.txt"}}
 	u := testUmgebung(t, a)
 
 	if _, err := BauePrompt(u, a, &fakeSummaries{}); err == nil {
@@ -109,14 +109,14 @@ func TestBauePromptDateiAusserhalbDesBaus(t *testing.T) {
 
 type fehlerQuelle struct{}
 
-func (fehlerQuelle) LetzteSummaries(string, int) ([]string, error) {
+func (fehlerQuelle) RecentSummaries(string, int) ([]string, error) {
 	return nil, fmt.Errorf("db kaputt")
 }
 
 func TestBauePromptSummaryFehler(t *testing.T) {
 	a := testAuftrag()
 	a.Body = "Body."
-	a.Kontext = []auftrag.Kontext{{LetzteSummaries: 1}}
+	a.Context = []auftrag.Context{{LastSummaries: 1}}
 	u := testUmgebung(t, a)
 
 	if _, err := BauePrompt(u, a, fehlerQuelle{}); err == nil || !strings.Contains(err.Error(), "db kaputt") {

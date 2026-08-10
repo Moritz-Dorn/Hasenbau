@@ -57,11 +57,11 @@ func TestGrabenFehlerpfade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.LaufBeginne("pdf-einlagern", "watch", "kaputt.pdf")
+	id, err := st.StartLauf("pdf-einlagern", "watch", "kaputt.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.LaufBeende(id, store.LaufErgebnis{Status: "fehler", Fehler: "gang kaputt"}); err != nil {
+	if err := st.EndLauf(id, store.LaufResult{Status: "failed", Error: "gang kaputt"}); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -92,17 +92,17 @@ func TestGrabenAusDerDBOhneServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.LaufBeginne("notiz-einlagern", "manuell", "")
+	id, err := st.StartLauf("notiz-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.LaufBeende(id, store.LaufErgebnis{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
+	if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
 		t.Fatal(err)
 	}
 	roh := []byte(`{"session_id":"ses_t","schritte":[` +
 		`{"art":"reasoning","rolle":"assistant","text":"Erst lesen."},` +
 		`{"art":"tool","rolle":"assistant","tool":"write","status":"completed","input":"{\"filePath\":\"raeume/lager/x.md\"}"}]}`)
-	if err := st.TraceSchreibe(id, "ses_t", roh); err != nil {
+	if err := st.WriteTrace(id, "ses_t", roh); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -156,7 +156,7 @@ func TestGetLaeufeUndStatus(t *testing.T) {
 
 // TestVerwaisteZeileWirdBeimStartAufgeraeumt bildet den Fall nach, für
 // den es das Kriterium gibt: der Daemon starb mitten im Lauf, seine
-// Zeile steht noch auf 'laeuft'. Der nächste Prozess, der selbst Läufe
+// Zeile steht noch auf 'running'. Der nächste Prozess, der selbst Läufe
 // anlegt, muss sie schließen — hier `lauf`, weil es dafür (anders als
 // `daemon`) keinen opencode-Server braucht.
 func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
@@ -182,8 +182,8 @@ func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`
-		INSERT INTO laeufe (auftrag, "trigger", gestartet, status, pid, pid_gestartet)
-		VALUES ('tagesbericht', 'cron', datetime('now','-1 hour'), 'laeuft', ?, datetime('now','-1 hour'))`,
+		INSERT INTO laeufe (auftrag, "trigger", started, status, pid, pid_started)
+		VALUES ('tagesbericht', 'cron', datetime('now','-1 hour'), 'running', ?, datetime('now','-1 hour'))`,
 		totePID); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
 	if strings.Contains(out.String(), "laeuft") {
 		t.Errorf("Status zählt immer noch einen laufenden Lauf: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "1 abgebrochen") {
+	if !strings.Contains(out.String(), "1 aborted") {
 		t.Errorf("abgebrochener Lauf fehlt im Status: %q", out.String())
 	}
 }
@@ -225,12 +225,12 @@ func seed(t *testing.T, dbFile string) {
 	}
 	defer db.Close()
 	if _, err := db.Exec(`
-		INSERT INTO laeufe (auftrag, "trigger", gestartet, beendet, status, summary)
+		INSERT INTO laeufe (auftrag, "trigger", started, ended, status, summary)
 		VALUES ('pdf-einlagern', 'watch', datetime('now','-2 minutes'), datetime('now'), 'ok', 'Rechnung einsortiert')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`
-		INSERT INTO auftrag_state (auftrag, letzter_lauf, letzter_ok, fehler_serie)
+		INSERT INTO auftrag_state (auftrag, last_lauf, last_ok, error_streak)
 		VALUES ('pdf-einlagern', datetime('now'), datetime('now'), 0)`); err != nil {
 		t.Fatal(err)
 	}

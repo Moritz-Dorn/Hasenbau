@@ -20,9 +20,9 @@ func testAuftrag(gaenge ...auftrag.Gang) *auftrag.Auftrag {
 		Trigger: auftrag.Trigger{Watch: "raeume/eingang/*.txt"},
 		Gaenge:  gaenge,
 		Raeume: map[string]string{
-			"input":       "raeume/eingang/",
-			"work":        "raeume/work/",
-			"quarantaene": "raeume/quarantaene/",
+			"input":      "raeume/eingang/",
+			"work":       "raeume/work/",
+			"quarantine": "raeume/quarantaene/",
 		},
 	}
 }
@@ -111,7 +111,7 @@ func TestGangFehlerBrichtAbUndQuarantaene(t *testing.T) {
 
 func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
 	a := testAuftrag(auftrag.Gang{Name: "kaputt", Run: "exit 1"})
-	delete(a.Raeume, "quarantaene")
+	delete(a.Raeume, "quarantine")
 	u := testUmgebung(t, a)
 
 	_, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
@@ -134,11 +134,11 @@ func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
 func TestManuellKeineQuarantaene(t *testing.T) {
 	a := &auftrag.Auftrag{
 		Name: "baumeister", Hase: "baumeister",
-		Trigger: auftrag.Trigger{Manuell: true},
+		Trigger: auftrag.Trigger{Manual: true},
 		Gaenge:  []auftrag.Gang{{Name: "kaputt", Run: "exit 1"}},
 		Raeume: map[string]string{
-			"work":        "raeume/work/",
-			"quarantaene": "raeume/quarantaene/",
+			"work":       "raeume/work/",
+			"quarantine": "raeume/quarantaene/",
 		},
 	}
 	root := t.TempDir()

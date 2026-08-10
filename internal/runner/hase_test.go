@@ -30,8 +30,8 @@ hase: testhase
 raeume:
   work: raeume/werkstatt/
   out:  raeume/lager/
-kontext:
-  - datei: $WORK/extrakt.md
+context:
+  - file: $WORK/extrakt.md
 ---
 Sortiere ein.
 `
@@ -147,7 +147,7 @@ func TestFuehreAusEndeUeberEventStream(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: logf,
 	}
-	if err := r.FuehreAus(ctx, a, "manuell", ""); err != nil {
+	if err := r.FuehreAus(ctx, a, "manual", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,19 +165,19 @@ func TestFuehreAusEndeUeberEventStream(t *testing.T) {
 	}
 
 	// laeufe-Zeile vollständig (Akzeptanzkriterium q4y).
-	laeufe, err := st.LetzteLaeufe(1)
+	laeufe, err := st.RecentLaeufe(1)
 	if err != nil || len(laeufe) != 1 {
 		t.Fatalf("laeufe: %v, %v", laeufe, err)
 	}
 	l := laeufe[0]
-	if l.Status != "ok" || l.SessionID != "ses_1" || l.Beendet == nil {
+	if l.Status != "ok" || l.SessionID != "ses_1" || l.Ended == nil {
 		t.Errorf("Lauf = %+v", l)
 	}
 	if l.Summary != "Alles einsortiert. Fertig." {
 		t.Errorf("Summary = %q", l.Summary)
 	}
-	if l.TokensIn != 120 || l.TokensOut != 30 || l.KostenCent != 2 {
-		t.Errorf("Tokens/Kosten = %d/%d/%d", l.TokensIn, l.TokensOut, l.KostenCent)
+	if l.TokensIn != 120 || l.TokensOut != 30 || l.CostCent != 2 {
+		t.Errorf("Tokens/Kosten = %d/%d/%d", l.TokensIn, l.TokensOut, l.CostCent)
 	}
 
 	// Tool-Call wurde strukturiert geloggt.
@@ -217,14 +217,14 @@ func TestFuehreAusSessionError(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: t.Logf,
 	}
-	err := r.FuehreAus(ctx, a, "manuell", "")
+	err := r.FuehreAus(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "UnknownError") {
 		t.Fatalf("erwartete session.error, bekam %v", err)
 	}
 
-	laeufe, _ := st.LetzteLaeufe(1)
+	laeufe, _ := st.RecentLaeufe(1)
 	l := laeufe[0]
-	if l.Status != "fehler" || !strings.Contains(l.Fehler, "UnknownError") || l.SessionID != "ses_1" {
+	if l.Status != "failed" || !strings.Contains(l.Error, "UnknownError") || l.SessionID != "ses_1" {
 		t.Errorf("Lauf = %+v", l)
 	}
 	// Fehlerfall: $WORK bleibt zur Nachforschung liegen (§6, Ablauf 7).
@@ -271,15 +271,15 @@ func TestFuehreAusPromptAbgelehnt(t *testing.T) {
 		HaseTimeout: time.Minute, Logf: t.Logf,
 	}
 	anfang := time.Now()
-	err := r.FuehreAus(ctx, a, "manuell", "")
+	err := r.FuehreAus(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "prompt") {
 		t.Fatalf("erwartete Prompt-Fehler, bekam %v", err)
 	}
 	if time.Since(anfang) > 10*time.Second {
 		t.Error("abgelehnter Prompt darf nicht auf den Timeout warten")
 	}
-	laeufe, _ := st.LetzteLaeufe(1)
-	if laeufe[0].Status != "fehler" {
+	laeufe, _ := st.RecentLaeufe(1)
+	if laeufe[0].Status != "failed" {
 		t.Errorf("Status = %q", laeufe[0].Status)
 	}
 }

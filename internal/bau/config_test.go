@@ -17,7 +17,7 @@ func schreibeConfig(t *testing.T, inhalt string) string {
 }
 
 func TestLadeConfigDefaults(t *testing.T) {
-	// Ohne Datei: Defaults, kein Fehler — ein Bau ohne Config ist
+	// Ohne File: Defaults, kein Fehler — ein Bau ohne Config ist
 	// benutzbar, nur eben ohne Baumeister.
 	c, err := LadeConfig(t.TempDir())
 	if err != nil {

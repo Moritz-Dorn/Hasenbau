@@ -7,20 +7,20 @@ import (
 func TestTraceSchreibenUndLesen(t *testing.T) {
 	s := neuerStore(t)
 
-	id, err := s.LaufBeginne("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
+	id, err := s.StartLauf("pdf-einlagern", "watch", "raeume/laderampe/sources/a.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, da, err := s.TraceLies(id); err != nil || da {
+	if _, da, err := s.ReadTrace(id); err != nil || da {
 		t.Errorf("vor dem Schreiben: da=%v, err=%v", da, err)
 	}
 
 	roh := []byte(`{"session_id":"ses_1","schritte":[{"art":"tool","tool":"write"}]}`)
-	if err := s.TraceSchreibe(id, "ses_1", roh); err != nil {
+	if err := s.WriteTrace(id, "ses_1", roh); err != nil {
 		t.Fatal(err)
 	}
-	gelesen, da, err := s.TraceLies(id)
+	gelesen, da, err := s.ReadTrace(id)
 	if err != nil || !da {
 		t.Fatalf("nach dem Schreiben: da=%v, err=%v", da, err)
 	}
@@ -31,10 +31,10 @@ func TestTraceSchreibenUndLesen(t *testing.T) {
 	// Nachtragen darf überschreiben — der Lazy-Backfill in `graben`
 	// fragt nicht erst.
 	neu := []byte(`{"session_id":"ses_1","schritte":[]}`)
-	if err := s.TraceSchreibe(id, "ses_1", neu); err != nil {
+	if err := s.WriteTrace(id, "ses_1", neu); err != nil {
 		t.Fatal(err)
 	}
-	gelesen, _, err = s.TraceLies(id)
+	gelesen, _, err = s.ReadTrace(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,22 +45,22 @@ func TestTraceSchreibenUndLesen(t *testing.T) {
 
 func TestTraceOhneSessionIDAbgelehnt(t *testing.T) {
 	s := neuerStore(t)
-	id, err := s.LaufBeginne("pdf-einlagern", "manuell", "")
+	id, err := s.StartLauf("pdf-einlagern", "manual", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.TraceSchreibe(id, "", []byte(`{}`)); err == nil {
+	if err := s.WriteTrace(id, "", []byte(`{}`)); err == nil {
 		t.Error("Trace ohne Session-ID muss ein Fehler sein")
 	}
 }
 
 func TestTraceUnbekannterLauf(t *testing.T) {
 	s := neuerStore(t)
-	if _, da, err := s.TraceLies(99); err != nil || da {
+	if _, da, err := s.ReadTrace(99); err != nil || da {
 		t.Errorf("unbekannter Lauf: da=%v, err=%v", da, err)
 	}
 	// Die Fremdschlüssel-Bedingung greift (foreign_keys ist an).
-	if err := s.TraceSchreibe(99, "ses_x", []byte(`{}`)); err == nil {
+	if err := s.WriteTrace(99, "ses_x", []byte(`{}`)); err == nil {
 		t.Error("Trace zu einem Lauf, den es nicht gibt, muss scheitern")
 	}
 }

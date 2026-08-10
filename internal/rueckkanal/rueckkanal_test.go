@@ -13,7 +13,7 @@ import (
 )
 
 // fakeStore steht für die Bau-Datenbank: aktiv ist der Lauf, den
-// AktiverLauf meldet, fehler das, was sie stattdessen zurückgibt.
+// ActiveLauf meldet, fehler das, was sie stattdessen zurückgibt.
 type fakeStore struct {
 	aktiv         *store.Lauf
 	fehler        error
@@ -22,14 +22,14 @@ type fakeStore struct {
 	schreibFehler error
 }
 
-func (f *fakeStore) AktiverLauf() (*store.Lauf, error) {
+func (f *fakeStore) ActiveLauf() (*store.Lauf, error) {
 	if f.fehler != nil {
 		return nil, f.fehler
 	}
 	return f.aktiv, nil
 }
 
-func (f *fakeStore) NotizSchreibe(lauf int64, text string) error {
+func (f *fakeStore) WriteNote(lauf int64, text string) error {
 	if f.schreibFehler != nil {
 		return f.schreibFehler
 	}
@@ -37,7 +37,7 @@ func (f *fakeStore) NotizSchreibe(lauf int64, text string) error {
 	return nil
 }
 
-func (f *fakeStore) SummarySchreibe(lauf int64, text string) error {
+func (f *fakeStore) WriteSummary(lauf int64, text string) error {
 	if f.schreibFehler != nil {
 		return f.schreibFehler
 	}
@@ -144,8 +144,8 @@ func TestOhneEindeutigenLaufWirdNichtsGeschrieben(t *testing.T) {
 		fehler  error
 		erwarte string
 	}{
-		{"kein Lauf", store.ErrKeinAktiverLauf, "kein Lauf aktiv"},
-		{"mehrdeutig", store.ErrMehrdeutig, "mehrere Läufe"},
+		{"kein Lauf", store.ErrNoActiveLauf, "kein Lauf aktiv"},
+		{"mehrdeutig", store.ErrAmbiguous, "mehrere Läufe"},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {

@@ -26,13 +26,13 @@ raeume:
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
-  quarantaene: raeume/quarantaene/
+  quarantine: raeume/quarantaene/
 
-kontext:
-  - datei: $WORK/extrakt.md
-  - letzte_summaries: 3
+context:
+  - file: $WORK/extrakt.md
+  - last_summaries: 3
 
-nachher:
+after:
   - move: $INPUT -> raeume/archiv/
 ---
 
@@ -66,14 +66,14 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	if a.Hase != "archivar" {
 		t.Errorf("Hase = %q", a.Hase)
 	}
-	if len(a.Raeume) != 5 || a.Raeume["out"] != "raeume/lager/" || a.Raeume["quarantaene"] != "raeume/quarantaene/" {
+	if len(a.Raeume) != 5 || a.Raeume["out"] != "raeume/lager/" || a.Raeume["quarantine"] != "raeume/quarantaene/" {
 		t.Errorf("Raeume = %+v", a.Raeume)
 	}
-	if len(a.Kontext) != 2 || a.Kontext[0].Datei != "$WORK/extrakt.md" || a.Kontext[1].LetzteSummaries != 3 {
-		t.Errorf("Kontext = %+v", a.Kontext)
+	if len(a.Context) != 2 || a.Context[0].File != "$WORK/extrakt.md" || a.Context[1].LastSummaries != 3 {
+		t.Errorf("Kontext = %+v", a.Context)
 	}
-	if len(a.Nachher) != 1 || a.Nachher[0] != (Nachher{Aktion: "move", Von: "$INPUT", Nach: "raeume/archiv/"}) {
-		t.Errorf("Nachher = %+v", a.Nachher)
+	if len(a.After) != 1 || a.After[0] != (After{Action: "move", From: "$INPUT", To: "raeume/archiv/"}) {
+		t.Errorf("Nachher = %+v", a.After)
 	}
 	if !strings.HasPrefix(a.Body, "Der extrahierte Text") || strings.HasPrefix(a.Body, "\n") {
 		t.Errorf("Body = %q", a.Body)
@@ -100,7 +100,7 @@ Guten Morgen.
 func TestParseManuellTrigger(t *testing.T) {
 	src := `---
 trigger:
-  manuell: true
+  manual: true
 
 gaenge:
   - name: trace-ziehen
@@ -112,8 +112,8 @@ raeume:
   work: raeume/baumeister/work/
   out:  gaenge/entwurf/
 
-kontext:
-  - datei: $WORK/trace.md
+context:
+  - file: $WORK/trace.md
 ---
 Verdichte den Trace.
 `
@@ -121,11 +121,11 @@ Verdichte den Trace.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !a.Trigger.Manuell || a.Trigger.Watch != "" || a.Trigger.Cron != "" {
+	if !a.Trigger.Manual || a.Trigger.Watch != "" || a.Trigger.Cron != "" {
 		t.Errorf("Trigger = %+v", a.Trigger)
 	}
-	if a.Trigger.Art() != TriggerManuell {
-		t.Errorf("Art() = %q, erwartet %q", a.Trigger.Art(), TriggerManuell)
+	if a.Trigger.Kind() != TriggerManual {
+		t.Errorf("Art() = %q, erwartet %q", a.Trigger.Kind(), TriggerManual)
 	}
 }
 
@@ -136,10 +136,10 @@ func TestTriggerArt(t *testing.T) {
 	}{
 		{Trigger{Watch: "raeume/x/*.pdf"}, TriggerWatch},
 		{Trigger{Cron: "0 7 * * *"}, TriggerCron},
-		{Trigger{Manuell: true}, TriggerManuell},
+		{Trigger{Manual: true}, TriggerManual},
 	}
 	for _, f := range faelle {
-		if got := f.t.Art(); got != f.art {
+		if got := f.t.Kind(); got != f.art {
 			t.Errorf("Art(%+v) = %q, erwartet %q", f.t, got, f.art)
 		}
 	}
@@ -174,18 +174,18 @@ func TestParseFehler(t *testing.T) {
 		{"watch absolut", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "watch: /tmp/*.pdf"), "nicht absolut"},
 		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$INPUT\" --out \"$WORK/extrakt.md\"\n", ""), "run fehlt"},
 		{"ungültige Dauer", ersetze(t, "timeout: 120s", "timeout: zwei Minuten"), "ungültige Dauer"},
-		{"kontext leer", ersetze(t, "- datei: $WORK/extrakt.md", "- {}"), "braucht datei oder letzte_summaries"},
-		{"kontext doppelt", ersetze(t, "- datei: $WORK/extrakt.md", "- {datei: x, letzte_summaries: 2}"), "schließen sich aus"},
-		{"summaries null", ersetze(t, "letzte_summaries: 3", "letzte_summaries: 0"), "muss > 0 sein"},
+		{"kontext leer", ersetze(t, "- file: $WORK/extrakt.md", "- {}"), "braucht file oder last_summaries"},
+		{"kontext doppelt", ersetze(t, "- file: $WORK/extrakt.md", "- {file: x, last_summaries: 2}"), "schließen sich aus"},
+		{"summaries null", ersetze(t, "last_summaries: 3", "last_summaries: 0"), "muss > 0 sein"},
 		{"nachher ohne Pfeil", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- move: $INPUT raeume/archiv/"), "VON -> NACH"},
 		{"nachher unbekannt", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- verbrenne: $INPUT"), "unbekannte Aktion"},
 		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "ungültiger Hasen-Name"},
-		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manuell: true"), "schließen sich aus"},
-		{"debounce bei manuell", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "manuell: true"), "debounce gilt nur für watch"},
+		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manual: true"), "schließen sich aus"},
+		{"debounce bei manuell", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "manual: true"), "debounce gilt nur für watch"},
 		// $INPUT eines manuell-Auftrags ist ein Argument, kein Pfad.
 		{"manuell mit $INPUT in nachher", ersetze(t,
 			"trigger:\n  watch: raeume/laderampe/sources/*.pdf\n  debounce: 5s",
-			"trigger:\n  manuell: true"), "$INPUT ist bei manuell-Triggern kein Pfad"},
+			"trigger:\n  manual: true"), "$INPUT ist bei manuell-Triggern kein Pfad"},
 	}
 
 	for _, f := range faelle {
@@ -213,13 +213,13 @@ func TestManuellLehntInputAlsPfadAb(t *testing.T) {
 trigger:
 ` + trigger + `
 hase: baumeister
-kontext:
-  - datei: $INPUT
+context:
+  - file: $INPUT
 ---
 Lies das.
 `)
 	}
-	_, err := Parse("baumeister", src("  manuell: true"))
+	_, err := Parse("baumeister", src("  manual: true"))
 	if err == nil || !strings.Contains(err.Error(), "$INPUT ist bei manuell-Triggern kein Pfad") {
 		t.Errorf("kontext datei $INPUT bei manuell: %v", err)
 	}

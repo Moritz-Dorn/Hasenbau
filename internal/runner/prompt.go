@@ -16,7 +16,7 @@ import (
 // SummaryQuelle liefert die letzten nicht-leeren Summaries eines
 // Auftrags, älteste zuerst. *store.Store erfüllt das Interface.
 type SummaryQuelle interface {
-	LetzteSummaries(auftrag string, n int) ([]string, error)
+	RecentSummaries(auftrag string, n int) ([]string, error)
 }
 
 // BauePrompt baut den Prompt-Text. Fehlende Kontext-Dateien sind ein
@@ -25,13 +25,13 @@ func BauePrompt(u *lauf.Umgebung, a *auftrag.Auftrag, quelle SummaryQuelle) (str
 	var b strings.Builder
 	b.WriteString(a.Body)
 
-	for i, k := range a.Kontext {
-		if k.Datei != "" {
-			pfad, err := u.Ersetze(k.Datei)
+	for i, k := range a.Context {
+		if k.File != "" {
+			pfad, err := u.Ersetze(k.File)
 			if err != nil {
 				return "", fmt.Errorf("kontext %d: %w", i+1, err)
 			}
-			if err := auftrag.BauRelativ(pfad); err != nil {
+			if err := auftrag.BauRelative(pfad); err != nil {
 				return "", fmt.Errorf("kontext %d: %w", i+1, err)
 			}
 			inhalt, err := os.ReadFile(filepath.Join(u.Bau, pfad))
@@ -42,7 +42,7 @@ func BauePrompt(u *lauf.Umgebung, a *auftrag.Auftrag, quelle SummaryQuelle) (str
 			continue
 		}
 
-		summaries, err := quelle.LetzteSummaries(a.Name, k.LetzteSummaries)
+		summaries, err := quelle.RecentSummaries(a.Name, k.LastSummaries)
 		if err != nil {
 			return "", fmt.Errorf("kontext %d: %w", i+1, err)
 		}

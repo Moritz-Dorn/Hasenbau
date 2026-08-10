@@ -43,17 +43,17 @@ func TestBaumeisterGangZiehtTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := st.LaufBeginne("notiz-einlagern", "watch", "raeume/laderampe/sources/notiz.txt")
+	id, err := st.StartLauf("notiz-einlagern", "watch", "raeume/laderampe/sources/notiz.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.LaufBeende(id, store.LaufErgebnis{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
+	if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
 		t.Fatal(err)
 	}
 	roh := []byte(`{"session_id":"ses_t","schritte":[` +
 		`{"art":"tool","rolle":"assistant","tool":"read","status":"completed",` +
 		`"input":"{\"filePath\":\"raeume/laderampe/sources/notiz.txt\"}"}]}`)
-	if err := st.TraceSchreibe(id, "ses_t", roh); err != nil {
+	if err := st.WriteTrace(id, "ses_t", roh); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -99,16 +99,16 @@ func TestZielLauf(t *testing.T) {
 	defer st.Close()
 
 	// Ein Lauf ohne Session (vor dem Hasen gescheitert) und zwei mit.
-	ohne, _ := st.LaufBeginne("pdf-einlagern", "watch", "a.pdf")
-	if err := st.LaufBeende(ohne, store.LaufErgebnis{Status: "fehler", Fehler: "gang kaputt"}); err != nil {
+	ohne, _ := st.StartLauf("pdf-einlagern", "watch", "a.pdf")
+	if err := st.EndLauf(ohne, store.LaufResult{Status: "failed", Error: "gang kaputt"}); err != nil {
 		t.Fatal(err)
 	}
-	alt, _ := st.LaufBeginne("pdf-einlagern", "watch", "b.pdf")
-	if err := st.LaufBeende(alt, store.LaufErgebnis{Status: "ok", SessionID: "ses_alt"}); err != nil {
+	alt, _ := st.StartLauf("pdf-einlagern", "watch", "b.pdf")
+	if err := st.EndLauf(alt, store.LaufResult{Status: "ok", SessionID: "ses_alt"}); err != nil {
 		t.Fatal(err)
 	}
-	neu, _ := st.LaufBeginne("pdf-einlagern", "watch", "c.pdf")
-	if err := st.LaufBeende(neu, store.LaufErgebnis{Status: "ok", SessionID: "ses_neu"}); err != nil {
+	neu, _ := st.StartLauf("pdf-einlagern", "watch", "c.pdf")
+	if err := st.EndLauf(neu, store.LaufResult{Status: "ok", SessionID: "ses_neu"}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -40,10 +40,10 @@ type configDaten struct {
 
 var logLevel = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 
-// namensMuster gilt für Auftrags- und Hasen-Namen (§6). Hier dupliziert
+// namePattern gilt für Auftrags- und Hasen-Namen (§6). Hier dupliziert
 // statt importiert: internal/auftrag hängt an dieser Config nicht, und
 // umgekehrt soll bau nicht das halbe Auftragsformat hereinziehen.
-var namensMuster = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // LadeConfig liest <root>/hasenbau.yaml. Fehlt die Datei, gelten die
 // Defaults — sie wird von `hasenbau init` angelegt, und ihr Fehlen ist
@@ -73,7 +73,7 @@ func LadeConfig(root string) (*Config, error) {
 		c.LogLevel = *d.LogLevel
 	}
 	if d.Baumeister != nil {
-		if !namensMuster.MatchString(*d.Baumeister) {
+		if !namePattern.MatchString(*d.Baumeister) {
 			return nil, fmt.Errorf("bau: %s: baumeister %q ist kein gültiger Auftrags-Name (erlaubt: Buchstaben, Ziffern, . _ -)", ConfigDatei, *d.Baumeister)
 		}
 		c.Baumeister = *d.Baumeister

@@ -219,18 +219,18 @@ func TestGeneriereLehntFalschesTemplateAb(t *testing.T) {
 
 func TestKenntHasenbauBindetMitgeliefertesWissenEin(t *testing.T) {
 	root := t.TempDir()
-	schreibeTemplate(t, root, "baumeister", "---\nkennt_hasenbau: true\n---\nDu bist der Baumeister.\n")
+	schreibeTemplate(t, root, "baumeister", "---\nknows_hasenbau: true\n---\nDu bist der Baumeister.\n")
 
 	tpl, err := Lade(root, "baumeister")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tpl.Wissen) != 1 || tpl.Wissen[0].Herkunft != "Der Hasenbau" {
-		t.Fatalf("Wissen = %+v", tpl.Wissen)
+	if len(tpl.Knowledge) != 1 || tpl.Knowledge[0].Origin != "Der Hasenbau" {
+		t.Fatalf("Wissen = %+v", tpl.Knowledge)
 	}
 	// Der Text kommt aus dem Binary — im Bau liegt keine Datei dafür.
-	if !strings.Contains(tpl.Wissen[0].Text, "Bau") || len(tpl.Wissen[0].Text) < 500 {
-		t.Errorf("mitgeliefertes Wissen sieht leer aus: %q", kurzText(tpl.Wissen[0].Text))
+	if !strings.Contains(tpl.Knowledge[0].Text, "Bau") || len(tpl.Knowledge[0].Text) < 500 {
+		t.Errorf("mitgeliefertes Wissen sieht leer aus: %q", kurzText(tpl.Knowledge[0].Text))
 	}
 
 	a := beispielAuftrag(t)
@@ -260,8 +260,8 @@ func TestOhneWissenFelderKeinZusatz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tpl.Wissen) != 0 {
-		t.Errorf("Wissen ohne Feld: %+v", tpl.Wissen)
+	if len(tpl.Knowledge) != 0 {
+		t.Errorf("Wissen ohne Feld: %+v", tpl.Knowledge)
 	}
 	roh, err := Generiere(beispielAuftrag(t), tpl)
 	if err != nil {
@@ -287,7 +287,7 @@ func TestWissenAusEigenenDateien(t *testing.T) {
 		}
 	}
 	schreibeTemplate(t, root, "archivar",
-		"---\nwissen:\n  - doku/haus.md\n  - doku/[ab].md\n---\nSortiere ein.\n")
+		"---\nknowledge:\n  - doku/haus.md\n  - doku/[ab].md\n---\nSortiere ein.\n")
 
 	tpl, err := Lade(root, "archivar")
 	if err != nil {
@@ -296,8 +296,8 @@ func TestWissenAusEigenenDateien(t *testing.T) {
 	// Reihenfolge: die Einträge in Template-Reihenfolge, Glob-Treffer
 	// sortiert — sonst wechselt der generierte Agent bei jedem Lauf.
 	var herkunft []string
-	for _, w := range tpl.Wissen {
-		herkunft = append(herkunft, w.Herkunft)
+	for _, w := range tpl.Knowledge {
+		herkunft = append(herkunft, w.Origin)
 	}
 	if strings.Join(herkunft, ",") != "doku/haus.md,doku/a.md,doku/b.md" {
 		t.Errorf("Herkunft = %v", herkunft)
@@ -327,7 +327,7 @@ func TestWissenFehlerpfade(t *testing.T) {
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {
-			schreibeTemplate(t, root, "archivar", "---\nwissen:\n"+f.wissen+"\n---\nSortiere ein.\n")
+			schreibeTemplate(t, root, "archivar", "---\nknowledge:\n"+f.wissen+"\n---\nSortiere ein.\n")
 			_, err := Lade(root, "archivar")
 			if err == nil {
 				t.Fatal("Fehler erwartet")

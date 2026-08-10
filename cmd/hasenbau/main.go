@@ -190,14 +190,14 @@ func rueckkanalEintragen(root string, logf func(string, ...any)) error {
 // status` für immer falsch und der Rückkanal findet keinen eindeutigen
 // aktiven Lauf mehr (PLAN.md §5, §11.7).
 func laeufeAufraeumen(st *store.Store, logf func(string, ...any)) error {
-	leichen, err := st.LaeufeAufraeumen()
+	leichen, err := st.CleanupLaeufe()
 	if err != nil {
 		return err
 	}
 	for _, l := range leichen {
 		logf("Lauf %d (%s, %s, seit %s) aufgeräumt: %s",
 			l.ID, l.Auftrag, l.Trigger,
-			l.Gestartet.Local().Format("2006-01-02 15:04"), l.Fehler)
+			l.Started.Local().Format("2006-01-02 15:04"), l.Error)
 	}
 	return nil
 }
@@ -359,7 +359,7 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	l, err := st.LaufNachID(id)
+	l, err := st.LaufByID(id)
 	if err != nil {
 		fmt.Fprintf(errw, "hasenbau graben: %v\n", err)
 		return 1
@@ -387,7 +387,7 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	fmt.Fprintf(out, "# Trace Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
 	// Notizen aus dem Rückkanal zuerst: was der Hase selbst für
 	// erwähnenswert hielt, ordnet den Trace darunter ein.
-	notizen, err := st.Notizen(l.ID)
+	notizen, err := st.Notes(l.ID)
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -395,7 +395,7 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 	if len(notizen) > 0 {
 		fmt.Fprint(out, "## Notizen des Hasen\n\n")
 		for _, n := range notizen {
-			fmt.Fprintf(out, "- %s — %s\n", n.Geschrieben.Local().Format("15:04:05"), n.Text)
+			fmt.Fprintf(out, "- %s — %s\n", n.Written.Local().Format("15:04:05"), n.Text)
 		}
 		fmt.Fprintln(out)
 	}
@@ -409,7 +409,7 @@ func cmdGraben(root string, args []string, out, errw io.Writer) int {
 // Zeile, danach geht es ohne Server.
 func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *log.Logger) (*opencode.Trace, error) {
 	if !live {
-		roh, da, err := st.TraceLies(l.ID)
+		roh, da, err := st.ReadTrace(l.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -439,7 +439,7 @@ func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *l
 	}
 	if !live {
 		if roh, err := json.Marshal(trace); err == nil {
-			if err := st.TraceSchreibe(l.ID, l.SessionID, roh); err != nil {
+			if err := st.WriteTrace(l.ID, l.SessionID, roh); err != nil {
 				logger.Printf("Trace von Lauf %d nicht nachgetragen: %v", l.ID, err)
 			}
 		}
@@ -525,7 +525,7 @@ func cmdStatus(bau string, out, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	counts, err := st.StatusZaehler()
+	counts, err := st.StatusCounts()
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -542,7 +542,7 @@ func cmdStatus(bau string, out, errw io.Writer) int {
 		total += n
 	}
 	fmt.Fprintf(out, "Läufe: %d gesamt", total)
-	for _, s := range []string{"laeuft", "ok", "fehler", "abgebrochen"} {
+	for _, s := range []string{"running", "ok", "failed", "aborted"} {
 		if counts[s] > 0 {
 			fmt.Fprintf(out, ", %d %s", counts[s], s)
 		}
@@ -563,7 +563,7 @@ func cmdStatus(bau string, out, errw io.Writer) int {
 	}
 	for _, a := range states {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\n",
-			a.Auftrag, fmtTime(a.LetzterLauf), fmtTime(a.LetzterOk), a.FehlerSerie)
+			a.Auftrag, fmtTime(a.LastLauf), fmtTime(a.LastOk), a.ErrorStreak)
 	}
 	w.Flush()
 	return 0

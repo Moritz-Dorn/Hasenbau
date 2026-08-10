@@ -3,7 +3,7 @@
 # keine PDFs, sondern Läufe. Gestartet wird er auf Zuruf:
 #   hasenbau baumeister <lauf-id|auftrag>
 trigger:
-  manuell: true
+  manual: true
 
 gaenge:
   # $INPUT ist hier die Lauf-ID, kein Pfad. Die run-Zeile muss in
@@ -22,8 +22,8 @@ raeume:
   # damit kein Lauf einen benutzten Gang überschreiben kann.
   out: gaenge/entwurf/
 
-kontext:
-  - datei: $WORK/trace.md
+context:
+  - file: $WORK/trace.md
 ---
 
 Im Kontext unten steht der Trace eines einzelnen Laufs: was der Hase

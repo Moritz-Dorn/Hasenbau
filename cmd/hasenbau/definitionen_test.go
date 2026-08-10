@@ -40,10 +40,10 @@ raeume:
   input: raeume/laderampe/sources/
   work:  raeume/laderampe/work/
   out:   raeume/lager/
-kontext:
-  - datei: $WORK/extrakt.md
-  - letzte_summaries: 3
-nachher:
+context:
+  - file: $WORK/extrakt.md
+  - last_summaries: 3
+after:
   - move: $INPUT -> raeume/archiv/
 ---
 Fasse zusammen.
@@ -181,11 +181,11 @@ func TestDescribeHaseZeigtEffektivePermissions(t *testing.T) {
 func TestSchreibRaeumeStimmtMitGenerierungUeberein(t *testing.T) {
 	rollen := map[string]string{
 		"work": "raeume/w/", "out": "raeume/o/",
-		"input": "raeume/i/", "done": "raeume/d/", "quarantaene": "raeume/q/",
+		"input": "raeume/i/", "done": "raeume/d/", "quarantine": "raeume/q/",
 	}
 	a := &auftrag.Auftrag{
 		Name: "test", Hase: "h", Raeume: rollen,
-		Trigger: auftrag.Trigger{Manuell: true}, Body: "x",
+		Trigger: auftrag.Trigger{Manual: true}, Body: "x",
 	}
 	t.Setenv("HOME", t.TempDir()) // hase.Generiere fasst nichts an, aber sicher ist sicher
 	roh, err := hase.Generiere(a, &hase.Template{Name: "h", Prompt: "x"})

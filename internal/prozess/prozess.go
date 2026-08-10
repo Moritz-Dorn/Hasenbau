@@ -1,5 +1,5 @@
 // Package prozess beantwortet die eine Frage, die eine verwaiste
-// 'laeuft'-Zeile von einem lebenden Lauf trennt: Läuft der Prozess, der
+// 'running'-Zeile von einem lebenden Lauf trennt: Läuft der Prozess, der
 // diesen Lauf hält, überhaupt noch? (PLAN.md §5, Hasenbau-c6i)
 //
 // Die PID allein reicht dafür nicht — sie wird recycelt, und dann hielte

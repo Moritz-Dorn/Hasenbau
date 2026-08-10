@@ -30,9 +30,9 @@ import (
 // Store; *store.Store erfüllt das Interface.
 type LaufStore interface {
 	SummaryQuelle
-	LaufBeginne(auftrag, trigger, ausloeser string) (int64, error)
-	LaufBeende(id int64, e store.LaufErgebnis) error
-	TraceSchreibe(lauf int64, sessionID string, roh []byte) error
+	StartLauf(auftrag, trigger, ausloeser string) (int64, error)
+	EndLauf(id int64, e store.LaufResult) error
+	WriteTrace(lauf int64, sessionID string, roh []byte) error
 }
 
 // traceMax ist die Kappungsgrenze pro Feld für den abgelegten Trace.
@@ -93,7 +93,7 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 		logf = func(string, ...any) {}
 	}
 
-	id, err := r.Store.LaufBeginne(a.Name, trigger, input)
+	id, err := r.Store.StartLauf(a.Name, trigger, input)
 	if err != nil {
 		return err
 	}
@@ -104,14 +104,14 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 	// dahin angefallen sind (Tokens kosten auch bei Fehlläufen), gehen
 	// mit in die Zeile. $WORK bleibt liegen (§6, Ablauf 7).
 	scheitere := func(erg haseErgebnis, grund error) error {
-		erg.Status = "fehler"
+		erg.Status = "failed"
 		if ctx.Err() != nil {
-			erg.Status = "abgebrochen"
+			erg.Status = "aborted"
 		}
 		e := erg.alsErgebnis()
-		e.Fehler = grund.Error()
+		e.Error = grund.Error()
 		r.legeTraceAb(id, erg, logf)
-		if err := r.Store.LaufBeende(id, e); err != nil {
+		if err := r.Store.EndLauf(id, e); err != nil {
 			logf("lauf %s: %v", laufID, err)
 		}
 		logf("lauf %s: %s — %v", laufID, e.Status, grund)
@@ -145,7 +145,7 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 	}
 	erg.Status = "ok"
 	r.legeTraceAb(id, erg, logf)
-	if err := r.Store.LaufBeende(id, erg.alsErgebnis()); err != nil {
+	if err := r.Store.EndLauf(id, erg.alsErgebnis()); err != nil {
 		return err
 	}
 	logf("lauf %s: ok — %s", laufID, erg.Summary)
@@ -154,23 +154,23 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 
 // haseErgebnis sammelt, was der LLM-Schritt über sich weiß.
 type haseErgebnis struct {
-	Status     string
-	SessionID  string
-	Summary    string
-	TokensIn   int64
-	TokensOut  int64
-	KostenCent int64
-	Trace      *opencode.Trace // nil, wenn der Lauf vor der Auswertung scheiterte
+	Status    string
+	SessionID string
+	Summary   string
+	TokensIn  int64
+	TokensOut int64
+	CostCent  int64
+	Trace     *opencode.Trace // nil, wenn der Lauf vor der Auswertung scheiterte
 }
 
-func (h haseErgebnis) alsErgebnis() store.LaufErgebnis {
-	return store.LaufErgebnis{
-		Status:     h.Status,
-		SessionID:  h.SessionID,
-		Summary:    h.Summary,
-		TokensIn:   h.TokensIn,
-		TokensOut:  h.TokensOut,
-		KostenCent: h.KostenCent,
+func (h haseErgebnis) alsErgebnis() store.LaufResult {
+	return store.LaufResult{
+		Status:    h.Status,
+		SessionID: h.SessionID,
+		Summary:   h.Summary,
+		TokensIn:  h.TokensIn,
+		TokensOut: h.TokensOut,
+		CostCent:  h.CostCent,
 	}
 }
 
@@ -260,7 +260,7 @@ warten:
 	if err != nil {
 		return erg, fmt.Errorf("session %s auswerten: %w", sess.ID, err)
 	}
-	erg.Summary, erg.TokensIn, erg.TokensOut, erg.KostenCent = werteAus(*msgs)
+	erg.Summary, erg.TokensIn, erg.TokensOut, erg.CostCent = werteAus(*msgs)
 	erg.Trace = opencode.TraceAus(sess.ID, *msgs).Gekuerzt(traceMax)
 	return erg, nil
 }
@@ -274,7 +274,7 @@ func (r *Runner) legeTraceAb(id int64, erg haseErgebnis, logf func(string, ...an
 	}
 	roh, err := json.Marshal(erg.Trace)
 	if err == nil {
-		err = r.Store.TraceSchreibe(id, erg.SessionID, roh)
+		err = r.Store.WriteTrace(id, erg.SessionID, roh)
 	}
 	if err != nil {
 		logf("lauf %d: Trace nicht abgelegt: %v", id, err)

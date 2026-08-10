@@ -29,17 +29,17 @@ const DefaultDebounce = 2 * time.Second
 // gesehen-Tabelle (Backstop, §7).
 type AusfuehrFunc func(a *auftrag.Auftrag, input string) error
 
-// GesehenStore ist der Idempotenz-Backstop; *store.Store erfüllt ihn.
-type GesehenStore interface {
-	IstGesehen(auftrag, hash string) (bool, error)
-	MerkeGesehen(auftrag, hash string) error
+// SeenStore ist der Idempotenz-Backstop; *store.Store erfüllt ihn.
+type SeenStore interface {
+	IsSeen(auftrag, hash string) (bool, error)
+	MarkSeen(auftrag, hash string) error
 }
 
 type Watcher struct {
 	root       string
 	auftraege  []*auftrag.Auftrag // nur watch-Trigger
 	sperre     *lauf.Sperre
-	gesehen    GesehenStore
+	gesehen    SeenStore
 	ausfuehren AusfuehrFunc
 	logf       func(format string, args ...any)
 
@@ -52,7 +52,7 @@ type Watcher struct {
 // New baut den Watcher für alle Aufträge mit watch-Trigger. Die
 // Watch-Verzeichnisse (= Verzeichnisanteil des Globs) werden angelegt —
 // sie sind die Eingangs-Räume der Aufträge.
-func New(root string, auftraege []*auftrag.Auftrag, sperre *lauf.Sperre, gesehen GesehenStore, ausfuehren AusfuehrFunc, logf func(format string, args ...any)) (*Watcher, error) {
+func New(root string, auftraege []*auftrag.Auftrag, sperre *lauf.Sperre, gesehen SeenStore, ausfuehren AusfuehrFunc, logf func(format string, args ...any)) (*Watcher, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -187,7 +187,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 	if err != nil {
 		return fmt.Errorf("hash: %w", err)
 	}
-	schon, err := w.gesehen.IstGesehen(a.Name, hash)
+	schon, err := w.gesehen.IsSeen(a.Name, hash)
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 	if err := w.ausfuehren(a, rel); err != nil {
 		return err
 	}
-	return w.gesehen.MerkeGesehen(a.Name, hash)
+	return w.gesehen.MarkSeen(a.Name, hash)
 }
 
 // warteAufStabileGroesse wartet, bis die Datei über zwei Ticks dieselbe

@@ -13,19 +13,19 @@ import (
 )
 
 type fakeGesehen struct {
-	mu   sync.Mutex
+	mu    sync.Mutex
 	menge map[string]bool
 }
 
 func neuerFakeGesehen() *fakeGesehen { return &fakeGesehen{menge: map[string]bool{}} }
 
-func (f *fakeGesehen) IstGesehen(auftrag, hash string) (bool, error) {
+func (f *fakeGesehen) IsSeen(auftrag, hash string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.menge[auftrag+"/"+hash], nil
 }
 
-func (f *fakeGesehen) MerkeGesehen(auftrag, hash string) error {
+func (f *fakeGesehen) MarkSeen(auftrag, hash string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.menge[auftrag+"/"+hash] = true
@@ -46,7 +46,7 @@ func watchAuftrag(debounce time.Duration) *auftrag.Auftrag {
 }
 
 // starte baut einen Watcher mit Aufruf-Kanal und optionalem Verhalten.
-func starte(t *testing.T, root string, a *auftrag.Auftrag, gesehen GesehenStore, verhalten func(input string) error) (<-chan aufruf, func()) {
+func starte(t *testing.T, root string, a *auftrag.Auftrag, gesehen SeenStore, verhalten func(input string) error) (<-chan aufruf, func()) {
 	t.Helper()
 	aufrufe := make(chan aufruf, 16)
 	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NeueSperre(), gesehen,
@@ -189,7 +189,7 @@ func TestFehlgeschlagenerLaufLandetNichtInGesehen(t *testing.T) {
 	}
 	// Erster Versuch scheitert ⇒ kein Aufruf-Event, kein gesehen-Eintrag.
 	erwarteKeinenAufruf(t, aufrufe, 500*time.Millisecond)
-	if ok, _ := gesehen.IstGesehen("pdf-einlagern", "egal"); ok {
+	if ok, _ := gesehen.IsSeen("pdf-einlagern", "egal"); ok {
 		t.Fatal("gesehen trotz Fehlschlag")
 	}
 

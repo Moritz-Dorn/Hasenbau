@@ -19,36 +19,36 @@ import (
 // Pfade werden substituiert und müssen danach im Bau bleiben — $BAU
 // (absolut) ist hier deshalb tabu. Der erste Fehler bricht ab.
 func FuehreNachherAus(u *lauf.Umgebung, a *auftrag.Auftrag) error {
-	for i, n := range a.Nachher {
+	for i, n := range a.After {
 		if err := fuehreSchrittAus(u, n); err != nil {
-			return fmt.Errorf("nachher %d (%s): %w", i+1, n.Aktion, err)
+			return fmt.Errorf("nachher %d (%s): %w", i+1, n.Action, err)
 		}
 	}
 	return nil
 }
 
-func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.Nachher) error {
-	von, err := substituierterBauPfad(u, n.Von)
+func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.After) error {
+	von, err := substituierterBauPfad(u, n.From)
 	if err != nil {
 		return err
 	}
 
-	switch n.Aktion {
+	switch n.Action {
 	case "delete":
 		if err := os.Remove(filepath.Join(u.Bau, von)); err != nil {
 			return fmt.Errorf("delete %s: %w", von, err)
 		}
 		return nil
 	case "move", "copy":
-		nach, err := substituierterBauPfad(u, n.Nach)
+		nach, err := substituierterBauPfad(u, n.To)
 		if err != nil {
 			return err
 		}
-		ziel, err := zielPfad(u.Bau, von, nach, n.Nach)
+		ziel, err := zielPfad(u.Bau, von, nach, n.To)
 		if err != nil {
 			return err
 		}
-		if n.Aktion == "move" {
+		if n.Action == "move" {
 			if err := os.Rename(filepath.Join(u.Bau, von), filepath.Join(u.Bau, ziel)); err != nil {
 				return fmt.Errorf("move %s -> %s: %w", von, ziel, err)
 			}
@@ -60,7 +60,7 @@ func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.Nachher) error {
 		return nil
 	default:
 		// Parse lässt nur move/copy/delete durch — das hier wäre ein Bug.
-		return fmt.Errorf("unbekannte Aktion %q", n.Aktion)
+		return fmt.Errorf("unbekannte Aktion %q", n.Action)
 	}
 }
 
@@ -71,7 +71,7 @@ func substituierterBauPfad(u *lauf.Umgebung, roh string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := auftrag.BauRelativ(pfad); err != nil {
+	if err := auftrag.BauRelative(pfad); err != nil {
 		return "", err
 	}
 	return pfad, nil
