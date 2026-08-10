@@ -75,6 +75,12 @@ und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
 `hasenbau graben`. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er beim Daemon-Start selbst.
 
+Stirbt der Daemon mitten in einem Lauf, bleibt dessen Zeile auf
+`laeuft` stehen. `hasenbau daemon` und `hasenbau lauf` räumen deshalb
+beim Start die Läufe ab, deren Prozess nicht mehr lebt — sie werden als
+`abgebrochen` mit Grund geschlossen. Ein gleichzeitig laufender zweiter
+Hasenbau-Prozess bleibt unangetastet; im Zweifel wird nichts abgeräumt.
+
 Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
 die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,
 `options.baseURL`) gehört handgepflegt in

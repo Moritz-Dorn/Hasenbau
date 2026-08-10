@@ -225,7 +225,9 @@ CREATE TABLE laeufe (
   fehler        TEXT,
   tokens_in     INTEGER,
   tokens_out    INTEGER,
-  kosten_cent   INTEGER
+  kosten_cent   INTEGER,
+  pid           INTEGER,           -- Wirt: der Prozess, der den Lauf hält
+  pid_gestartet TIMESTAMP          -- dessen Startzeit (gegen PID-Recycling)
 );
 CREATE INDEX idx_laeufe_auftrag ON laeufe(auftrag, gestartet DESC);
 
@@ -252,6 +254,25 @@ sie am Ende selbst über den Rückkanal (§8, Phase 2); ruft er das Tool
 nicht auf, extrahiert der Runner sie als Fallback aus der letzten
 Assistant-Message. Die Ein-Zeilen-Invariante hält der Store, damit sie
 für beide Wege gilt.
+
+`pid`/`pid_gestartet` tragen den **Wirt** eines Laufs: den Prozess, der
+ihn hält. Stirbt der hart (SIGKILL), bliebe seine Zeile sonst für immer
+auf `status='laeuft'` — `hasenbau status` zählt dann falsch, und der
+Rückkanal findet keinen eindeutigen aktiven Lauf mehr (§11.7). „Beim
+Start alles auf `laeuft` als abgebrochen markieren" wäre zu grob: ein
+paralleles `hasenbau lauf` ist ausdrücklich erlaubt (eigener Server,
+geteilte DB im WAL-Modus) und würde mit abgeräumt. Also entscheidet der
+Wirt — die PID allein reicht nicht, sie wird recycelt, erst mit der
+Startzeit ist eine Prozess-Inkarnation identifiziert (`/proc/<pid>/stat`
+Feld 22 plus `btime`; ein Zombie zählt als tot). Jeder Prozess, der
+selbst Läufe anlegt (`daemon`, `lauf`), räumt beim Start die Zeilen ab,
+deren Wirt nachweislich nicht mehr lebt: Status `abgebrochen`, Grund in
+`fehler`, `beendet` = Zeitpunkt des Aufräumens (der Todeszeitpunkt ist
+nicht bekannt). Im Zweifel wird nichts abgeräumt — eine verwaiste Zeile
+ist ärgerlich, ein abgeräumter lebender Lauf ist Datenverlust. Auf
+Plattformen ohne `/proc` gibt es kein Kriterium; dort bleibt es beim
+Zweifel. Unabhängig davon zählen tote Wirte für den Rückkanal nicht als
+aktiver Lauf, auch bevor jemand aufgeräumt hat (Hasenbau-c6i).
 
 Dazu kommt eine vierte Tabelle für den Rückkanal — die Summary ist eine
 pro Lauf und steht deshalb in `laeufe`, Notizen sind beliebig viele:
@@ -732,9 +753,11 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
      geht dabei nicht verloren: der Fallback (letzte Assistant-Message)
      trägt sie beim Lauf-Ende ein.
    - **Bekannte Grenze:** Laufen zwei Aufträge gleichzeitig (cron +
-     watch), ist der Rückkanal für beide vorübergehend zu. Dasselbe
-     gilt nach einem Daemon-Absturz, solange verwaiste
-     `laeuft`-Zeilen in der DB stehen (Hasenbau-c6i). Verworfene
+     watch), ist der Rückkanal für beide vorübergehend zu. Nach einem
+     Daemon-Absturz gilt das **nicht** mehr: Zeilen, deren Wirt tot
+     ist, zählen nicht als aktiver Lauf, und beim nächsten Start
+     werden sie abgeräumt (§5, erledigt 2026-08-10, Hasenbau-c6i).
+     Verworfene
      Alternativen: ein MCP-Eintrag pro Auftrag (exakt, aber der Daemon
      müsste die user-eigene `opencode.json` pro Auftrag pflegen, N
      Subprozesse, N×2 Werkzeuge in jeder Werkzeugliste plus
