@@ -18,17 +18,28 @@ import (
 // und die Permission-Patterns der Hasen ankern ebenfalls dort.
 type Umgebung struct {
 	Bau    string            // absoluter Bau-Root ($BAU)
-	Input  string            // auslösende Datei ($INPUT), leer bei cron
+	Input  string            // Auslöser ($INPUT): auslösende Datei bei watch, freies Argument bei manuell
 	Work   string            // Scratch dieses Laufs ($WORK), leer ohne work-Raum
 	Raeume map[string]string // Rolle → Pfad ($RAUM_<rolle>)
+
+	// TriggerArt ist die Art des Auftrags (auftrag.TriggerWatch|Cron|
+	// Manuell), nicht der Trigger der laeufe-Zeile. Nur bei watch ist
+	// Input ein Pfad — daran hängt die Quarantäne (§7).
+	TriggerArt string
+
+	// Hasenbau ist der absolute Pfad des laufenden Binaries
+	// ($HASENBAU). Ein Gang, der den Hasenbau selbst aufruft, darf
+	// sich nicht auf den PATH des Daemons verlassen.
+	Hasenbau string
 }
 
 var laufIDMuster = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // Neue legt fehlende Räume an (Räume sind Konvention, kein Vertrag —
 // §4), erzeugt das $WORK-Verzeichnis dieses Laufs und bindet die
-// Variablen. input ist der Bau-relative Pfad der auslösenden Datei —
-// Pflicht bei watch-Triggern, verboten bei cron.
+// Variablen. input ist bei watch der Bau-relative Pfad der auslösenden
+// Datei (Pflicht), bei cron verboten und bei manuell das übergebene
+// Argument (optional, kein Pfad).
 func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, error) {
 	fehler := func(format string, args ...any) error {
 		return fmt.Errorf("lauf %s (%s): %s", laufID, a.Name, fmt.Sprintf(format, args...))
@@ -47,7 +58,18 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, err
 		return nil, fehler("cron-Trigger mit $INPUT %q — woher kommt die Datei?", input)
 	}
 
-	u := &Umgebung{Bau: root, Input: input, Raeume: a.Raeume}
+	// os.Executable scheitert praktisch nie; wenn doch, bleibt
+	// $HASENBAU ungebunden und Ersetze sagt das deutlich, statt einen
+	// Gang mit leerem Kommando zu starten.
+	exe, _ := os.Executable()
+
+	u := &Umgebung{
+		Bau:        root,
+		Input:      input,
+		Raeume:     a.Raeume,
+		TriggerArt: a.Trigger.Art(),
+		Hasenbau:   exe,
+	}
 	for rolle, pfad := range a.Raeume {
 		if err := os.MkdirAll(filepath.Join(root, pfad), 0o755); err != nil {
 			return nil, fehler("raum %s anlegen: %w", rolle, err)
@@ -79,10 +101,16 @@ func (u *Umgebung) Ersetze(s string) (string, error) {
 			return u.Bau
 		case name == "INPUT":
 			if u.Input == "" {
-				fehler = append(fehler, "$INPUT ist nur bei watch-Triggern gebunden")
+				fehler = append(fehler, "$INPUT ist bei watch-Triggern gebunden und bei manuell-Läufen mit Argument")
 				return treffer
 			}
 			return u.Input
+		case name == "HASENBAU":
+			if u.Hasenbau == "" {
+				fehler = append(fehler, "$HASENBAU: eigener Programmpfad nicht bestimmbar")
+				return treffer
+			}
+			return u.Hasenbau
 		case name == "WORK":
 			if u.Work == "" {
 				fehler = append(fehler, "$WORK braucht einen Raum mit Rolle work")
@@ -98,7 +126,7 @@ func (u *Umgebung) Ersetze(s string) (string, error) {
 			}
 			return pfad
 		default:
-			fehler = append(fehler, fmt.Sprintf("unbekannte Variable $%s (erlaubt: $BAU, $INPUT, $WORK, $RAUM_<rolle>)", name))
+			fehler = append(fehler, fmt.Sprintf("unbekannte Variable $%s (erlaubt: $BAU, $INPUT, $WORK, $RAUM_<rolle>, $HASENBAU)", name))
 			return treffer
 		}
 	})

@@ -121,7 +121,14 @@ func fuehreAus(ctx context.Context, bau, zeile, logRel string, timeout time.Dura
 // quarantaene-Raum, falls der Auftrag einen kennt. Kollisionen werden
 // mit Zeitstempel-Suffix aufgelöst. Scheitert der Move, bleibt der
 // Input am Ursprung — das ist per §7 der zweite legale Zustand.
+//
+// Nur bei watch: dort ist $INPUT eine Datei. Bei manuell ist es ein
+// freies Argument, und ein Move würde bestenfalls scheitern,
+// schlimmstenfalls eine gleichnamige Datei im Bau-Root wegtragen.
 func verschiebeInQuarantaene(u *lauf.Umgebung, a *auftrag.Auftrag) string {
+	if u.TriggerArt != auftrag.TriggerWatch {
+		return ""
+	}
 	raum, ok := a.Raeume["quarantaene"]
 	if !ok || u.Input == "" {
 		return ""

@@ -97,6 +97,54 @@ Guten Morgen.
 	}
 }
 
+func TestParseManuellTrigger(t *testing.T) {
+	src := `---
+trigger:
+  manuell: true
+
+gaenge:
+  - name: trace-ziehen
+    run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'
+
+hase: baumeister
+
+raeume:
+  work: raeume/baumeister/work/
+  out:  gaenge/entwurf/
+
+kontext:
+  - datei: $WORK/trace.md
+---
+Verdichte den Trace.
+`
+	a, err := Parse("baumeister", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Trigger.Manuell || a.Trigger.Watch != "" || a.Trigger.Cron != "" {
+		t.Errorf("Trigger = %+v", a.Trigger)
+	}
+	if a.Trigger.Art() != TriggerManuell {
+		t.Errorf("Art() = %q, erwartet %q", a.Trigger.Art(), TriggerManuell)
+	}
+}
+
+func TestTriggerArt(t *testing.T) {
+	faelle := []struct {
+		t   Trigger
+		art string
+	}{
+		{Trigger{Watch: "raeume/x/*.pdf"}, TriggerWatch},
+		{Trigger{Cron: "0 7 * * *"}, TriggerCron},
+		{Trigger{Manuell: true}, TriggerManuell},
+	}
+	for _, f := range faelle {
+		if got := f.t.Art(); got != f.art {
+			t.Errorf("Art(%+v) = %q, erwartet %q", f.t, got, f.art)
+		}
+	}
+}
+
 // ersetze baut Varianten des Beispiel-Auftrags für Fehlerfälle.
 func ersetze(t *testing.T, alt, neu string) string {
 	t.Helper()
@@ -132,6 +180,12 @@ func TestParseFehler(t *testing.T) {
 		{"nachher ohne Pfeil", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- move: $INPUT raeume/archiv/"), "VON -> NACH"},
 		{"nachher unbekannt", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- verbrenne: $INPUT"), "unbekannte Aktion"},
 		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "ungültiger Hasen-Name"},
+		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manuell: true"), "schließen sich aus"},
+		{"debounce bei manuell", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "manuell: true"), "debounce gilt nur für watch"},
+		// $INPUT eines manuell-Auftrags ist ein Argument, kein Pfad.
+		{"manuell mit $INPUT in nachher", ersetze(t,
+			"trigger:\n  watch: raeume/laderampe/sources/*.pdf\n  debounce: 5s",
+			"trigger:\n  manuell: true"), "$INPUT ist bei manuell-Triggern kein Pfad"},
 	}
 
 	for _, f := range faelle {
@@ -147,6 +201,30 @@ func TestParseFehler(t *testing.T) {
 				t.Errorf("Fehler %q nennt den Auftrag nicht", err)
 			}
 		})
+	}
+}
+
+// TestManuellLehntInputAlsPfadAb nagelt die zweite Leitplanke fest:
+// `kontext: - datei:` liest eine Datei, das Argument eines
+// manuell-Laufs ist keine. Bei watch bleibt derselbe Ausdruck erlaubt.
+func TestManuellLehntInputAlsPfadAb(t *testing.T) {
+	src := func(trigger string) []byte {
+		return []byte(`---
+trigger:
+` + trigger + `
+hase: baumeister
+kontext:
+  - datei: $INPUT
+---
+Lies das.
+`)
+	}
+	_, err := Parse("baumeister", src("  manuell: true"))
+	if err == nil || !strings.Contains(err.Error(), "$INPUT ist bei manuell-Triggern kein Pfad") {
+		t.Errorf("kontext datei $INPUT bei manuell: %v", err)
+	}
+	if _, err := Parse("archiv", src("  watch: raeume/eingang/*.pdf")); err != nil {
+		t.Errorf("kontext datei $INPUT bei watch muss erlaubt bleiben: %v", err)
 	}
 }
 

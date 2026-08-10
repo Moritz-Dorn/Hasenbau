@@ -70,6 +70,49 @@ func TestNeueValidiert(t *testing.T) {
 	}
 }
 
+// TestManuellBindetInputUndHasenbau: bei manuell ist $INPUT das
+// übergebene Argument (optional, kein Pfad), und $HASENBAU zeigt auf
+// das laufende Binary — ohne das findet ein Gang den Hasenbau nicht,
+// wenn der Daemon mit absolutem Pfad gestartet wurde.
+func TestManuellBindetInputUndHasenbau(t *testing.T) {
+	root := t.TempDir()
+	a := &auftrag.Auftrag{
+		Name: "baumeister", Hase: "baumeister",
+		Trigger: auftrag.Trigger{Manuell: true},
+		Raeume:  map[string]string{"work": "raeume/baumeister/work/", "out": "gaenge/entwurf/"},
+	}
+
+	// Ohne Argument: erlaubt, $INPUT bleibt ungebunden.
+	ohne, err := Neue(root, a, "lauf-001", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ohne.TriggerArt != auftrag.TriggerManuell {
+		t.Errorf("TriggerArt = %q", ohne.TriggerArt)
+	}
+	if _, err := ohne.Ersetze("graben $INPUT"); err == nil {
+		t.Error("$INPUT ohne Argument muss ein Fehler sein")
+	}
+
+	u, err := Neue(root, a, "lauf-002", "8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zeile, err := u.Ersetze(`"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	erwartet := `"` + exe + `" graben "8" > "` +
+		filepath.Join("raeume/baumeister/work", "lauf-002") + `/trace.md"`
+	if zeile != erwartet {
+		t.Errorf("Ersetze:\n got %q\nwant %q", zeile, erwartet)
+	}
+}
+
 func TestErsetze(t *testing.T) {
 	root := t.TempDir()
 	u, err := Neue(root, watchAuftrag(), "lauf-001", "raeume/laderampe/sources/a.pdf")
@@ -131,7 +174,7 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := u.Ersetze("lies $INPUT"); err == nil || !strings.Contains(err.Error(), "nur bei watch-Triggern") {
+	if _, err := u.Ersetze("lies $INPUT"); err == nil || !strings.Contains(err.Error(), "$INPUT ist bei watch-Triggern gebunden") {
 		t.Errorf("$INPUT bei cron: %v", err)
 	}
 	if _, err := u.Ersetze("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "Rolle work") {

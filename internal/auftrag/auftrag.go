@@ -32,11 +32,34 @@ type Auftrag struct {
 	Body    string // Prompt-Kern
 }
 
-// Trigger ist genau eines von beiden: Datei-Watch oder Cron.
+// Trigger-Arten (§6). Genau eine gilt pro Auftrag.
+const (
+	TriggerWatch   = "watch"
+	TriggerCron    = "cron"
+	TriggerManuell = "manuell"
+)
+
+// Trigger ist genau eines von dreien: Datei-Watch, Cron oder manuell.
 type Trigger struct {
 	Watch    string        // Glob, Bau-relativ
 	Cron     string        // Standard-Cron (5 Felder)
+	Manuell  bool          // läuft nur auf Zuruf (hasenbau lauf / hasenbau baumeister)
 	Debounce time.Duration // nur bei Watch
+}
+
+// Art nennt die Trigger-Art des Auftrags. Nicht zu verwechseln mit dem
+// Trigger einer laeufe-Zeile (§5): ein watch-Auftrag, den `hasenbau
+// lauf` startet, läuft als DB-Trigger 'manuell' — seine Art bleibt
+// 'watch', und daran hängt die Pfad-Semantik von $INPUT.
+func (t Trigger) Art() string {
+	switch {
+	case t.Cron != "":
+		return TriggerCron
+	case t.Manuell:
+		return TriggerManuell
+	default:
+		return TriggerWatch
+	}
 }
 
 // Gang ist ein deterministischer Vorverarbeitungs-Schritt.
@@ -90,6 +113,7 @@ type kopfdaten struct {
 	Trigger *struct {
 		Watch    string `yaml:"watch"`
 		Cron     string `yaml:"cron"`
+		Manuell  bool   `yaml:"manuell"`
 		Debounce dauer  `yaml:"debounce"`
 	} `yaml:"trigger"`
 	Gaenge []struct {
@@ -137,20 +161,31 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		Body:   strings.TrimSpace(body),
 	}
 
-	// Trigger: genau eines von watch oder cron.
+	// Trigger: genau eines von watch, cron oder manuell.
 	if fm.Trigger == nil {
-		return nil, fehler("trigger fehlt (watch oder cron)")
+		return nil, fehler("trigger fehlt (watch, cron oder manuell)")
 	}
 	a.Trigger = Trigger{
 		Watch:    fm.Trigger.Watch,
 		Cron:     fm.Trigger.Cron,
+		Manuell:  fm.Trigger.Manuell,
 		Debounce: time.Duration(fm.Trigger.Debounce),
 	}
+	gesetzt := 0
+	for _, an := range []bool{a.Trigger.Watch != "", a.Trigger.Cron != "", a.Trigger.Manuell} {
+		if an {
+			gesetzt++
+		}
+	}
 	switch {
-	case a.Trigger.Watch == "" && a.Trigger.Cron == "":
-		return nil, fehler("trigger braucht genau eines von watch oder cron")
-	case a.Trigger.Watch != "" && a.Trigger.Cron != "":
-		return nil, fehler("trigger: watch und cron schließen sich aus")
+	case gesetzt == 0:
+		return nil, fehler("trigger braucht genau eines von watch, cron oder manuell")
+	case gesetzt > 1:
+		return nil, fehler("trigger: watch, cron und manuell schließen sich aus")
+	case a.Trigger.Manuell:
+		if a.Trigger.Debounce != 0 {
+			return nil, fehler("debounce gilt nur für watch-Trigger")
+		}
 	case a.Trigger.Cron != "":
 		if _, err := cron.ParseStandard(a.Trigger.Cron); err != nil {
 			return nil, fehler("ungültiger cron-Ausdruck %q: %v", a.Trigger.Cron, err)
@@ -227,11 +262,34 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		a.Nachher = append(a.Nachher, schritt)
 	}
 
+	// $INPUT eines manuell-Auftrags ist ein freies Argument von der
+	// Kommandozeile, kein Pfad — wer es als Datei liest oder verschiebt,
+	// arbeitet auf einer Datei, die es nie gab. Lieber hier ablehnen als
+	// mitten im Lauf danebengreifen.
+	if a.Trigger.Manuell {
+		for i, k := range a.Kontext {
+			if enthaeltInput(k.Datei) {
+				return nil, fehler("kontext %d: $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1)
+			}
+		}
+		for i, n := range a.Nachher {
+			if enthaeltInput(n.Von) || enthaeltInput(n.Nach) {
+				return nil, fehler("nachher %d (%s): $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1, n.Aktion)
+			}
+		}
+	}
+
 	if a.Body == "" {
 		return nil, fehler("body fehlt — der Markdown-Teil ist der Prompt-Kern")
 	}
 	return a, nil
 }
+
+// inputMuster trifft $INPUT, aber nicht $INPUTS o.ä. — dieselbe
+// Wortgrenze, die lauf.Ersetze zieht.
+var inputMuster = regexp.MustCompile(`\$INPUT([^A-Za-z0-9_]|$)`)
+
+func enthaeltInput(s string) bool { return inputMuster.MatchString(s) }
 
 // Load liest alle Aufträge unter <root>/auftraege/*.md und prüft, dass
 // jeder referenzierte Hase ein Template unter <root>/hasen/ hat.

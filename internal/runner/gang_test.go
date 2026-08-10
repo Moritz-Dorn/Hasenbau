@@ -128,6 +128,42 @@ func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
 	}
 }
 
+// TestManuellKeineQuarantaene: bei manuell ist $INPUT ein Argument,
+// kein Pfad. Selbst wenn zufällig eine gleichnamige Datei im Bau liegt,
+// darf ein Gang-Fehler sie nicht wegtragen.
+func TestManuellKeineQuarantaene(t *testing.T) {
+	a := &auftrag.Auftrag{
+		Name: "baumeister", Hase: "baumeister",
+		Trigger: auftrag.Trigger{Manuell: true},
+		Gaenge:  []auftrag.Gang{{Name: "kaputt", Run: "exit 1"}},
+		Raeume: map[string]string{
+			"work":        "raeume/work/",
+			"quarantaene": "raeume/quarantaene/",
+		},
+	}
+	root := t.TempDir()
+	// Die Falle: eine Datei, die genauso heißt wie das Argument.
+	if err := os.WriteFile(filepath.Join(root, "8"), []byte("unbeteiligt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	u, err := lauf.Neue(root, a, "lauf-001", "8")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	var gf *GangFehler
+	if !errors.As(err, &gf) {
+		t.Fatalf("erwartete GangFehler, bekam %v", err)
+	}
+	if gf.Quarantaene != "" {
+		t.Errorf("Quarantaene = %q bei manuell-Trigger", gf.Quarantaene)
+	}
+	if _, err := os.Stat(filepath.Join(root, "8")); err != nil {
+		t.Errorf("unbeteiligte Datei wurde weggetragen: %v", err)
+	}
+}
+
 func TestGangTimeoutKilltProzessgruppe(t *testing.T) {
 	a := testAuftrag(auftrag.Gang{Name: "schlaefer", Run: "sleep 30", Timeout: 200 * time.Millisecond})
 	u := testUmgebung(t, a)
