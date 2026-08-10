@@ -57,6 +57,9 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, 
 	case a.Trigger.Cron != "" && input != "":
 		return nil, fehler("cron-Trigger mit $INPUT %q — woher kommt die Datei?", input)
 	}
+	if err := checkInput(input); err != nil {
+		return nil, fehler("%v", err)
+	}
 
 	// os.Executable scheitert praktisch nie; wenn doch, bleibt
 	// $HASENBAU ungebunden und Ersetze sagt das deutlich, statt einen
@@ -82,6 +85,40 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, 
 		}
 	}
 	return u, nil
+}
+
+// shellUnsafe sind die Zeichen, mit denen ein Input aus dem "$INPUT"
+// einer Gang-Zeile ausbrechen kann: Anführungszeichen beenden die
+// Quotierung, Backtick und $ starten eine Substitution, der Backslash
+// hebelt das Escaping aus.
+const shellUnsafe = "\"'`$\\"
+
+// checkInput hält $INPUT von der Shell fern.
+//
+// Die Variablen werden vor `sh -c` TEXTUELL ersetzt (§6) — das ist
+// Absicht, nur so ist `$HOME` in einer Gang-Zeile ein harter Fehler
+// statt einer stillen Expansion. Der Preis: der Input landet
+// unquotiert im Kommando, und bei einem watch-Trigger kommt er aus
+// einem Dateinamen, den irgendwer in die Drop-Zone gelegt hat. Eine
+// Datei namens `x";rm -rf ~;"y.pdf` wäre sonst ein Kommando
+// (Hasenbau-bnh).
+//
+// Deshalb hier die Grenze und nicht im Gang: der Gang ist Text aus
+// einem Auftrag, den ein Mensch geschrieben hat — wer ihn schreibt,
+// darf darin alles. Der Input ist das Einzige, was von außen kommt.
+// Leerzeichen, Klammern und Bindestriche bleiben erlaubt: die stehen
+// in echten Dateinamen und sind in "$INPUT" harmlos.
+func checkInput(input string) error {
+	if i := strings.IndexAny(input, shellUnsafe); i >= 0 {
+		return fmt.Errorf("$INPUT %q enthält %q — solche Zeichen brechen aus der Gang-Zeile aus (%s sind verboten); die Datei umbenennen",
+			input, string(input[i]), shellUnsafe)
+	}
+	for _, r := range input {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("$INPUT %q enthält ein Steuerzeichen (%U) — die Datei umbenennen", input, r)
+		}
+	}
+	return nil
 }
 
 // variablePattern: $NAME, beginnend mit Großbuchstabe — deckt $BAU,

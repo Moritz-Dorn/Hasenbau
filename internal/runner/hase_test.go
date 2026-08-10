@@ -423,3 +423,48 @@ func TestAuftragsZeitlimitSchlaegtVorgabe(t *testing.T) {
 		t.Fatalf("erwartet: Abbruch nach dem Limit des Auftrags, bekam %v", err)
 	}
 }
+
+// Hasenbau-bnh: Ein Dateiname mit Shell-Syntax darf nicht bloß
+// „irgendwann" scheitern — er muss scheitern, BEVOR ein Gang läuft.
+// Der Beweis ist die Datei, die der Gang geschrieben hätte.
+func TestGefaehrlicherInputStartetKeinenGang(t *testing.T) {
+	root := t.TempDir()
+	a, err := auftrag.Parse("test-auftrag", []byte(`---
+trigger:
+  watch: raeume/laderampe/*.pdf
+gaenge:
+  - name: marker
+    run: echo da > "$BAU/beweis.txt"
+hase: testhase
+raeume:
+  work: raeume/werkstatt/
+---
+Sortiere ein.
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(root, "state", "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	r := &Runner{Root: root, BaseURL: func() string { return "" }, Store: st, Logf: t.Logf}
+	id, err := r.Execute(context.Background(), a, "watch", `raeume/laderampe/x";touch "$BAU/beweis.txt";"y.pdf`)
+	if err == nil {
+		t.Fatal("gefährlicher Input wurde angenommen")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "beweis.txt")); statErr == nil {
+		t.Error("der Gang lief — die Prüfung kommt zu spät")
+	}
+
+	// Der Lauf steht trotzdem sauber in der DB, mit dem Grund.
+	l, err := st.LaufByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Status != "failed" || !strings.Contains(l.Error, "brechen aus der Gang-Zeile aus") {
+		t.Errorf("Lauf = %+v", l)
+	}
+}

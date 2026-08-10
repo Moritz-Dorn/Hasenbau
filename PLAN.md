@@ -488,6 +488,20 @@ nichts zu tun hat. Zu unterscheiden ist das von `laeufe.trigger` (§5) —
 ein watch-Auftrag, den `hasenbau lauf` startet, wird dort als `manuell`
 verbucht, bleibt aber ein watch-Auftrag.
 
+**Die Variablen werden vor `sh -c` textuell ersetzt — und genau deshalb
+ist `$INPUT` das einzige geprüfte Feld.** Textuell zu ersetzen ist
+Absicht: nur so ist `$HOME` in einer Gang-Zeile ein harter Fehler statt
+einer stillen Expansion. Der Preis ist, dass der Wert unquotiert im
+Kommando landet. Für `$BAU`, `$WORK` und `$RAUM_<rolle>` ist das
+harmlos — sie stammen aus Dateien, die ein Mensch geschrieben hat, und
+wer einen Auftrag schreibt, darf darin ohnehin alles. `$INPUT` ist das
+Einzige, was von außen kommt: bei `watch` ist es ein Dateiname aus der
+Drop-Zone. Eine Datei namens `x";rm -rf ~;"y.pdf` wäre sonst ein
+Kommando. Deshalb lehnt `lauf.Neue` Inputs mit `"`, `'`, `` ` ``, `$`,
+`\` und Steuerzeichen ab, bevor irgendein Gang startet
+(Hasenbau-bnh). Leerzeichen, Klammern, Umlaute und `&` bleiben erlaubt
+— die stehen in echten Dateinamen und sind in `"$INPUT"` harmlos.
+
 ### Ablauf eines Laufs
 
 1. Trigger feuert → Lock auf den Auftrag (kein Overlap, ein Auftrag läuft nie doppelt)

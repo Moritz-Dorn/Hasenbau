@@ -181,3 +181,47 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 		t.Errorf("$WORK ohne work-Raum: %v", err)
 	}
 }
+
+// Hasenbau-bnh: Der Input ist das Einzige, was von außen kommt — und
+// er landet unquotiert in einer Zeile, die `sh -c` ausführt.
+func TestNeueLehntShellZeichenImInputAb(t *testing.T) {
+	a, err := auftrag.Parse("pdf-einlagern", []byte(`---
+trigger:
+  watch: raeume/laderampe/sources/*.pdf
+hase: archivar
+raeume:
+  work: raeume/werkstatt/
+---
+Sortiere ein.
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	boese := []struct{ name, input string }{
+		{"Anführungszeichen", `raeume/laderampe/sources/x";rm -rf ~;"y.pdf`},
+		{"Backtick", "raeume/laderampe/sources/x`whoami`.pdf"},
+		{"Dollar", "raeume/laderampe/sources/$(id).pdf"},
+		{"Backslash", `raeume/laderampe/sources/x\".pdf`},
+		{"einfaches Anführungszeichen", "raeume/laderampe/sources/x'.pdf"},
+		{"Zeilenumbruch", "raeume/laderampe/sources/x\ny.pdf"},
+	}
+	for _, f := range boese {
+		t.Run(f.name, func(t *testing.T) {
+			if _, err := Neue(t.TempDir(), a, "20260810-120000-1", f.input); err == nil {
+				t.Fatalf("Input %q wurde angenommen", f.input)
+			}
+		})
+	}
+
+	// Was in echten Dateinamen vorkommt, bleibt erlaubt.
+	for _, gut := range []string{
+		"raeume/laderampe/sources/Rechnung 2026-03 (final).pdf",
+		"raeume/laderampe/sources/protokoll_bauversammlung-2.pdf",
+		"raeume/laderampe/sources/Müller & Söhne.pdf",
+	} {
+		if _, err := Neue(t.TempDir(), a, "20260810-120000-1", gut); err != nil {
+			t.Errorf("harmloser Input %q abgelehnt: %v", gut, err)
+		}
+	}
+}
