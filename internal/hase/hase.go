@@ -192,7 +192,7 @@ func AgentName(a *auftrag.Auftrag) string {
 
 // schreibRollen sind die Raum-Rollen, für die der Hase Schreibrecht
 // bekommt (§6): sein Scratch und seine Ausgabe. `done` bedient der
-// Runner über nachher:-Schritte, nicht der Hase.
+// Runner über nachher:-Steps, nicht der Hase.
 var schreibRollen = []string{"work", "out"}
 
 // grundDenies sind die Pauschal-Verbote jedes generierten Agenten.
@@ -277,7 +277,7 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 	b.WriteString("---\n")
 	b.WriteString(t.Prompt)
 	b.WriteString("\n")
-	// Beigelegtes Wissen nach der Rolle: erst wer der Hase ist und was
+	// Beigelegtes Wissen nach der Role: erst wer der Hase ist und was
 	// er tun soll, dann das Nachschlagewerk. Die Herkunft steht als
 	// Überschrift dabei — sonst ist im Trace nicht zu erkennen, woher
 	// eine Anweisung kam.

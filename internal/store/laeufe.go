@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Moritz-Dorn/Hasenbau/internal/prozess"
+	"github.com/Moritz-Dorn/Hasenbau/internal/process"
 )
 
 // Lauf ist eine Ausführung eines Auftrags (PLAN.md §1, §5).
@@ -43,7 +43,7 @@ func (s *Store) StartLauf(auftrag, trigger, input string) (int64, error) {
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
-	pid, pidStarted := prozess.Ich()
+	pid, pidStarted := process.Self()
 	res, err := tx.Exec(
 		`INSERT INTO laeufe (auftrag, "trigger", input, started, status, pid, pid_started)
 		 VALUES (?, ?, ?, ?, 'running', ?, ?)`,

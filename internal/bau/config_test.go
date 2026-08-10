@@ -10,7 +10,7 @@ import (
 func schreibeConfig(t *testing.T, inhalt string) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, ConfigDatei), []byte(inhalt), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ConfigFile), []byte(inhalt), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -19,7 +19,7 @@ func schreibeConfig(t *testing.T, inhalt string) string {
 func TestLadeConfigDefaults(t *testing.T) {
 	// Ohne File: Defaults, kein Fehler — ein Bau ohne Config ist
 	// benutzbar, nur eben ohne Baumeister.
-	c, err := LadeConfig(t.TempDir())
+	c, err := LoadConfig(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestLadeConfigDefaults(t *testing.T) {
 
 func TestLadeConfigSkelettParst(t *testing.T) {
 	// Was `hasenbau init` schreibt, muss der eigene Parser lesen können.
-	c, err := LadeConfig(schreibeConfig(t, hasenbauYAML))
+	c, err := LoadConfig(schreibeConfig(t, hasenbauYAML))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestLadeConfigSkelettParst(t *testing.T) {
 }
 
 func TestLadeConfigBaumeister(t *testing.T) {
-	c, err := LadeConfig(schreibeConfig(t, "log_level: debug\nbaumeister: baumeister\n"))
+	c, err := LoadConfig(schreibeConfig(t, "log_level: debug\nbaumeister: baumeister\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,11 +61,11 @@ func TestLadeConfigFehler(t *testing.T) {
 		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister"},
 		{"log_level ungültig", "log_level: laut\n", "erlaubt: debug, info, warn, error"},
 		{"baumeister mit Pfad", "baumeister: ../fremd\n", "kein gültiger Auftrags-Name"},
-		{"kaputtes YAML", "log_level: [\n", ConfigDatei},
+		{"kaputtes YAML", "log_level: [\n", ConfigFile},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {
-			_, err := LadeConfig(schreibeConfig(t, f.inhalt))
+			_, err := LoadConfig(schreibeConfig(t, f.inhalt))
 			if err == nil {
 				t.Fatal("Fehler erwartet, bekam nil")
 			}

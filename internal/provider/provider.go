@@ -30,20 +30,20 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 )
 
-// Modell ist ein Eintrag der Provider-Modell-Liste. Verbindung und
+// Modell ist ein Eintrag der Provider-Modell-Liste. Connection und
 // Notiz sind Zusatz des Endpoints — sie helfen beim Lesen des Diffs
 // (was kostet Budget?), landen aber nicht in der Config: geschrieben
 // wird nur, was opencode versteht.
-type Modell struct {
+type Model struct {
 	ID         string
 	Name       string
-	Verbindung string // connection_type, z.B. "local"/"external"; "" wenn nicht gemeldet
-	Notiz      string // erste Zeile aus info.meta.description
+	Connection string // connection_type, z.B. "local"/"external"; "" wenn nicht gemeldet
+	Note       string // erste Zeile aus info.meta.description
 }
 
-// Hole fragt <baseURL>/models mit Bearer-Auth ab. Akzeptiert sowohl das
+// Fetch fragt <baseURL>/models mit Bearer-Auth ab. Akzeptiert sowohl das
 // OpenAI-Format {"data":[…]} als auch eine nackte Liste.
-func Hole(ctx context.Context, baseURL, key string) ([]Modell, error) {
+func Fetch(ctx context.Context, baseURL, key string) ([]Model, error) {
 	url := strings.TrimSuffix(baseURL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -63,16 +63,16 @@ func Hole(ctx context.Context, baseURL, key string) ([]Modell, error) {
 		return nil, fmt.Errorf("provider: Antwort von %s lesen: %w", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("provider: %s antwortet %s: %s", url, resp.Status, kurz(string(body)))
+		return nil, fmt.Errorf("provider: %s antwortet %s: %s", url, resp.Status, short(string(body)))
 	}
 
-	roh, err := entpackeListe(body)
+	roh, err := unwrapList(body)
 	if err != nil {
 		return nil, fmt.Errorf("provider: Antwort von %s: %w", url, err)
 	}
-	modelle := make([]Modell, 0, len(roh))
+	modelle := make([]Model, 0, len(roh))
 	for _, e := range roh {
-		if m, ok := ausEintrag(e); ok {
+		if m, ok := fromEntry(e); ok {
 			modelle = append(modelle, m)
 		}
 	}
@@ -83,7 +83,7 @@ func Hole(ctx context.Context, baseURL, key string) ([]Modell, error) {
 	return modelle, nil
 }
 
-func entpackeListe(body []byte) ([]map[string]any, error) {
+func unwrapList(body []byte) ([]map[string]any, error) {
 	var umschlag struct {
 		Data []map[string]any `json:"data"`
 	}
@@ -92,32 +92,32 @@ func entpackeListe(body []byte) ([]map[string]any, error) {
 	}
 	var liste []map[string]any
 	if err := json.Unmarshal(body, &liste); err != nil {
-		return nil, fmt.Errorf("weder {\"data\":[…]} noch Liste: %s", kurz(string(body)))
+		return nil, fmt.Errorf("weder {\"data\":[…]} noch Liste: %s", short(string(body)))
 	}
 	return liste, nil
 }
 
-func ausEintrag(e map[string]any) (Modell, bool) {
+func fromEntry(e map[string]any) (Model, bool) {
 	id, _ := e["id"].(string)
 	if id == "" {
-		return Modell{}, false
+		return Model{}, false
 	}
-	m := Modell{ID: id, Name: id}
+	m := Model{ID: id, Name: id}
 	if s, _ := e["name"].(string); s != "" {
 		m.Name = s
 	}
-	m.Verbindung, _ = e["connection_type"].(string)
+	m.Connection, _ = e["connection_type"].(string)
 	if info, ok := e["info"].(map[string]any); ok {
 		if meta, ok := info["meta"].(map[string]any); ok {
 			if d, _ := meta["description"].(string); d != "" {
-				m.Notiz, _, _ = strings.Cut(d, "\n")
+				m.Note, _, _ = strings.Cut(d, "\n")
 			}
 		}
 	}
 	return m, true
 }
 
-func kurz(s string) string {
+func short(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) > 200 {
 		return s[:200] + "…"
@@ -125,10 +125,10 @@ func kurz(s string) string {
 	return s
 }
 
-// Schluessel liest den API-Key eines Providers aus der auth.json, die
+// Key liest den API-Key eines Providers aus der auth.json, die
 // sich Bau und Alltags-opencode über XDG_DATA_HOME teilen (§3).
-func Schluessel(id string) (string, error) {
-	pfad := AuthPfad()
+func Key(id string) (string, error) {
+	pfad := AuthPath()
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("provider: keine auth.json unter %s — erst im Alltags-opencode anmelden (`opencode auth login`)", pfad)
@@ -153,24 +153,24 @@ func Schluessel(id string) (string, error) {
 	return eintrag.Key, nil
 }
 
-// SchluesselIDs meldet, für welche Provider die geteilte auth.json
+// KeyIDs meldet, für welche Provider die geteilte auth.json
 // einen benutzbaren API-Key hat — ohne den Key selbst herauszugeben.
-// Fehlt die Datei, kommt eine leere Menge und kein Fehler: das ist ein
+// Fehlt die Datei, kommt eine leere Menge und kein Error: das ist ein
 // Zustand, kein Unfall.
-func SchluesselIDs() (map[string]bool, error) {
-	b, err := os.ReadFile(AuthPfad())
+func KeyIDs() (map[string]bool, error) {
+	b, err := os.ReadFile(AuthPath())
 	if errors.Is(err, fs.ErrNotExist) {
 		return map[string]bool{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("provider: %s lesen: %w", AuthPfad(), err)
+		return nil, fmt.Errorf("provider: %s lesen: %w", AuthPath(), err)
 	}
 	var auth map[string]struct {
 		Type string `json:"type"`
 		Key  string `json:"key"`
 	}
 	if err := json.Unmarshal(b, &auth); err != nil {
-		return nil, fmt.Errorf("provider: %s parsen: %w", AuthPfad(), err)
+		return nil, fmt.Errorf("provider: %s parsen: %w", AuthPath(), err)
 	}
 	da := map[string]bool{}
 	for id, e := range auth {
@@ -179,9 +179,9 @@ func SchluesselIDs() (map[string]bool, error) {
 	return da, nil
 }
 
-// AuthPfad ist der Ort der geteilten auth.json — dieselbe XDG-Kaskade,
+// AuthPath ist der Ort der geteilten auth.json — dieselbe XDG-Kaskade,
 // der auch der gespawnte Server folgt (§3: XDG_DATA_HOME bleibt geerbt).
-func AuthPfad() string {
+func AuthPath() string {
 	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
 		return filepath.Join(d, "opencode", "auth.json")
 	}
@@ -201,8 +201,8 @@ type Config struct {
 	roh  map[string]any
 }
 
-// LadeConfig liest die Bau-eigene opencode.json (§4).
-func LadeConfig(root string) (*Config, error) {
+// LoadConfig liest die Bau-eigene opencode.json (§4).
+func LoadConfig(root string) (*Config, error) {
 	pfad := filepath.Join(root, bau.OpencodeConfig)
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -238,17 +238,17 @@ func (c *Config) BaseURL(id string) (string, error) {
 }
 
 // Eintrag ist ein Provider, wie ihn die Bau-Config kennt.
-type Eintrag struct {
+type Entry struct {
 	ID      string
 	BaseURL string // leer: eingebaut (Modelle kommen aus models.dev) oder Gerüst unvollständig
 	Modelle int
 	Aktiv   bool // steht in enabled_providers — ohne das ignoriert der Server die Definition
 }
 
-// Liste zählt auf, was im Bau definiert ist. Enthalten sind auch IDs,
+// List zählt auf, was im Bau definiert ist. Enthalten sind auch IDs,
 // die nur in enabled_providers stehen: ein Tippfehler dort ist sonst
 // unsichtbar, obwohl er den Provider still abschaltet.
-func (c *Config) Liste() []Eintrag {
+func (c *Config) List() []Entry {
 	aktiv := map[string]bool{}
 	liste, _ := c.roh["enabled_providers"].([]any)
 	for _, e := range liste {
@@ -257,9 +257,9 @@ func (c *Config) Liste() []Eintrag {
 		}
 	}
 
-	eintraege := map[string]*Eintrag{}
+	eintraege := map[string]*Entry{}
 	for id, roh := range c.provider() {
-		e := &Eintrag{ID: id, Aktiv: aktiv[id]}
+		e := &Entry{ID: id, Aktiv: aktiv[id]}
 		if p, ok := roh.(map[string]any); ok {
 			if opts, ok := p["options"].(map[string]any); ok {
 				e.BaseURL, _ = opts["baseURL"].(string)
@@ -272,11 +272,11 @@ func (c *Config) Liste() []Eintrag {
 	}
 	for id := range aktiv {
 		if _, da := eintraege[id]; !da {
-			eintraege[id] = &Eintrag{ID: id, Aktiv: true}
+			eintraege[id] = &Entry{ID: id, Aktiv: true}
 		}
 	}
 
-	out := make([]Eintrag, 0, len(eintraege))
+	out := make([]Entry, 0, len(eintraege))
 	for _, e := range eintraege {
 		out = append(out, *e)
 	}
@@ -293,25 +293,25 @@ func (c *Config) provider() map[string]any {
 	return p
 }
 
-// Aenderung ist das Ergebnis eines Merge: was der Endpoint gegenüber
+// Change ist das Ergebnis eines Merge: was der Endpoint gegenüber
 // der Config neu hat, was er nicht mehr kennt, was umbenannt wurde.
-type Aenderung struct {
-	Neu             []Modell
+type Change struct {
+	Neu             []Model
 	Weg             []string
-	Umbenannt       []Umbenennung
+	Umbenannt       []Rename
 	Unveraendert    int
 	EnabledErgaenzt bool
 }
 
 // Umbenennung ist ein Modell, dessen Anzeigename sich geändert hat.
-type Umbenennung struct {
+type Rename struct {
 	ID  string
 	Alt string
 	Neu string
 }
 
-// Leer meldet, ob der Fetch nichts zu schreiben hätte.
-func (a Aenderung) Leer() bool {
+// Empty meldet, ob der Fetch nichts zu schreiben hätte.
+func (a Change) Empty() bool {
 	return len(a.Neu) == 0 && len(a.Weg) == 0 && len(a.Umbenannt) == 0 && !a.EnabledErgaenzt
 }
 
@@ -319,7 +319,7 @@ func (a Aenderung) Leer() bool {
 // Bestehende Modell-Einträge behalten ihre Zusatzfelder (z.B. limit,
 // options) — überschrieben wird nur name. Modelle, die der Endpoint
 // nicht mehr kennt, fallen raus: sie sind ein 500 mit Anlauf.
-func (c *Config) Merge(id string, modelle []Modell) Aenderung {
+func (c *Config) Merge(id string, modelle []Model) Change {
 	prov, ok := c.provider()[id].(map[string]any)
 	if !ok {
 		prov = map[string]any{}
@@ -327,7 +327,7 @@ func (c *Config) Merge(id string, modelle []Modell) Aenderung {
 	}
 	alt, _ := prov["models"].(map[string]any)
 	neu := map[string]any{}
-	var ae Aenderung
+	var ae Change
 
 	for _, m := range modelle {
 		eintrag, bestand := alt[m.ID].(map[string]any)
@@ -341,7 +341,7 @@ func (c *Config) Merge(id string, modelle []Modell) Aenderung {
 		case altName == m.Name:
 			ae.Unveraendert++
 		default:
-			ae.Umbenannt = append(ae.Umbenannt, Umbenennung{ID: m.ID, Alt: altName, Neu: m.Name})
+			ae.Umbenannt = append(ae.Umbenannt, Rename{ID: m.ID, Alt: altName, Neu: m.Name})
 		}
 		eintrag["name"] = m.Name
 		neu[m.ID] = eintrag
@@ -354,13 +354,13 @@ func (c *Config) Merge(id string, modelle []Modell) Aenderung {
 	sort.Strings(ae.Weg)
 	prov["models"] = neu
 
-	ae.EnabledErgaenzt = c.enabledSicherstellen(id)
+	ae.EnabledErgaenzt = c.ensureEnabled(id)
 	return ae
 }
 
-// enabledSicherstellen ergänzt die Provider-ID in enabled_providers —
+// ensureEnabled ergänzt die Provider-ID in enabled_providers —
 // ohne sie ignoriert der Server die Definition.
-func (c *Config) enabledSicherstellen(id string) bool {
+func (c *Config) ensureEnabled(id string) bool {
 	liste, _ := c.roh["enabled_providers"].([]any)
 	for _, e := range liste {
 		if s, _ := e.(string); s == id {
@@ -371,10 +371,10 @@ func (c *Config) enabledSicherstellen(id string) bool {
 	return true
 }
 
-// Schreibe legt die Config zurück auf die Platte. Die Schlüssel stehen
+// Write legt die Config zurück auf die Platte. Die Schlüssel stehen
 // danach sortiert — deterministisch, damit der Bau als Git-Repo saubere
 // Diffs bekommt.
-func (c *Config) Schreibe() error {
+func (c *Config) Write() error {
 	b, err := json.MarshalIndent(c.roh, "", "  ")
 	if err != nil {
 		return fmt.Errorf("provider: %s serialisieren: %w", c.Pfad, err)
@@ -386,11 +386,11 @@ func (c *Config) Schreibe() error {
 	return nil
 }
 
-// Bericht formatiert die Änderung als lesbaren Diff.
-func (a Aenderung) Bericht() string {
+// Report formatiert die Änderung als lesbaren Diff.
+func (a Change) Report() string {
 	var b strings.Builder
 	for _, m := range a.Neu {
-		fmt.Fprintf(&b, "  + %s  %s\n", m.ID, zusatz(m))
+		fmt.Fprintf(&b, "  + %s  %s\n", m.ID, extra(m))
 	}
 	for _, u := range a.Umbenannt {
 		fmt.Fprintf(&b, "  ~ %s  %q → %q\n", u.ID, u.Alt, u.Neu)
@@ -409,13 +409,13 @@ func (a Aenderung) Bericht() string {
 // zusatz zeigt, was der Endpoint über das Modell verrät — Orientierung
 // beim Lesen, nicht Teil der Config. Gefiltert wird bewusst nicht:
 // welches Modell ein Hase bekommt, entscheidet der Auftrag.
-func zusatz(m Modell) string {
+func extra(m Model) string {
 	teile := []string{fmt.Sprintf("%q", m.Name)}
-	if m.Verbindung != "" {
-		teile = append(teile, m.Verbindung)
+	if m.Connection != "" {
+		teile = append(teile, m.Connection)
 	}
-	if m.Notiz != "" {
-		teile = append(teile, m.Notiz)
+	if m.Note != "" {
+		teile = append(teile, m.Note)
 	}
-	return kurz(strings.Join(teile, " · "))
+	return short(strings.Join(teile, " · "))
 }

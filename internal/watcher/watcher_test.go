@@ -49,7 +49,7 @@ func watchAuftrag(debounce time.Duration) *auftrag.Auftrag {
 func starte(t *testing.T, root string, a *auftrag.Auftrag, gesehen SeenStore, verhalten func(input string) error) (<-chan aufruf, func()) {
 	t.Helper()
 	aufrufe := make(chan aufruf, 16)
-	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NeueSperre(), gesehen,
+	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), gesehen,
 		func(a *auftrag.Auftrag, input string) error {
 			if verhalten != nil {
 				if err := verhalten(input); err != nil {

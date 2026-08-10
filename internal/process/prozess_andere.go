@@ -1,6 +1,6 @@
 //go:build !linux
 
-package prozess
+package process
 
 import "time"
 
@@ -9,6 +9,6 @@ import "time"
 // einem Recycling den Falschen. Der Hasenbau räumt dann lieber nicht auf
 // — verwaiste Zeilen bleiben stehen, statt einen lebenden Lauf zu
 // schließen (siehe Lebt).
-const startZeitVerfuegbar = false
+const startTimeAvailable = false
 
-func startZeit(int) (time.Time, bool) { return time.Time{}, false }
+func startTime(int) (time.Time, bool) { return time.Time{}, false }

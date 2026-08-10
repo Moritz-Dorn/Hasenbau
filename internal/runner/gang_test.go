@@ -27,7 +27,7 @@ func testAuftrag(gaenge ...auftrag.Gang) *auftrag.Auftrag {
 	}
 }
 
-func testUmgebung(t *testing.T, a *auftrag.Auftrag) *lauf.Umgebung {
+func testUmgebung(t *testing.T, a *auftrag.Auftrag) *lauf.Environment {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "raeume/eingang"), 0o755); err != nil {
@@ -51,7 +51,7 @@ func TestGaengeSequenziellMitLogs(t *testing.T) {
 	)
 	u := testUmgebung(t, a)
 
-	logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	logs, err := RunGaenge(context.Background(), u, a, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,13 +79,13 @@ func TestGangFehlerBrichtAbUndQuarantaene(t *testing.T) {
 	)
 	u := testUmgebung(t, a)
 
-	logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
-	var gf *GangFehler
+	logs, err := RunGaenge(context.Background(), u, a, time.Minute)
+	var gf *GangError
 	if !errors.As(err, &gf) {
-		t.Fatalf("erwartete GangFehler, bekam %v", err)
+		t.Fatalf("erwartete GangError, bekam %v", err)
 	}
 	if gf.Gang != "kaputt" || gf.Grund != "exit 3" {
-		t.Errorf("GangFehler = %+v", gf)
+		t.Errorf("GangError = %+v", gf)
 	}
 
 	// stderr steht im Log, auch im Fehlerfall.
@@ -114,10 +114,10 @@ func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
 	delete(a.Raeume, "quarantine")
 	u := testUmgebung(t, a)
 
-	_, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
-	var gf *GangFehler
+	_, err := RunGaenge(context.Background(), u, a, time.Minute)
+	var gf *GangError
 	if !errors.As(err, &gf) {
-		t.Fatalf("erwartete GangFehler, bekam %v", err)
+		t.Fatalf("erwartete GangError, bekam %v", err)
 	}
 	if gf.Quarantaene != "" {
 		t.Errorf("Quarantaene = %q ohne quarantaene-Raum", gf.Quarantaene)
@@ -151,10 +151,10 @@ func TestManuellKeineQuarantaene(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = FuehreGaengeAus(context.Background(), u, a, time.Minute)
-	var gf *GangFehler
+	_, err = RunGaenge(context.Background(), u, a, time.Minute)
+	var gf *GangError
 	if !errors.As(err, &gf) {
-		t.Fatalf("erwartete GangFehler, bekam %v", err)
+		t.Fatalf("erwartete GangError, bekam %v", err)
 	}
 	if gf.Quarantaene != "" {
 		t.Errorf("Quarantaene = %q bei manuell-Trigger", gf.Quarantaene)
@@ -169,12 +169,12 @@ func TestGangTimeoutKilltProzessgruppe(t *testing.T) {
 	u := testUmgebung(t, a)
 
 	start := time.Now()
-	_, err := FuehreGaengeAus(context.Background(), u, a, time.Minute)
+	_, err := RunGaenge(context.Background(), u, a, time.Minute)
 	dauer := time.Since(start)
 
-	var gf *GangFehler
+	var gf *GangError
 	if !errors.As(err, &gf) {
-		t.Fatalf("erwartete GangFehler, bekam %v", err)
+		t.Fatalf("erwartete GangError, bekam %v", err)
 	}
 	if !strings.Contains(gf.Grund, "timeout nach") {
 		t.Errorf("Grund = %q", gf.Grund)
@@ -189,7 +189,7 @@ func TestGaengeOhneWorkRaum(t *testing.T) {
 	delete(a.Raeume, "work")
 	u := testUmgebung(t, a)
 
-	if _, err := FuehreGaengeAus(context.Background(), u, a, time.Minute); err == nil || !strings.Contains(err.Error(), "Rolle work") {
+	if _, err := RunGaenge(context.Background(), u, a, time.Minute); err == nil || !strings.Contains(err.Error(), "Rolle work") {
 		t.Errorf("ohne work-Raum: %v", err)
 	}
 }
@@ -198,7 +198,7 @@ func TestKeineGaengeKeinWork(t *testing.T) {
 	a := testAuftrag()
 	delete(a.Raeume, "work")
 	u := testUmgebung(t, a)
-	if logs, err := FuehreGaengeAus(context.Background(), u, a, time.Minute); err != nil || logs != nil {
+	if logs, err := RunGaenge(context.Background(), u, a, time.Minute); err != nil || logs != nil {
 		t.Errorf("ohne Gänge: logs=%v err=%v", logs, err)
 	}
 }

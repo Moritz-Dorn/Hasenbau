@@ -87,10 +87,10 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ohne.TriggerArt != auftrag.TriggerManual {
-		t.Errorf("TriggerArt = %q", ohne.TriggerArt)
+	if ohne.TriggerKind != auftrag.TriggerManual {
+		t.Errorf("TriggerKind = %q", ohne.TriggerKind)
 	}
-	if _, err := ohne.Ersetze("graben $INPUT"); err == nil {
+	if _, err := ohne.Substitute("graben $INPUT"); err == nil {
 		t.Error("$INPUT ohne Argument muss ein Fehler sein")
 	}
 
@@ -98,7 +98,7 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zeile, err := u.Ersetze(`"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"`)
+	zeile, err := u.Substitute(`"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestErsetze(t *testing.T) {
 	}
 
 	// Die Gang-Zeile aus dem §6-Beispiel.
-	zeile, err := u.Ersetze(`gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"`)
+	zeile, err := u.Substitute(`gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestErsetze(t *testing.T) {
 	}
 
 	// $BAU ist absolut, $RAUM_<rolle> kommt aus dem Auftrag.
-	s, err := u.Ersetze("$BAU|$RAUM_out")
+	s, err := u.Substitute("$BAU|$RAUM_out")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,14 +153,14 @@ func TestErsetzeFehler(t *testing.T) {
 		{"cp $RAUM_lager x", `keinen Raum "lager"`},
 	}
 	for _, f := range faelle {
-		if _, err := u.Ersetze(f.eingabe); err == nil || !strings.Contains(err.Error(), f.erwarte) {
+		if _, err := u.Substitute(f.eingabe); err == nil || !strings.Contains(err.Error(), f.erwarte) {
 			t.Errorf("Ersetze(%q): %v", f.eingabe, err)
 		}
 	}
 
 	// Kein stilles Leerersetzen: der Fehlerfall liefert leeren String
 	// UND einen Fehler, nie den halb substituierten Text.
-	s, err := u.Ersetze("$INPUT und $HOME")
+	s, err := u.Substitute("$INPUT und $HOME")
 	if err == nil || s != "" {
 		t.Errorf("teilweise Substitution durchgereicht: %q, %v", s, err)
 	}
@@ -174,10 +174,10 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := u.Ersetze("lies $INPUT"); err == nil || !strings.Contains(err.Error(), "$INPUT ist bei watch-Triggern gebunden") {
+	if _, err := u.Substitute("lies $INPUT"); err == nil || !strings.Contains(err.Error(), "$INPUT ist bei watch-Triggern gebunden") {
 		t.Errorf("$INPUT bei cron: %v", err)
 	}
-	if _, err := u.Ersetze("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "Rolle work") {
+	if _, err := u.Substitute("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "Rolle work") {
 		t.Errorf("$WORK ohne work-Raum: %v", err)
 	}
 }

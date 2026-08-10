@@ -41,7 +41,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	}
 	logger := log.New(errw, "", log.LstdFlags)
 
-	conf, err := bau.LadeConfig(root)
+	conf, err := bau.LoadConfig(root)
 	if err != nil {
 		logger.Print(err)
 		return 1
@@ -49,7 +49,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	if conf.Baumeister == "" {
 		fmt.Fprintf(errw, "hasenbau baumeister: %s nennt keinen baumeister:\n"+
 			"  Vorlage kopieren (beispiele/auftraege/baumeister.md, beispiele/hasen/baumeister.md),\n"+
-			"  dann `baumeister: <auftrag>` in %s eintragen.\n", bau.ConfigDatei, bau.ConfigDatei)
+			"  dann `baumeister: <auftrag>` in %s eintragen.\n", bau.ConfigFile, bau.ConfigFile)
 		return 1
 	}
 
@@ -62,7 +62,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 
 	ziel, err := k.Auftrag(conf.Baumeister)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau baumeister: %s nennt %q — %v\n", bau.ConfigDatei, conf.Baumeister, err)
+		fmt.Fprintf(errw, "hasenbau baumeister: %s nennt %q — %v\n", bau.ConfigFile, conf.Baumeister, err)
 		return 1
 	}
 	raum := ziel.Raeume["out"]
@@ -92,7 +92,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	laufFehler := k.Runner.FuehreAus(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
+	laufFehler := k.Runner.Execute(k.Ctx, ziel, "manual", strconv.FormatInt(quelle.ID, 10))
 	if laufFehler != nil {
 		logger.Print(laufFehler)
 	}

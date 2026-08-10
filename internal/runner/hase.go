@@ -1,5 +1,5 @@
 // hase.go orchestriert einen ganzen Lauf (§6, Ablauf): die Sperre hält
-// der Trigger, hier passiert Umgebung → Gänge → Prompt → Hase →
+// der Trigger, hier passiert Environment → Gänge → Prompt → Hase →
 // nachher → persistieren. Der LLM-Schritt läuft asynchron; die
 // Wahrheitsquelle für das Ende ist der Event-Stream (Funnel), der
 // synchrone Prompt-Call nur ein zweiter Zeuge — er riss im Spike bei
@@ -29,7 +29,7 @@ import (
 // LaufStore ist die Schreib- und Kontext-Sicht des Runners auf den
 // Store; *store.Store erfüllt das Interface.
 type LaufStore interface {
-	SummaryQuelle
+	SummarySource
 	StartLauf(auftrag, trigger, ausloeser string) (int64, error)
 	EndLauf(id int64, e store.LaufResult) error
 	WriteTrace(lauf int64, sessionID string, roh []byte) error
@@ -63,8 +63,8 @@ type Runner struct {
 	aktiv  atomic.Int64
 }
 
-// AktiveLaeufe zählt die gerade laufenden Läufe (für Status/Shutdown).
-func (r *Runner) AktiveLaeufe() int64 { return r.aktiv.Load() }
+// ActiveLaeufe zählt die gerade laufenden Läufe (für Status/Shutdown).
+func (r *Runner) ActiveLaeufe() int64 { return r.aktiv.Load() }
 
 // Dispose verwirft die Instanz-Caches des Servers (Agent-Reload,
 // §11.6) — erst, wenn kein Lauf mehr aktiv ist; neue Läufe warten.
@@ -78,12 +78,12 @@ func (r *Runner) Dispose(ctx context.Context) error {
 	return opencode.DisposeInstance(ctx, opencode.New(url))
 }
 
-// FuehreAus ist die AusfuehrFunc für Scheduler, Watcher und manuelle
+// Execute ist die ExecFunc für Scheduler, Watcher und manuelle
 // Trigger. Die Overlap-Sperre hält der Aufrufer; trigger ist 'cron',
 // 'watch' oder 'manuell', input der Bau-relative Pfad der auslösenden
 // Datei (nur watch). Rückgabe nil ⇒ Lauf ok (der Watcher merkt den
 // Input dann als gesehen).
-func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, input string) error {
+func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input string) error {
 	r.laufMu.RLock()
 	defer r.laufMu.RUnlock()
 	r.aktiv.Add(1)
@@ -103,14 +103,14 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 	// scheitere beendet den Lauf als 'fehler'. Session-Daten, die bis
 	// dahin angefallen sind (Tokens kosten auch bei Fehlläufen), gehen
 	// mit in die Zeile. $WORK bleibt liegen (§6, Ablauf 7).
-	scheitere := func(erg haseErgebnis, grund error) error {
+	scheitere := func(erg haseResult, grund error) error {
 		erg.Status = "failed"
 		if ctx.Err() != nil {
 			erg.Status = "aborted"
 		}
 		e := erg.alsErgebnis()
 		e.Error = grund.Error()
-		r.legeTraceAb(id, erg, logf)
+		r.storeTrace(id, erg, logf)
 		if err := r.Store.EndLauf(id, e); err != nil {
 			logf("lauf %s: %v", laufID, err)
 		}
@@ -120,21 +120,21 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 
 	u, err := lauf.Neue(r.Root, a, laufID, input)
 	if err != nil {
-		return scheitere(haseErgebnis{}, err)
+		return scheitere(haseResult{}, err)
 	}
-	if _, err := FuehreGaengeAus(ctx, u, a, r.GangTimeout); err != nil {
-		return scheitere(haseErgebnis{}, err)
+	if _, err := RunGaenge(ctx, u, a, r.GangTimeout); err != nil {
+		return scheitere(haseResult{}, err)
 	}
-	prompt, err := BauePrompt(u, a, r.Store)
+	prompt, err := BuildPrompt(u, a, r.Store)
 	if err != nil {
-		return scheitere(haseErgebnis{}, err)
+		return scheitere(haseResult{}, err)
 	}
 
-	erg, err := r.fuehreHaseAus(ctx, a, laufID, prompt, logf)
+	erg, err := r.runHase(ctx, a, laufID, prompt, logf)
 	if err != nil {
 		return scheitere(erg, err)
 	}
-	if err := FuehreNachherAus(u, a); err != nil {
+	if err := RunAfter(u, a); err != nil {
 		return scheitere(erg, err)
 	}
 
@@ -144,7 +144,7 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 		}
 	}
 	erg.Status = "ok"
-	r.legeTraceAb(id, erg, logf)
+	r.storeTrace(id, erg, logf)
 	if err := r.Store.EndLauf(id, erg.alsErgebnis()); err != nil {
 		return err
 	}
@@ -152,8 +152,8 @@ func (r *Runner) FuehreAus(ctx context.Context, a *auftrag.Auftrag, trigger, inp
 	return nil
 }
 
-// haseErgebnis sammelt, was der LLM-Schritt über sich weiß.
-type haseErgebnis struct {
+// haseResult sammelt, was der LLM-Schritt über sich weiß.
+type haseResult struct {
 	Status    string
 	SessionID string
 	Summary   string
@@ -163,7 +163,7 @@ type haseErgebnis struct {
 	Trace     *opencode.Trace // nil, wenn der Lauf vor der Auswertung scheiterte
 }
 
-func (h haseErgebnis) alsErgebnis() store.LaufResult {
+func (h haseResult) alsErgebnis() store.LaufResult {
 	return store.LaufResult{
 		Status:    h.Status,
 		SessionID: h.SessionID,
@@ -174,12 +174,12 @@ func (h haseErgebnis) alsErgebnis() store.LaufResult {
 	}
 }
 
-// fuehreHaseAus macht den LLM-Schritt: Session anlegen, Prompt
+// runHase macht den LLM-Schritt: Session anlegen, Prompt
 // asynchron an den generierten Agenten, Event-Stream mitlesen
 // (Tool-Calls loggen), auf session.idle warten, dann die Session
 // auswerten. Fertig ist der Lauf, wenn der Stream idle meldet ODER der
 // synchrone Call sauber zurückkommt — was zuerst eintritt.
-func (r *Runner) fuehreHaseAus(ctx context.Context, a *auftrag.Auftrag, laufID, prompt string, logf func(string, ...any)) (haseErgebnis, error) {
+func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt string, logf func(string, ...any)) (haseResult, error) {
 	timeout := r.HaseTimeout
 	if timeout == 0 {
 		timeout = 30 * time.Minute
@@ -189,7 +189,7 @@ func (r *Runner) fuehreHaseAus(ctx context.Context, a *auftrag.Auftrag, laufID, 
 
 	url := r.BaseURL()
 	if url == "" {
-		return haseErgebnis{}, fmt.Errorf("kein opencode-Server erreichbar")
+		return haseResult{}, fmt.Errorf("kein opencode-Server erreichbar")
 	}
 	client := opencode.New(url)
 
@@ -197,12 +197,12 @@ func (r *Runner) fuehreHaseAus(ctx context.Context, a *auftrag.Auftrag, laufID, 
 		Title: sdk.F(a.Name + " " + laufID),
 	})
 	if err != nil {
-		return haseErgebnis{}, fmt.Errorf("session anlegen: %w", err)
+		return haseResult{}, fmt.Errorf("session anlegen: %w", err)
 	}
-	erg := haseErgebnis{SessionID: sess.ID}
+	erg := haseResult{SessionID: sess.ID}
 
 	// Erst abonnieren, dann prompten — sonst kann idle am Abo vorbeilaufen.
-	ereignisse, abmelden := r.Funnel.Abonniere(sess.ID)
+	ereignisse, abmelden := r.Funnel.Subscribe(sess.ID)
 	defer abmelden()
 
 	promptFehler := make(chan error, 1)
@@ -222,16 +222,16 @@ warten:
 			switch {
 			case ev.Idle:
 				break warten
-			case ev.Fehler != "":
-				return erg, fmt.Errorf("session %s: %s", sess.ID, ev.Fehler)
+			case ev.Error != "":
+				return erg, fmt.Errorf("session %s: %s", sess.ID, ev.Error)
 			case ev.Tool != nil:
 				gesehen = true
 				zeile := fmt.Sprintf("lauf %s: tool %s [%s] %s", laufID, ev.Tool.Name, ev.Tool.CallID, ev.Tool.Status)
-				if ev.Tool.Fehler != "" {
-					zeile += " — " + ev.Tool.Fehler
+				if ev.Tool.Error != "" {
+					zeile += " — " + ev.Tool.Error
 				}
 				logf("%s", zeile)
-			case ev.Abriss:
+			case ev.Reconnected:
 				logf("lauf %s: Event-Stream neu verbunden — falls idle verloren ging, fängt der Prompt-Call oder der Timeout den Lauf", laufID)
 			}
 		case err := <-promptFehler:
@@ -243,7 +243,7 @@ warten:
 				// lief (Config-/Agent-Fehler) — nicht auf idle warten.
 				return erg, fmt.Errorf("prompt: %w", err)
 			}
-			// Abriss bei laufender Session (Spike-Befund) — der Stream
+			// Reconnected bei laufender Session (Spike-Befund) — der Stream
 			// bleibt die Wahrheitsquelle, der Timeout der Backstop.
 			logf("lauf %s: prompt-Call riss ab (%v) — warte auf session.idle", laufID, err)
 			promptFehler = nil
@@ -260,15 +260,15 @@ warten:
 	if err != nil {
 		return erg, fmt.Errorf("session %s auswerten: %w", sess.ID, err)
 	}
-	erg.Summary, erg.TokensIn, erg.TokensOut, erg.CostCent = werteAus(*msgs)
-	erg.Trace = opencode.TraceAus(sess.ID, *msgs).Gekuerzt(traceMax)
+	erg.Summary, erg.TokensIn, erg.TokensOut, erg.CostCent = evaluate(*msgs)
+	erg.Trace = opencode.TraceFrom(sess.ID, *msgs).Truncated(traceMax)
 	return erg, nil
 }
 
-// legeTraceAb schreibt den Verlauf zum Lauf. Ein Fehler dabei wird
+// storeTrace schreibt den Verlauf zum Lauf. Ein Fehler dabei wird
 // gemeldet, scheitert den Lauf aber nie: der Trace ist Material für
 // später, das Ergebnis des Laufs hängt nicht an ihm.
-func (r *Runner) legeTraceAb(id int64, erg haseErgebnis, logf func(string, ...any)) {
+func (r *Runner) storeTrace(id int64, erg haseResult, logf func(string, ...any)) {
 	if erg.Trace == nil || erg.SessionID == "" {
 		return
 	}
@@ -281,12 +281,12 @@ func (r *Runner) legeTraceAb(id int64, erg haseErgebnis, logf func(string, ...an
 	}
 }
 
-// werteAus zieht Summary, Tokens und Kosten aus den Session-Messages.
+// evaluate zieht Summary, Tokens und Kosten aus den Session-Messages.
 // Die Summary hier ist nur der Fallback — der Text der letzten
 // Assistant-Message. Hat der Hase seine Summary über den Rückkanal
 // geschrieben, gewinnt sie (§5, §8 Phase 2). In eine Zeile presst sie
 // der Store, der die Invariante hält.
-func werteAus(msgs []sdk.SessionMessagesResponse) (summary string, tokensIn, tokensOut, kostenCent int64) {
+func evaluate(msgs []sdk.SessionMessagesResponse) (summary string, tokensIn, tokensOut, kostenCent int64) {
 	var kosten float64
 	for _, m := range msgs {
 		am, ok := m.Info.AsUnion().(sdk.AssistantMessage)

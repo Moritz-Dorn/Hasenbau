@@ -293,7 +293,7 @@ func (s *Supervisor) waitExit(ctx context.Context) error {
 	}
 }
 
-// isolatedEnv erbt die Umgebung des Daemons, biegt aber XDG_CONFIG_HOME
+// isolatedEnv erbt die Environment des Daemons, biegt aber XDG_CONFIG_HOME
 // auf den Bau um. XDG_DATA_HOME bleibt geerbt → auth.json wird mit dem
 // täglichen opencode geteilt, sonst nichts (PLAN.md §3).
 func isolatedEnv(bauDir string) []string {

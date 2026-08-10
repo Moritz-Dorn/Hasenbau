@@ -43,7 +43,7 @@ func TestZieheTraceNormalisiert(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	trace, err := ZieheTrace(context.Background(), New(srv.URL), "ses_t")
+	trace, err := FetchTrace(context.Background(), New(srv.URL), "ses_t")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,33 +52,33 @@ func TestZieheTraceNormalisiert(t *testing.T) {
 	}
 
 	// Reihenfolge = Ausführungsreihenfolge; step-start/-finish fehlen.
-	arten := make([]string, len(trace.Schritte))
-	for i, s := range trace.Schritte {
-		arten[i] = s.Art
+	arten := make([]string, len(trace.Steps))
+	for i, s := range trace.Steps {
+		arten[i] = s.Kind
 	}
 	erwartet := []string{"text", "reasoning", "tool", "tool", "patch", "text"}
 	if strings.Join(arten, ",") != strings.Join(erwartet, ",") {
 		t.Fatalf("Arten = %v, erwartet %v", arten, erwartet)
 	}
 
-	ok := trace.Schritte[2]
+	ok := trace.Steps[2]
 	if ok.Tool != "write" || ok.CallID != "call_1" || ok.Status != "completed" ||
 		!strings.Contains(ok.Input, `"filePath":"raeume/lager/x.md"`) ||
-		ok.Output != "Wrote file successfully." || ok.Start == nil || ok.Ende == nil {
+		ok.Output != "Wrote file successfully." || ok.Start == nil || ok.End == nil {
 		t.Errorf("Erfolgs-Tool = %+v", ok)
 	}
-	if d := ok.Ende.Sub(*ok.Start).Milliseconds(); d != 17 {
+	if d := ok.End.Sub(*ok.Start).Milliseconds(); d != 17 {
 		t.Errorf("Dauer = %dms, erwartet 17", d)
 	}
 
-	fehl := trace.Schritte[3]
-	if fehl.Status != "error" || !strings.Contains(fehl.Fehler, "rule which prevents") ||
+	fehl := trace.Steps[3]
+	if fehl.Status != "error" || !strings.Contains(fehl.Error, "rule which prevents") ||
 		!strings.Contains(fehl.Input, "/tmp/escape.md") {
 		t.Errorf("Fehlversuch = %+v", fehl)
 	}
 
-	if trace.Schritte[0].Rolle != "user" || trace.Schritte[1].Rolle != "assistant" {
-		t.Errorf("Rollen = %q/%q", trace.Schritte[0].Rolle, trace.Schritte[1].Rolle)
+	if trace.Steps[0].Role != "user" || trace.Steps[1].Role != "assistant" {
+		t.Errorf("Rollen = %q/%q", trace.Steps[0].Role, trace.Steps[1].Role)
 	}
 
 	md := trace.Markdown()
@@ -105,7 +105,7 @@ func TestZieheTraceUnbekannteSession(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	_, err := ZieheTrace(context.Background(), New(srv.URL), "ses_weg")
+	_, err := FetchTrace(context.Background(), New(srv.URL), "ses_weg")
 	if err == nil || !strings.Contains(err.Error(), "ses_weg") {
 		t.Fatalf("erwartete Fehler mit Session-ID, bekam %v", err)
 	}
@@ -113,37 +113,37 @@ func TestZieheTraceUnbekannteSession(t *testing.T) {
 
 func TestGekuerztKapptUndSagtEs(t *testing.T) {
 	lang := strings.Repeat("x", 100)
-	trace := &Trace{SessionID: "ses_t", Schritte: []TraceSchritt{
-		{Art: "tool", Tool: "read", Input: `{"filePath":"a.md"}`, Output: lang},
-		{Art: "tool", Tool: "write", Fehler: lang},
-		{Art: "text", Text: lang},
+	trace := &Trace{SessionID: "ses_t", Steps: []TraceStep{
+		{Kind: "tool", Tool: "read", Input: `{"filePath":"a.md"}`, Output: lang},
+		{Kind: "tool", Tool: "write", Error: lang},
+		{Kind: "text", Text: lang},
 	}}
 
-	k := trace.Gekuerzt(20)
-	if len(trace.Schritte[0].Output) != 100 {
-		t.Error("Gekuerzt hat das Original verändert")
+	k := trace.Truncated(20)
+	if len(trace.Steps[0].Output) != 100 {
+		t.Error("Truncated hat das Original verändert")
 	}
-	if !strings.HasPrefix(k.Schritte[0].Output, strings.Repeat("x", 20)) ||
-		!strings.Contains(k.Schritte[0].Output, "gekürzt, 100 Bytes") {
-		t.Errorf("Output = %q", k.Schritte[0].Output)
+	if !strings.HasPrefix(k.Steps[0].Output, strings.Repeat("x", 20)) ||
+		!strings.Contains(k.Steps[0].Output, "gekürzt, 100 Bytes") {
+		t.Errorf("Output = %q", k.Steps[0].Output)
 	}
-	if !strings.Contains(k.Schritte[1].Fehler, "gekürzt") {
-		t.Errorf("Fehler = %q", k.Schritte[1].Fehler)
+	if !strings.Contains(k.Steps[1].Error, "gekürzt") {
+		t.Errorf("Fehler = %q", k.Steps[1].Error)
 	}
 	// Kurze Felder und Texte bleiben, wie sie sind — der Trace soll
 	// lesbar bleiben, nicht überall Stummel zeigen.
-	if k.Schritte[0].Input != `{"filePath":"a.md"}` {
-		t.Errorf("kurzer Input gekappt: %q", k.Schritte[0].Input)
+	if k.Steps[0].Input != `{"filePath":"a.md"}` {
+		t.Errorf("kurzer Input gekappt: %q", k.Steps[0].Input)
 	}
-	if k.Schritte[2].Text != lang {
+	if k.Steps[2].Text != lang {
 		t.Error("Text darf nicht gekappt werden — er ist die Absicht, nicht die Ausgabe")
 	}
 }
 
 func TestGekuerztSchneidetAnRunengrenze(t *testing.T) {
 	// 10 Umlaute = 20 Bytes; ein Schnitt bei 15 landet mitten in einem.
-	trace := &Trace{Schritte: []TraceSchritt{{Art: "tool", Output: strings.Repeat("ä", 10)}}}
-	got := trace.Gekuerzt(15).Schritte[0].Output
+	trace := &Trace{Steps: []TraceStep{{Kind: "tool", Output: strings.Repeat("ä", 10)}}}
+	got := trace.Truncated(15).Steps[0].Output
 	if !utf8.ValidString(got) {
 		t.Errorf("gekappter Output ist kein gültiges UTF-8: %q", got)
 	}

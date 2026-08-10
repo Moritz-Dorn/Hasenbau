@@ -1,4 +1,4 @@
-package rueckkanal
+package backchannel
 
 import (
 	"context"
@@ -118,7 +118,7 @@ func TestSchreibtAnDenAktivenLauf(t *testing.T) {
 
 	res := rufe(t, c, ctx, "notiz", "Rechnung ohne Datum")
 	if res.IsError {
-		t.Fatalf("notiz meldet Fehler: %s", text(t, res))
+		t.Fatalf("notiz meldet Error: %s", text(t, res))
 	}
 	// Die Quittung nennt den Lauf — der Hase soll sehen, wo es landete.
 	if antwort := text(t, res); !strings.Contains(antwort, "Lauf 7") || !strings.Contains(antwort, "pdf-einlagern") {
@@ -126,7 +126,7 @@ func TestSchreibtAnDenAktivenLauf(t *testing.T) {
 	}
 
 	if res := rufe(t, c, ctx, "summary", "3 Rechnungen einsortiert"); res.IsError {
-		t.Fatalf("summary meldet Fehler: %s", text(t, res))
+		t.Fatalf("summary meldet Error: %s", text(t, res))
 	}
 	if len(f.notizen) != 1 || f.notizen[0] != "Rechnung ohne Datum" {
 		t.Errorf("Notizen = %v", f.notizen)

@@ -1,4 +1,4 @@
-// nachher.go führt die Aufräum-Schritte eines Auftrags aus (§6):
+// nachher.go führt die Aufräum-Steps eines Auftrags aus (§6):
 // move, copy, delete — nur nach einem erfolgreichen Lauf (der Aufrufer
 // entscheidet das; der move → archiv/ ist der Idempotenz-Mechanismus).
 package runner
@@ -15,20 +15,20 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 )
 
-// FuehreNachherAus arbeitet die nachher:-Schritte sequenziell ab.
+// RunAfter arbeitet die nachher:-Steps sequenziell ab.
 // Pfade werden substituiert und müssen danach im Bau bleiben — $BAU
 // (absolut) ist hier deshalb tabu. Der erste Fehler bricht ab.
-func FuehreNachherAus(u *lauf.Umgebung, a *auftrag.Auftrag) error {
+func RunAfter(u *lauf.Environment, a *auftrag.Auftrag) error {
 	for i, n := range a.After {
-		if err := fuehreSchrittAus(u, n); err != nil {
+		if err := runStep(u, n); err != nil {
 			return fmt.Errorf("nachher %d (%s): %w", i+1, n.Action, err)
 		}
 	}
 	return nil
 }
 
-func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.After) error {
-	von, err := substituierterBauPfad(u, n.From)
+func runStep(u *lauf.Environment, n auftrag.After) error {
+	von, err := substitutedBauPath(u, n.From)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.After) error {
 		}
 		return nil
 	case "move", "copy":
-		nach, err := substituierterBauPfad(u, n.To)
+		nach, err := substitutedBauPath(u, n.To)
 		if err != nil {
 			return err
 		}
@@ -54,7 +54,7 @@ func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.After) error {
 			}
 			return nil
 		}
-		if err := kopiere(filepath.Join(u.Bau, von), filepath.Join(u.Bau, ziel)); err != nil {
+		if err := copyFile(filepath.Join(u.Bau, von), filepath.Join(u.Bau, ziel)); err != nil {
 			return fmt.Errorf("copy %s -> %s: %w", von, ziel, err)
 		}
 		return nil
@@ -64,10 +64,10 @@ func fuehreSchrittAus(u *lauf.Umgebung, n auftrag.After) error {
 	}
 }
 
-// substituierterBauPfad ersetzt Variablen und erzwingt danach die
-// Bau-Grenze: nachher-Schritte arbeiten nur im Bau (§3).
-func substituierterBauPfad(u *lauf.Umgebung, roh string) (string, error) {
-	pfad, err := u.Ersetze(roh)
+// substitutedBauPath ersetzt Variablen und erzwingt danach die
+// Bau-Grenze: nachher-Steps arbeiten nur im Bau (§3).
+func substitutedBauPath(u *lauf.Environment, roh string) (string, error) {
+	pfad, err := u.Substitute(roh)
 	if err != nil {
 		return "", err
 	}
@@ -100,7 +100,7 @@ func zielPfad(bau, von, nach, roh string) (string, error) {
 	return ziel, nil
 }
 
-func kopiere(von, nach string) error {
+func copyFile(von, nach string) error {
 	quelle, err := os.Open(von)
 	if err != nil {
 		return err

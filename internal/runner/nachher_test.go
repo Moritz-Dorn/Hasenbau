@@ -15,7 +15,7 @@ func TestNachherMoveInVerzeichnis(t *testing.T) {
 	a.After = []auftrag.After{{Action: "move", From: "$INPUT", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 
-	if err := FuehreNachherAus(u, a); err != nil {
+	if err := RunAfter(u, a); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(u.Bau, "raeume/archiv/doc.txt")); err != nil {
@@ -38,7 +38,7 @@ func TestNachherMoveKollisionUeberschreibtNie(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := FuehreNachherAus(u, a); err != nil {
+	if err := RunAfter(u, a); err != nil {
 		t.Fatal(err)
 	}
 	alt, err := os.ReadFile(filepath.Join(u.Bau, "raeume/archiv/doc.txt"))
@@ -59,7 +59,7 @@ func TestNachherCopyUndDelete(t *testing.T) {
 	}
 	u := testUmgebung(t, a)
 
-	if err := FuehreNachherAus(u, a); err != nil {
+	if err := RunAfter(u, a); err != nil {
 		t.Fatal(err)
 	}
 	kopie, err := os.ReadFile(filepath.Join(u.Bau, "raeume/work/sicherung.txt"))
@@ -81,7 +81,7 @@ func TestNachherBleibtImBau(t *testing.T) {
 		a := testAuftrag()
 		a.After = []auftrag.After{n}
 		u := testUmgebung(t, a)
-		if err := FuehreNachherAus(u, a); err == nil {
+		if err := RunAfter(u, a); err == nil {
 			t.Errorf("%s %s -> %s: muss scheitern", n.Action, n.From, n.To)
 		}
 	}
@@ -91,7 +91,7 @@ func TestNachherFehlendeQuelle(t *testing.T) {
 	a := testAuftrag()
 	a.After = []auftrag.After{{Action: "move", From: "raeume/eingang/gibtsnicht.txt", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
-	if err := FuehreNachherAus(u, a); err == nil || !strings.Contains(err.Error(), "gibtsnicht") {
+	if err := RunAfter(u, a); err == nil || !strings.Contains(err.Error(), "gibtsnicht") {
 		t.Errorf("fehlende Quelle: %v", err)
 	}
 }

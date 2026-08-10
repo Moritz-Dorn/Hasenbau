@@ -26,7 +26,7 @@ func TestMCPSicherstellen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	geschrieben, err := MCPSicherstellen(root, "/opt/hasenbau")
+	geschrieben, err := EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestMCPSicherstellen(t *testing.T) {
 	}
 
 	// Zweiter Aufruf ist ein No-op.
-	geschrieben, err = MCPSicherstellen(root, "/opt/hasenbau")
+	geschrieben, err = EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestMCPSicherstellenLaesstHandarbeitStehen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	geschrieben, err := MCPSicherstellen(root, "/opt/hasenbau")
+	geschrieben, err := EnsureMCP(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestMCPSicherstellenNebenFremdenServern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := MCPSicherstellen(root, "/opt/hasenbau"); err != nil {
+	if _, err := EnsureMCP(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	mcp := leseConfig(t, root)["mcp"].(map[string]any)
@@ -121,7 +121,7 @@ func TestMCPSicherstellenNebenFremdenServern(t *testing.T) {
 }
 
 func TestMCPSicherstellenOhneConfig(t *testing.T) {
-	if _, err := MCPSicherstellen(t.TempDir(), "/opt/hasenbau"); err == nil {
+	if _, err := EnsureMCP(t.TempDir(), "/opt/hasenbau"); err == nil {
 		t.Error("ohne Bau-Config kein Fehler")
 	}
 }

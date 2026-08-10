@@ -147,7 +147,7 @@ func TestFuehreAusEndeUeberEventStream(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: logf,
 	}
-	if err := r.FuehreAus(ctx, a, "manual", ""); err != nil {
+	if err := r.Execute(ctx, a, "manual", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +217,7 @@ func TestFuehreAusSessionError(t *testing.T) {
 		Store: st, Funnel: funnel,
 		HaseTimeout: 10 * time.Second, Logf: t.Logf,
 	}
-	err := r.FuehreAus(ctx, a, "manual", "")
+	err := r.Execute(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "UnknownError") {
 		t.Fatalf("erwartete session.error, bekam %v", err)
 	}
@@ -271,7 +271,7 @@ func TestFuehreAusPromptAbgelehnt(t *testing.T) {
 		HaseTimeout: time.Minute, Logf: t.Logf,
 	}
 	anfang := time.Now()
-	err := r.FuehreAus(ctx, a, "manual", "")
+	err := r.Execute(ctx, a, "manual", "")
 	if err == nil || !strings.Contains(err.Error(), "prompt") {
 		t.Fatalf("erwartete Prompt-Fehler, bekam %v", err)
 	}

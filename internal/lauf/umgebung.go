@@ -1,4 +1,4 @@
-// Package lauf baut die Umgebung einer Auftrags-Ausführung (PLAN.md §6):
+// Package lauf baut die Environment einer Auftrags-Ausführung (PLAN.md §6):
 // Räume existieren, $WORK ist pro Lauf angelegt, Variablen sind gebunden.
 // Alles hier ist deterministisch — kein LLM, keine Substitution im Stillen.
 package lauf
@@ -13,19 +13,19 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 )
 
-// Umgebung ist der aufgelöste Kontext eines Laufs. Alle Pfade außer Bau
+// Environment ist der aufgelöste Kontext eines Laufs. Alle Pfade außer Bau
 // sind Bau-relativ — Prozesse laufen mit CWD im Bau (§3-Invariante),
 // und die Permission-Patterns der Hasen ankern ebenfalls dort.
-type Umgebung struct {
+type Environment struct {
 	Bau    string            // absoluter Bau-Root ($BAU)
 	Input  string            // Auslöser ($INPUT): auslösende Datei bei watch, freies Argument bei manuell
 	Work   string            // Scratch dieses Laufs ($WORK), leer ohne work-Raum
 	Raeume map[string]string // Rolle → Pfad ($RAUM_<rolle>)
 
-	// TriggerArt ist die Art des Auftrags (auftrag.TriggerWatch|Cron|
+	// TriggerKind ist die Art des Auftrags (auftrag.TriggerWatch|Cron|
 	// Manuell), nicht der Trigger der laeufe-Zeile. Nur bei watch ist
 	// Input ein Pfad — daran hängt die Quarantäne (§7).
-	TriggerArt string
+	TriggerKind string
 
 	// Hasenbau ist der absolute Pfad des laufenden Binaries
 	// ($HASENBAU). Ein Gang, der den Hasenbau selbst aufruft, darf
@@ -33,14 +33,14 @@ type Umgebung struct {
 	Hasenbau string
 }
 
-var laufIDMuster = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+var laufIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // Neue legt fehlende Räume an (Räume sind Konvention, kein Vertrag —
 // §4), erzeugt das $WORK-Verzeichnis dieses Laufs und bindet die
 // Variablen. input ist bei watch der Bau-relative Pfad der auslösenden
 // Datei (Pflicht), bei cron verboten und bei manuell das übergebene
 // Argument (optional, kein Pfad).
-func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, error) {
+func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, error) {
 	fehler := func(format string, args ...any) error {
 		return fmt.Errorf("lauf %s (%s): %s", laufID, a.Name, fmt.Sprintf(format, args...))
 	}
@@ -48,7 +48,7 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, err
 	if !filepath.IsAbs(root) {
 		return nil, fehler("bau-Root %q muss absolut sein", root)
 	}
-	if !laufIDMuster.MatchString(laufID) {
+	if !laufIDPattern.MatchString(laufID) {
 		return nil, fehler("ungültige Lauf-ID %q", laufID)
 	}
 	switch {
@@ -63,12 +63,12 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, err
 	// Gang mit leerem Kommando zu starten.
 	exe, _ := os.Executable()
 
-	u := &Umgebung{
-		Bau:        root,
-		Input:      input,
-		Raeume:     a.Raeume,
-		TriggerArt: a.Trigger.Kind(),
-		Hasenbau:   exe,
+	u := &Environment{
+		Bau:         root,
+		Input:       input,
+		Raeume:      a.Raeume,
+		TriggerKind: a.Trigger.Kind(),
+		Hasenbau:    exe,
 	}
 	for rolle, pfad := range a.Raeume {
 		if err := os.MkdirAll(filepath.Join(root, pfad), 0o755); err != nil {
@@ -84,17 +84,17 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Umgebung, err
 	return u, nil
 }
 
-// variableMuster: $NAME, beginnend mit Großbuchstabe — deckt $BAU,
+// variablePattern: $NAME, beginnend mit Großbuchstabe — deckt $BAU,
 // $INPUT, $WORK und $RAUM_<rolle> ab. Shell-Variablen wie $HOME sind
 // absichtlich keine Ausnahme: unbekannt ⇒ Fehler.
-var variableMuster = regexp.MustCompile(`\$([A-Z][A-Za-z0-9_]*)`)
+var variablePattern = regexp.MustCompile(`\$([A-Z][A-Za-z0-9_]*)`)
 
-// Ersetze substituiert die Lauf-Variablen in s. Unbekannte oder in
+// Substitute substituiert die Lauf-Variablen in s. Unbekannte oder in
 // diesem Lauf nicht gebundene Variablen sind ein Fehler — nie ein
 // stilles Leerersetzen.
-func (u *Umgebung) Ersetze(s string) (string, error) {
+func (u *Environment) Substitute(s string) (string, error) {
 	var fehler []string
-	ersetzt := variableMuster.ReplaceAllStringFunc(s, func(treffer string) string {
+	ersetzt := variablePattern.ReplaceAllStringFunc(s, func(treffer string) string {
 		name := treffer[1:]
 		switch {
 		case name == "BAU":

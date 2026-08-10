@@ -16,7 +16,7 @@ func TestTraceSchreibenUndLesen(t *testing.T) {
 		t.Errorf("vor dem Schreiben: da=%v, err=%v", da, err)
 	}
 
-	roh := []byte(`{"session_id":"ses_1","schritte":[{"art":"tool","tool":"write"}]}`)
+	roh := []byte(`{"session_id":"ses_1","steps":[{"kind":"tool","tool":"write"}]}`)
 	if err := s.WriteTrace(id, "ses_1", roh); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestTraceSchreibenUndLesen(t *testing.T) {
 
 	// Nachtragen darf überschreiben — der Lazy-Backfill in `graben`
 	// fragt nicht erst.
-	neu := []byte(`{"session_id":"ses_1","schritte":[]}`)
+	neu := []byte(`{"session_id":"ses_1","steps":[]}`)
 	if err := s.WriteTrace(id, "ses_1", neu); err != nil {
 		t.Fatal(err)
 	}

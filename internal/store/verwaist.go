@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Moritz-Dorn/Hasenbau/internal/prozess"
+	"github.com/Moritz-Dorn/Hasenbau/internal/process"
 )
 
 // nullTime macht aus einer Nullzeit ein SQL NULL — die Startzeit des
@@ -36,7 +36,7 @@ func orphaned(pid sql.NullInt64, pidStarted sql.NullTime) bool {
 		// seine PID.
 		return true
 	}
-	return !prozess.Lebt(int(pid.Int64), pidStarted.Time)
+	return !process.Alive(int(pid.Int64), pidStarted.Time)
 }
 
 // CleanupLaeufe schließt die Läufe ab, deren Wirt gestorben ist:

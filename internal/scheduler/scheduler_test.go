@@ -19,7 +19,7 @@ func TestCronFeuert(t *testing.T) {
 	var zaehler atomic.Int32
 	s, err := New(
 		[]*auftrag.Auftrag{cronAuftrag("tick", "@every 1s")},
-		lauf.NeueSperre(),
+		lauf.NewLock(),
 		func(a *auftrag.Auftrag) { zaehler.Add(1) },
 		nil,
 	)
@@ -45,11 +45,11 @@ func TestSperreVerhindertOverlapUndLoggt(t *testing.T) {
 		logs    []string
 	)
 	blockiere := make(chan struct{})
-	sperre := lauf.NeueSperre()
+	lock := lauf.NewLock()
 
 	s, err := New(
 		[]*auftrag.Auftrag{cronAuftrag("langsam", "@every 1s")},
-		sperre,
+		lock,
 		func(a *auftrag.Auftrag) {
 			zaehler.Add(1)
 			<-blockiere // hält die Sperre über mehrere Ticks
@@ -90,19 +90,19 @@ func TestSperreVerhindertOverlapUndLoggt(t *testing.T) {
 }
 
 func TestSperreIstTriggerUebergreifend(t *testing.T) {
-	sperre := lauf.NeueSperre()
-	if !sperre.Belege("pdf-einlagern") {
+	lock := lauf.NewLock()
+	if !lock.Acquire("pdf-einlagern") {
 		t.Fatal("frische Sperre muss belegbar sein")
 	}
 	// Ein Watcher- oder manueller Lauf desselben Auftrags muss abprallen.
-	if sperre.Belege("pdf-einlagern") {
+	if lock.Acquire("pdf-einlagern") {
 		t.Error("Doppel-Belegung möglich")
 	}
-	if !sperre.Belege("anderer-auftrag") {
+	if !lock.Acquire("anderer-auftrag") {
 		t.Error("fremder Auftrag fälschlich blockiert")
 	}
-	sperre.GibFrei("pdf-einlagern")
-	if !sperre.Belege("pdf-einlagern") {
+	lock.Release("pdf-einlagern")
+	if !lock.Acquire("pdf-einlagern") {
 		t.Error("nach GibFrei nicht wieder belegbar")
 	}
 }
@@ -110,7 +110,7 @@ func TestSperreIstTriggerUebergreifend(t *testing.T) {
 func TestWatchAuftraegeWerdenIgnoriert(t *testing.T) {
 	s, err := New(
 		[]*auftrag.Auftrag{{Name: "w", Hase: "h", Trigger: auftrag.Trigger{Watch: "raeume/x/*.pdf"}}},
-		lauf.NeueSperre(),
+		lauf.NewLock(),
 		func(a *auftrag.Auftrag) { t.Error("watch-Auftrag im Scheduler gefeuert") },
 		nil,
 	)

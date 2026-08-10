@@ -16,8 +16,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigDatei ist der Ort der Bau-Config, Bau-relativ.
-const ConfigDatei = "hasenbau.yaml"
+// ConfigFile ist der Ort der Bau-Config, Bau-relativ.
+const ConfigFile = "hasenbau.yaml"
 
 // Config ist die geparste hasenbau.yaml.
 type Config struct {
@@ -33,7 +33,7 @@ type Config struct {
 	Baumeister string
 }
 
-type configDaten struct {
+type configFields struct {
 	LogLevel   *string `yaml:"log_level"`
 	Baumeister *string `yaml:"baumeister"`
 }
@@ -45,36 +45,36 @@ var logLevel = map[string]bool{"debug": true, "info": true, "warn": true, "error
 // umgekehrt soll bau nicht das halbe Auftragsformat hereinziehen.
 var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// LadeConfig liest <root>/hasenbau.yaml. Fehlt die Datei, gelten die
+// LoadConfig liest <root>/hasenbau.yaml. Fehlt die Datei, gelten die
 // Defaults — sie wird von `hasenbau init` angelegt, und ihr Fehlen ist
 // kein Grund, den Daemon nicht zu starten.
-func LadeConfig(root string) (*Config, error) {
+func LoadConfig(root string) (*Config, error) {
 	c := &Config{LogLevel: "info"}
-	pfad := filepath.Join(root, ConfigDatei)
+	pfad := filepath.Join(root, ConfigFile)
 	src, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("bau: %s lesen: %w", ConfigDatei, err)
+		return nil, fmt.Errorf("bau: %s lesen: %w", ConfigFile, err)
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
-	var d configDaten
+	var d configFields
 	if err := dec.Decode(&d); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister)", ConfigDatei, err)
+		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister)", ConfigFile, err)
 	}
 
 	if d.LogLevel != nil {
 		if !logLevel[*d.LogLevel] {
-			return nil, fmt.Errorf("bau: %s: log_level %q (erlaubt: debug, info, warn, error)", ConfigDatei, *d.LogLevel)
+			return nil, fmt.Errorf("bau: %s: log_level %q (erlaubt: debug, info, warn, error)", ConfigFile, *d.LogLevel)
 		}
 		c.LogLevel = *d.LogLevel
 	}
 	if d.Baumeister != nil {
 		if !namePattern.MatchString(*d.Baumeister) {
-			return nil, fmt.Errorf("bau: %s: baumeister %q ist kein gültiger Auftrags-Name (erlaubt: Buchstaben, Ziffern, . _ -)", ConfigDatei, *d.Baumeister)
+			return nil, fmt.Errorf("bau: %s: baumeister %q ist kein gültiger Auftrags-Name (erlaubt: Buchstaben, Ziffern, . _ -)", ConfigFile, *d.Baumeister)
 		}
 		c.Baumeister = *d.Baumeister
 	}

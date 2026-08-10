@@ -99,9 +99,9 @@ func TestGrabenAusDerDBOhneServer(t *testing.T) {
 	if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
 		t.Fatal(err)
 	}
-	roh := []byte(`{"session_id":"ses_t","schritte":[` +
-		`{"art":"reasoning","rolle":"assistant","text":"Erst lesen."},` +
-		`{"art":"tool","rolle":"assistant","tool":"write","status":"completed","input":"{\"filePath\":\"raeume/lager/x.md\"}"}]}`)
+	roh := []byte(`{"session_id":"ses_t","steps":[` +
+		`{"kind":"reasoning","role":"assistant","text":"Erst lesen."},` +
+		`{"kind":"tool","role":"assistant","tool":"write","status":"completed","input":"{\"filePath\":\"raeume/lager/x.md\"}"}]}`)
 	if err := st.WriteTrace(id, "ses_t", roh); err != nil {
 		t.Fatal(err)
 	}

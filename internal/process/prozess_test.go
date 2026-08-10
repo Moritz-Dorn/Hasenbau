@@ -1,4 +1,4 @@
-package prozess
+package process
 
 import (
 	"os"
@@ -9,23 +9,23 @@ import (
 )
 
 func TestIchLebt(t *testing.T) {
-	pid, start := Ich()
+	pid, start := Self()
 	if pid != os.Getpid() {
-		t.Errorf("Ich() = %d, erwartet %d", pid, os.Getpid())
+		t.Errorf("Self() = %d, erwartet %d", pid, os.Getpid())
 	}
-	if !Lebt(pid, start) {
+	if !Alive(pid, start) {
 		t.Errorf("der eigene Prozess (%d, %s) gilt als tot", pid, start)
 	}
 	// Zweiter Aufruf muss dasselbe liefern — die Startzeit ist der
 	// Anker, an dem später eine recycelte PID auffliegt.
-	pid2, start2 := Ich()
+	pid2, start2 := Self()
 	if pid2 != pid || !start2.Equal(start) {
-		t.Errorf("Ich() ist nicht stabil: (%d, %s) vs. (%d, %s)", pid, start, pid2, start2)
+		t.Errorf("Self() ist nicht stabil: (%d, %s) vs. (%d, %s)", pid, start, pid2, start2)
 	}
 }
 
 func TestLebtLehntUnsinnigePIDAb(t *testing.T) {
-	if Lebt(0, time.Time{}) || Lebt(-1, time.Time{}) {
+	if Alive(0, time.Time{}) || Alive(-1, time.Time{}) {
 		t.Error("PID <= 0 gilt als lebend")
 	}
 }
@@ -47,7 +47,7 @@ func TestToterProzessLebtNicht(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := cmd.Process.Pid
-	start, ok := startZeit(pid)
+	start, ok := startTime(pid)
 	if !ok {
 		// Das Kind war schneller als wir — dann ist es garantiert tot,
 		// und die Startzeit spielt keine Rolle mehr.
@@ -56,7 +56,7 @@ func TestToterProzessLebtNicht(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	if Lebt(pid, start) {
+	if Alive(pid, start) {
 		t.Errorf("beendetes Kind (PID %d) gilt als lebend", pid)
 	}
 }
@@ -66,13 +66,13 @@ func TestRecyceltePIDGiltNichtAlsLebend(t *testing.T) {
 
 	// Dieselbe PID, aber eine Inkarnation von vor einer Stunde: genau
 	// der Fall, den die PID allein nicht erkennt.
-	pid, start := Ich()
-	if Lebt(pid, start.Add(-time.Hour)) {
+	pid, start := Self()
+	if Alive(pid, start.Add(-time.Hour)) {
 		t.Error("PID mit fremder Startzeit gilt als lebend")
 	}
 	// Sekundenbruchteile dürfen dagegen nicht stören — die Startzeit
 	// kommt aus Boot-Zeit plus Ticks.
-	if !Lebt(pid, start.Add(-time.Second)) {
+	if !Alive(pid, start.Add(-time.Second)) {
 		t.Error("Startzeit-Toleranz greift nicht")
 	}
 }
@@ -92,11 +92,11 @@ func TestZombieGiltAlsTot(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := cmd.Process.Pid
-	start, ok := startZeit(pid)
+	start, ok := startTime(pid)
 	if !ok {
 		t.Fatalf("keine Startzeit für PID %d", pid)
 	}
-	if !Lebt(pid, start) {
+	if !Alive(pid, start) {
 		t.Fatalf("laufendes Kind (PID %d) gilt als tot", pid)
 	}
 	if err := cmd.Process.Kill(); err != nil {
@@ -106,7 +106,7 @@ func TestZombieGiltAlsTot(t *testing.T) {
 	defer cmd.Wait()
 
 	frist := time.Now().Add(5 * time.Second)
-	for Lebt(pid, start) {
+	for Alive(pid, start) {
 		if time.Now().After(frist) {
 			t.Fatalf("Zombie (PID %d) gilt weiter als lebend", pid)
 		}
@@ -117,13 +117,13 @@ func TestZombieGiltAlsTot(t *testing.T) {
 func TestStartZeitIstPlausibel(t *testing.T) {
 	nurLinux(t)
 
-	_, start := Ich()
+	_, start := Self()
 	if start.IsZero() {
 		t.Fatal("keine Startzeit für den eigenen Prozess")
 	}
 	// Der Testprozess ist gerade erst angelaufen; mehr als ein paar
 	// Minuten daneben hieße, dass Boot-Zeit oder Ticks nicht stimmen.
-	if abstand := time.Since(start); abstand < -startAbweichung || abstand > 10*time.Minute {
+	if abstand := time.Since(start); abstand < -startTolerance || abstand > 10*time.Minute {
 		t.Errorf("Startzeit %s liegt %s zurück — unplausibel", start, abstand)
 	}
 }

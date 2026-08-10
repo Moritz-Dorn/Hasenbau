@@ -180,12 +180,12 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "Aufruf: hasenbau get provider")
 		return 2
 	}
-	conf, err := provider.LadeConfig(root)
+	conf, err := provider.LoadConfig(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	eintraege := conf.Liste()
+	eintraege := conf.List()
 	if len(eintraege) == 0 {
 		fmt.Fprintf(out, "keine Provider in %s\n", conf.Pfad)
 		fmt.Fprintln(out, "Das Gerüst (npm, options.baseURL) gehört handgepflegt in den provider:-Block (PLAN.md §3).")
@@ -194,7 +194,7 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 
 	// Der Schlüssel selbst bleibt, wo er ist — hier zählt nur, ob es
 	// einen gibt.
-	schluessel, err := provider.SchluesselIDs()
+	schluessel, err := provider.KeyIDs()
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -224,7 +224,7 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(out, "oder das Gerüst im provider:-Block ist unvollständig.")
 	}
 	if ohneSchluessel {
-		fmt.Fprintf(out, "Ohne Schlüssel: in %s anmelden (`opencode auth login`) — die Datei teilen\n", provider.AuthPfad())
+		fmt.Fprintf(out, "Ohne Schlüssel: in %s anmelden (`opencode auth login`) — die Datei teilen\n", provider.AuthPath())
 		fmt.Fprintln(out, "sich Bau und Alltags-opencode (PLAN.md §3).")
 	}
 	return 0

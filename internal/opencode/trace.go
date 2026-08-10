@@ -18,42 +18,42 @@ import (
 
 // Trace ist der aufbereitete Verlauf einer Session.
 type Trace struct {
-	SessionID string         `json:"session_id"`
-	Schritte  []TraceSchritt `json:"schritte"`
+	SessionID string      `json:"session_id"`
+	Steps     []TraceStep `json:"steps"`
 }
 
-// TraceSchritt ist ein Ereignis in Ausführungsreihenfolge. Art folgt
+// TraceStep ist ein Ereignis in Ausführungsreihenfolge. Kind folgt
 // dem opencode-Vokabular der Parts: "text", "reasoning", "tool",
 // "patch". step-start/-finish und Snapshots sind Rauschen und fehlen.
-type TraceSchritt struct {
-	Art    string     `json:"art"`
-	Rolle  string     `json:"rolle"` // user | assistant
+type TraceStep struct {
+	Kind   string     `json:"kind"`
+	Role   string     `json:"role"` // user | assistant
 	Text   string     `json:"text,omitempty"`
 	Tool   string     `json:"tool,omitempty"`
 	CallID string     `json:"call_id,omitempty"`
 	Status string     `json:"status,omitempty"` // completed | error | …
 	Input  string     `json:"input,omitempty"`  // JSON der Argumente, vollständig
 	Output string     `json:"output,omitempty"`
-	Fehler string     `json:"fehler,omitempty"`
+	Error  string     `json:"error,omitempty"`
 	Start  *time.Time `json:"start,omitempty"` // nur tool, aus State.Time
-	Ende   *time.Time `json:"ende,omitempty"`
+	End    *time.Time `json:"end,omitempty"`
 }
 
-// ZieheTrace holt die Messages der Session und normalisiert sie. Die
+// FetchTrace holt die Messages der Session und normalisiert sie. Die
 // Reihenfolge der Parts ist die Ausführungsreihenfolge (§11.3).
-func ZieheTrace(ctx context.Context, client *sdk.Client, sessionID string) (*Trace, error) {
+func FetchTrace(ctx context.Context, client *sdk.Client, sessionID string) (*Trace, error) {
 	msgs, err := client.Session.Messages(ctx, sessionID, sdk.SessionMessagesParams{})
 	if err != nil {
 		return nil, fmt.Errorf("trace der Session %s: %w", sessionID, err)
 	}
-	return TraceAus(sessionID, *msgs), nil
+	return TraceFrom(sessionID, *msgs), nil
 }
 
-// TraceAus normalisiert bereits geholte Messages — derselbe Weg wie
-// ZieheTrace, nur ohne HTTP. Der Runner hat die Messages am Lauf-Ende
+// TraceFrom normalisiert bereits geholte Messages — derselbe Weg wie
+// FetchTrace, nur ohne HTTP. Der Runner hat die Messages am Lauf-Ende
 // ohnehin in der Hand und legt den Trace damit ab, ohne ihn ein
 // zweites Mal zu holen.
-func TraceAus(sessionID string, msgs []sdk.SessionMessagesResponse) *Trace {
+func TraceFrom(sessionID string, msgs []sdk.SessionMessagesResponse) *Trace {
 	t := &Trace{SessionID: sessionID}
 	for _, m := range msgs {
 		rolle := string(m.Info.Role)
@@ -61,32 +61,32 @@ func TraceAus(sessionID string, msgs []sdk.SessionMessagesResponse) *Trace {
 			switch u := p.AsUnion().(type) {
 			case sdk.TextPart:
 				if s := strings.TrimSpace(u.Text); s != "" {
-					t.Schritte = append(t.Schritte, TraceSchritt{Art: "text", Rolle: rolle, Text: s})
+					t.Steps = append(t.Steps, TraceStep{Kind: "text", Role: rolle, Text: s})
 				}
 			case sdk.ReasoningPart:
 				if s := strings.TrimSpace(u.Text); s != "" {
-					t.Schritte = append(t.Schritte, TraceSchritt{Art: "reasoning", Rolle: rolle, Text: s})
+					t.Steps = append(t.Steps, TraceStep{Kind: "reasoning", Role: rolle, Text: s})
 				}
 			case sdk.ToolPart:
 				input, err := json.Marshal(u.State.Input)
 				if err != nil {
 					input = []byte(fmt.Sprintf("%q", fmt.Sprint(u.State.Input)))
 				}
-				s := TraceSchritt{
-					Art:    "tool",
-					Rolle:  rolle,
+				s := TraceStep{
+					Kind:   "tool",
+					Role:   rolle,
 					Tool:   u.Tool,
 					CallID: u.CallID,
 					Status: string(u.State.Status),
 					Input:  string(input),
 					Output: u.State.Output,
-					Fehler: u.State.Error,
+					Error:  u.State.Error,
 				}
-				s.Start, s.Ende = toolZeiten(u.State.Time)
-				t.Schritte = append(t.Schritte, s)
+				s.Start, s.End = toolTimes(u.State.Time)
+				t.Steps = append(t.Steps, s)
 			default:
 				if p.Type == sdk.PartTypePatch {
-					t.Schritte = append(t.Schritte, TraceSchritt{Art: "patch", Rolle: rolle})
+					t.Steps = append(t.Steps, TraceStep{Kind: "patch", Role: rolle})
 				}
 			}
 		}
@@ -94,27 +94,27 @@ func TraceAus(sessionID string, msgs []sdk.SessionMessagesResponse) *Trace {
 	return t
 }
 
-// Gekuerzt liefert eine Kopie, deren Ausgaben und Fehlertexte bei max
+// Truncated liefert eine Kopie, deren Ausgaben und Fehlertexte bei max
 // Bytes gekappt sind. Was in die Bau-DB geht, ist Baumeister-Input,
 // kein Archiv: für die Verdichtung zählen Werkzeug, Argumente und
 // Status — nicht der Volltext einer gelesenen Datei. Der Live-Weg über
 // den Server bleibt ungekürzt.
-func (t *Trace) Gekuerzt(max int) *Trace {
-	kopie := &Trace{SessionID: t.SessionID, Schritte: make([]TraceSchritt, len(t.Schritte))}
-	copy(kopie.Schritte, t.Schritte)
-	for i := range kopie.Schritte {
-		s := &kopie.Schritte[i]
-		s.Output = kappe(s.Output, max)
-		s.Fehler = kappe(s.Fehler, max)
-		s.Input = kappe(s.Input, max)
+func (t *Trace) Truncated(max int) *Trace {
+	kopie := &Trace{SessionID: t.SessionID, Steps: make([]TraceStep, len(t.Steps))}
+	copy(kopie.Steps, t.Steps)
+	for i := range kopie.Steps {
+		s := &kopie.Steps[i]
+		s.Output = truncateField(s.Output, max)
+		s.Error = truncateField(s.Error, max)
+		s.Input = truncateField(s.Input, max)
 	}
 	return kopie
 }
 
-// kappe schneidet auf max Bytes und sagt, dass es das getan hat —
+// truncateField schneidet auf max Bytes und sagt, dass es das getan hat —
 // stilles Abschneiden würde der Baumeister für die ganze Wahrheit
 // halten. Schnitt an einer Runen-Grenze, damit gültiges UTF-8 bleibt.
-func kappe(s string, max int) string {
+func truncateField(s string, max int) string {
 	if max <= 0 || len(s) <= max {
 		return s
 	}
@@ -125,9 +125,9 @@ func kappe(s string, max int) string {
 	return s[:schnitt] + fmt.Sprintf("… (gekürzt, %d Bytes insgesamt)", len(s))
 }
 
-// toolZeiten liest start/end (Unix-ms) aus dem Time-Union des
+// toolTimes liest start/end (Unix-ms) aus dem Time-Union des
 // Tool-States — je nach Status kann eines oder beides fehlen.
-func toolZeiten(zeit interface{}) (*time.Time, *time.Time) {
+func toolTimes(zeit interface{}) (*time.Time, *time.Time) {
 	roh, err := json.Marshal(zeit)
 	if err != nil {
 		return nil, nil
@@ -150,41 +150,41 @@ func toolZeiten(zeit interface{}) (*time.Time, *time.Time) {
 }
 
 // Markdown rendert den Trace als Baumeister-Input: nummerierte
-// Schritte, Tool-Argumente vollständig (der Baumeister muss daraus
+// Steps, Tool-Argumente vollständig (der Baumeister muss daraus
 // generalisieren — was ist Parameter, was Konstante), Fehlversuche
 // deutlich markiert.
 func (t *Trace) Markdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Trace der Session %s\n", t.SessionID)
-	for i, s := range t.Schritte {
-		switch s.Art {
+	for i, s := range t.Steps {
+		switch s.Kind {
 		case "tool":
 			marker := s.Status
 			if s.Status == "error" {
 				marker = "FEHLVERSUCH"
 			}
 			fmt.Fprintf(&b, "\n%d. [tool %s — %s]", i+1, s.Tool, marker)
-			if s.Start != nil && s.Ende != nil {
-				fmt.Fprintf(&b, " (%s, %s)", s.Start.Format("15:04:05"), s.Ende.Sub(*s.Start).Round(time.Millisecond))
+			if s.Start != nil && s.End != nil {
+				fmt.Fprintf(&b, " (%s, %s)", s.Start.Format("15:04:05"), s.End.Sub(*s.Start).Round(time.Millisecond))
 			}
 			b.WriteString("\n")
 			fmt.Fprintf(&b, "   input: %s\n", s.Input)
 			if s.Output != "" {
-				fmt.Fprintf(&b, "   output: %s\n", einruecken(s.Output))
+				fmt.Fprintf(&b, "   output: %s\n", indent(s.Output))
 			}
-			if s.Fehler != "" {
-				fmt.Fprintf(&b, "   fehler: %s\n", einruecken(s.Fehler))
+			if s.Error != "" {
+				fmt.Fprintf(&b, "   fehler: %s\n", indent(s.Error))
 			}
 		case "patch":
 			fmt.Fprintf(&b, "\n%d. [patch]\n", i+1)
 		default:
-			fmt.Fprintf(&b, "\n%d. [%s, %s]\n   %s\n", i+1, s.Art, s.Rolle, einruecken(s.Text))
+			fmt.Fprintf(&b, "\n%d. [%s, %s]\n   %s\n", i+1, s.Kind, s.Role, indent(s.Text))
 		}
 	}
 	return b.String()
 }
 
-// einruecken hält mehrzeilige Inhalte unter dem Schritt eingerückt.
-func einruecken(s string) string {
+// indent hält mehrzeilige Inhalte unter dem Schritt eingerückt.
+func indent(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n   ")
 }

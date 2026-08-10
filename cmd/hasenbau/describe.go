@@ -92,7 +92,7 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	// Der Fehler eines Laufs ist mehrzeilig und der Grund, warum man
 	// überhaupt hinsieht — hier steht er vollständig, nicht gekürzt.
 	if l.Error != "" {
-		fmt.Fprintf(out, "\nFehler\n%s\n", einruecken(l.Error))
+		fmt.Fprintf(out, "\nFehler\n%s\n", indent(l.Error))
 	}
 
 	notizen, err := st.Notes(l.ID)
@@ -103,7 +103,7 @@ func describeLauf(root string, args []string, out, errw io.Writer) int {
 	if len(notizen) > 0 {
 		fmt.Fprint(out, "\nNotizen des Hasen\n")
 		for _, n := range notizen {
-			fmt.Fprintf(out, "  %s  %s\n", n.Written.Local().Format("15:04:05"), einruecken(n.Text))
+			fmt.Fprintf(out, "  %s  %s\n", n.Written.Local().Format("15:04:05"), indent(n.Text))
 		}
 	}
 
@@ -131,8 +131,8 @@ func (a *abschnitt) feld(label, format string, args ...any) {
 
 func (a *abschnitt) fertig() { a.w.Flush() }
 
-// einruecken hängt mehrzeilige Werte unter ihre erste Zeile.
-func einruecken(s string) string {
+// indent hängt mehrzeilige Werte unter ihre erste Zeile.
+func indent(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n  ")
 }
 

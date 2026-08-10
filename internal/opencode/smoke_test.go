@@ -118,6 +118,6 @@ func TestSplitModel(t *testing.T) {
 		t.Error("SplitModel ohne Slash muss fehlschlagen")
 	}
 	if _, ok := SplitModel("provider/"); ok {
-		t.Error("SplitModel mit leerem Modell muss fehlschlagen")
+		t.Error("SplitModel mit leerem Model muss fehlschlagen")
 	}
 }

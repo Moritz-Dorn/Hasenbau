@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
+	"github.com/Moritz-Dorn/Hasenbau/internal/backchannel"
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 	"github.com/Moritz-Dorn/Hasenbau/internal/opencode"
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
-	"github.com/Moritz-Dorn/Hasenbau/internal/rueckkanal"
 	"github.com/Moritz-Dorn/Hasenbau/internal/runner"
 	"github.com/Moritz-Dorn/Hasenbau/internal/scheduler"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -160,7 +160,7 @@ func cmdMCP(root string, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	if err := rueckkanal.Bediene(st, version); err != nil {
+	if err := backchannel.Serve(st, version); err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
 	}
@@ -175,7 +175,7 @@ func rueckkanalEintragen(root string, logf func(string, ...any)) error {
 	if err != nil {
 		return fmt.Errorf("hasenbau: eigenen Pfad bestimmen: %w", err)
 	}
-	geschrieben, err := bau.MCPSicherstellen(root, exe)
+	geschrieben, err := bau.EnsureMCP(root, exe)
 	if err != nil {
 		return err
 	}
@@ -286,10 +286,10 @@ func cmdDaemon(root string, errw io.Writer) int {
 	funnel := opencode.NewFunnel(sup.BaseURL, logger.Printf)
 	funnel.Start(ctx)
 	r := &runner.Runner{Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf}
-	sperre := lauf.NeueSperre()
+	lock := lauf.NewLock()
 
-	sched, err := scheduler.New(auftraege, sperre, func(a *auftrag.Auftrag) {
-		if err := r.FuehreAus(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
+	sched, err := scheduler.New(auftraege, lock, func(a *auftrag.Auftrag) {
+		if err := r.Execute(ctx, a, "cron", ""); err != nil && ctx.Err() == nil {
 			logger.Printf("scheduler: %v", err)
 		}
 	}, logger.Printf)
@@ -297,8 +297,8 @@ func cmdDaemon(root string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
-	w, err := watcher.New(root, auftraege, sperre, st, func(a *auftrag.Auftrag, input string) error {
-		return r.FuehreAus(ctx, a, "watch", input)
+	w, err := watcher.New(root, auftraege, lock, st, func(a *auftrag.Auftrag, input string) error {
+		return r.Execute(ctx, a, "watch", input)
 	}, logger.Printf)
 	if err != nil {
 		logger.Print(err)
@@ -433,7 +433,7 @@ func holeTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *l
 	}
 	defer sup.Stop()
 
-	trace, err := opencode.ZieheTrace(ctx, opencode.New(sup.BaseURL()), l.SessionID)
+	trace, err := opencode.FetchTrace(ctx, opencode.New(sup.BaseURL()), l.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +467,7 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 	}
 	id := fs.Arg(0)
 
-	conf, err := provider.LadeConfig(root)
+	conf, err := provider.LoadConfig(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -477,7 +477,7 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	key, err := provider.Schluessel(id)
+	key, err := provider.Key(id)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -485,7 +485,7 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	modelle, err := provider.Hole(ctx, baseURL, key)
+	modelle, err := provider.Fetch(ctx, baseURL, key)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
@@ -493,11 +493,11 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 
 	fmt.Fprintf(out, "%s: %d Modelle von %s\n\n", id, len(modelle), baseURL)
 	ae := conf.Merge(id, modelle)
-	if ae.Leer() {
+	if ae.Empty() {
 		fmt.Fprintln(out, "Bau-Config ist auf Stand, nichts zu tun")
 		return 0
 	}
-	fmt.Fprint(out, ae.Bericht())
+	fmt.Fprint(out, ae.Report())
 
 	if !*ja {
 		fmt.Fprintf(out, "\n%s schreiben? [j/N] ", conf.Pfad)
@@ -509,7 +509,7 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 			return 0
 		}
 	}
-	if err := conf.Schreibe(); err != nil {
+	if err := conf.Write(); err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
 	}

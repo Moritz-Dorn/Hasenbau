@@ -36,7 +36,7 @@ func TestBauePrompt(t *testing.T) {
 	}
 
 	quelle := &fakeSummaries{summaries: []string{"alt: PDF abgelegt", "neu: Rechnung sortiert"}}
-	prompt, err := BauePrompt(u, a, quelle)
+	prompt, err := BuildPrompt(u, a, quelle)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestBauePromptOhneVergangenheit(t *testing.T) {
 	a.Context = []auftrag.Context{{LastSummaries: 3}}
 	u := testUmgebung(t, a)
 
-	prompt, err := BauePrompt(u, a, &fakeSummaries{})
+	prompt, err := BuildPrompt(u, a, &fakeSummaries{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestBauePromptFehlendeDatei(t *testing.T) {
 	a.Context = []auftrag.Context{{File: "$WORK/extrakt.md"}}
 	u := testUmgebung(t, a)
 
-	_, err := BauePrompt(u, a, &fakeSummaries{})
+	_, err := BuildPrompt(u, a, &fakeSummaries{})
 	if err == nil || !strings.Contains(err.Error(), "extrakt.md fehlt") {
 		t.Errorf("fehlende Kontext-File: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestBauePromptDateiAusserhalbDesBaus(t *testing.T) {
 	a.Context = []auftrag.Context{{File: "../geheim.txt"}}
 	u := testUmgebung(t, a)
 
-	if _, err := BauePrompt(u, a, &fakeSummaries{}); err == nil {
+	if _, err := BuildPrompt(u, a, &fakeSummaries{}); err == nil {
 		t.Error("Kontext-Datei außerhalb des Baus muss scheitern")
 	}
 }
@@ -119,7 +119,7 @@ func TestBauePromptSummaryFehler(t *testing.T) {
 	a.Context = []auftrag.Context{{LastSummaries: 1}}
 	u := testUmgebung(t, a)
 
-	if _, err := BauePrompt(u, a, fehlerQuelle{}); err == nil || !strings.Contains(err.Error(), "db kaputt") {
+	if _, err := BuildPrompt(u, a, fehlerQuelle{}); err == nil || !strings.Contains(err.Error(), "db kaputt") {
 		t.Errorf("Summary-Fehler verschluckt: %v", err)
 	}
 }

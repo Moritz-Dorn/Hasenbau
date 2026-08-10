@@ -16,17 +16,17 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 )
 
-// GangFehler beschreibt den Abbruch der Gang-Kette. Der Input liegt
+// GangError beschreibt den Abbruch der Gang-Kette. Der Input liegt
 // danach in quarantaene/ (wenn der Auftrag den Raum kennt) oder
 // unverändert am Ursprung — niemals in archiv/ (§7).
-type GangFehler struct {
+type GangError struct {
 	Gang        string
 	Grund       string // "exit 3" oder "timeout nach 2m0s"
 	LogPfad     string // Bau-relativ
 	Quarantaene string // Bau-relativer Zielpfad, leer wenn Input blieb
 }
 
-func (e *GangFehler) Error() string {
+func (e *GangError) Error() string {
 	s := fmt.Sprintf("gang %s: %s (log: %s)", e.Gang, e.Grund, e.LogPfad)
 	if e.Quarantaene != "" {
 		s += fmt.Sprintf(" — input nach %s verschoben", e.Quarantaene)
@@ -34,11 +34,11 @@ func (e *GangFehler) Error() string {
 	return s
 }
 
-// FuehreGaengeAus führt die Gänge sequenziell als Subprocess aus
+// RunGaenge führt die Gänge sequenziell als Subprocess aus
 // (sh -c, CWD = Bau, Variablen substituiert). stdout+stderr jedes
 // Gangs landen in $WORK/gang-<name>.log. Der erste Fehler bricht ab.
 // defaultTimeout greift für Gänge ohne eigenes timeout; 0 = unbegrenzt.
-func FuehreGaengeAus(ctx context.Context, u *lauf.Umgebung, a *auftrag.Auftrag, defaultTimeout time.Duration) ([]string, error) {
+func RunGaenge(ctx context.Context, u *lauf.Environment, a *auftrag.Auftrag, defaultTimeout time.Duration) ([]string, error) {
 	if len(a.Gaenge) == 0 {
 		return nil, nil
 	}
@@ -51,25 +51,25 @@ func FuehreGaengeAus(ctx context.Context, u *lauf.Umgebung, a *auftrag.Auftrag, 
 		logRel := filepath.Join(u.Work, "gang-"+g.Name+".log")
 		logs = append(logs, logRel)
 
-		zeile, err := u.Ersetze(g.Run)
+		zeile, err := u.Substitute(g.Run)
 		if err != nil {
 			return logs, fmt.Errorf("gang %s: %w", g.Name, err)
 		}
 
-		grund, err := fuehreAus(ctx, u.Bau, zeile, logRel, timeoutFuer(g, defaultTimeout))
+		grund, err := fuehreAus(ctx, u.Bau, zeile, logRel, timeoutFor(g, defaultTimeout))
 		if err != nil {
 			return logs, fmt.Errorf("gang %s: %w", g.Name, err)
 		}
 		if grund != "" {
-			gf := &GangFehler{Gang: g.Name, Grund: grund, LogPfad: logRel}
-			gf.Quarantaene = verschiebeInQuarantaene(u, a)
+			gf := &GangError{Gang: g.Name, Grund: grund, LogPfad: logRel}
+			gf.Quarantaene = moveToQuarantine(u, a)
 			return logs, gf
 		}
 	}
 	return logs, nil
 }
 
-func timeoutFuer(g auftrag.Gang, defaultTimeout time.Duration) time.Duration {
+func timeoutFor(g auftrag.Gang, defaultTimeout time.Duration) time.Duration {
 	if g.Timeout != 0 {
 		return g.Timeout
 	}
@@ -117,7 +117,7 @@ func fuehreAus(ctx context.Context, bau, zeile, logRel string, timeout time.Dura
 	}
 }
 
-// verschiebeInQuarantaene bewegt den Trigger-Input in den
+// moveToQuarantine bewegt den Trigger-Input in den
 // quarantaene-Raum, falls der Auftrag einen kennt. Kollisionen werden
 // mit Zeitstempel-Suffix aufgelöst. Scheitert der Move, bleibt der
 // Input am Ursprung — das ist per §7 der zweite legale Zustand.
@@ -125,8 +125,8 @@ func fuehreAus(ctx context.Context, bau, zeile, logRel string, timeout time.Dura
 // Nur bei watch: dort ist $INPUT eine Datei. Bei manuell ist es ein
 // freies Argument, und ein Move würde bestenfalls scheitern,
 // schlimmstenfalls eine gleichnamige Datei im Bau-Root wegtragen.
-func verschiebeInQuarantaene(u *lauf.Umgebung, a *auftrag.Auftrag) string {
-	if u.TriggerArt != auftrag.TriggerWatch {
+func moveToQuarantine(u *lauf.Environment, a *auftrag.Auftrag) string {
+	if u.TriggerKind != auftrag.TriggerWatch {
 		return ""
 	}
 	raum, ok := a.Raeume["quarantine"]

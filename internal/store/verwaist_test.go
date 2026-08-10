@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Moritz-Dorn/Hasenbau/internal/prozess"
+	"github.com/Moritz-Dorn/Hasenbau/internal/process"
 )
 
 // toterWirt liefert die PID und Startzeit eines Prozesses, den es nicht
@@ -26,7 +26,7 @@ func toterWirt(t *testing.T) (int, time.Time) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	if prozess.Lebt(pid, time.Now().UTC()) {
+	if process.Alive(pid, time.Now().UTC()) {
 		t.Fatalf("PID %d lebt noch — Test taugt nicht", pid)
 	}
 	return pid, time.Now().UTC()
@@ -179,7 +179,7 @@ func TestLaufBeginneSchreibtDenWirt(t *testing.T) {
 		`SELECT pid, pid_started FROM laeufe WHERE id = ?`, id).Scan(&pid, &start); err != nil {
 		t.Fatal(err)
 	}
-	ichPID, ichStart := prozess.Ich()
+	ichPID, ichStart := process.Self()
 	if pid != ichPID {
 		t.Errorf("pid in der Zeile = %d, erwartet %d", pid, ichPID)
 	}
@@ -187,7 +187,7 @@ func TestLaufBeginneSchreibtDenWirt(t *testing.T) {
 		return // Plattform ohne Startzeit: NULL ist richtig
 	}
 	// Die Startzeit muss den Weg durch die DB überstehen — sonst hielte
-	// der Vergleich in prozess.Lebt jeden eigenen Lauf für recycelt.
+	// der Vergleich in process.Alive jeden eigenen Lauf für recycelt.
 	if !start.Valid || !start.Time.Equal(ichStart) {
 		t.Errorf("pid_gestartet in der Zeile = %v, erwartet %s", start, ichStart)
 	}

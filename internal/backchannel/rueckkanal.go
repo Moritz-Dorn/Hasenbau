@@ -16,7 +16,7 @@
 // Fehler; geraten wird nie, sonst landet eine Summary am falschen Lauf.
 // Die Summary geht dann nicht verloren: der Runner trägt beim
 // Lauf-Ende die letzte Assistant-Message als Fallback ein (§5).
-package rueckkanal
+package backchannel
 
 import (
 	"context"
@@ -120,8 +120,8 @@ func handler(st Store, getan string, schreibe func(Store, int64, string) error) 
 	}
 }
 
-// Bediene betreibt den Server über stdio, bis stdin schließt.
-func Bediene(st Store, version string) error {
+// Serve betreibt den Server über stdio, bis stdin schließt.
+func Serve(st Store, version string) error {
 	if err := server.ServeStdio(Server(st, version)); err != nil {
 		return fmt.Errorf("rueckkanal: %w", err)
 	}

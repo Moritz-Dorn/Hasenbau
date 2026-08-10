@@ -1,7 +1,7 @@
 // Package watcher feuert watch-Trigger (PLAN.md §2, §6) und setzt die
 // drei Fallen aus §7 um: Größenstabilität gegen partielle Writes, den
 // gesehen-Backstop gegen Doppelverarbeitung und das Nachholen beim
-// Start. Die Overlap-Sperre ist die trigger-übergreifende lauf.Sperre.
+// Start. Die Overlap-Sperre ist die trigger-übergreifende lauf.Lock.
 package watcher
 
 import (
@@ -23,11 +23,11 @@ import (
 // DefaultDebounce greift für Aufträge ohne eigenes debounce:.
 const DefaultDebounce = 2 * time.Second
 
-// AusfuehrFunc führt einen Lauf aus; input ist der Bau-relative Pfad
+// ExecFunc führt einen Lauf aus; input ist der Bau-relative Pfad
 // der auslösenden Datei. Die Sperre ist beim Aufruf belegt. Rückgabe
 // nil ⇒ der Input gilt als verarbeitet und wandert in die
 // gesehen-Tabelle (Backstop, §7).
-type AusfuehrFunc func(a *auftrag.Auftrag, input string) error
+type ExecFunc func(a *auftrag.Auftrag, input string) error
 
 // SeenStore ist der Idempotenz-Backstop; *store.Store erfüllt ihn.
 type SeenStore interface {
@@ -38,9 +38,9 @@ type SeenStore interface {
 type Watcher struct {
 	root       string
 	auftraege  []*auftrag.Auftrag // nur watch-Trigger
-	sperre     *lauf.Sperre
+	lock       *lauf.Lock
 	gesehen    SeenStore
-	ausfuehren AusfuehrFunc
+	ausfuehren ExecFunc
 	logf       func(format string, args ...any)
 
 	fsw     *fsnotify.Watcher
@@ -52,11 +52,11 @@ type Watcher struct {
 // New baut den Watcher für alle Aufträge mit watch-Trigger. Die
 // Watch-Verzeichnisse (= Verzeichnisanteil des Globs) werden angelegt —
 // sie sind die Eingangs-Räume der Aufträge.
-func New(root string, auftraege []*auftrag.Auftrag, sperre *lauf.Sperre, gesehen SeenStore, ausfuehren AusfuehrFunc, logf func(format string, args ...any)) (*Watcher, error) {
+func New(root string, auftraege []*auftrag.Auftrag, lock *lauf.Lock, gesehen SeenStore, ausfuehren ExecFunc, logf func(format string, args ...any)) (*Watcher, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	w := &Watcher{root: root, sperre: sperre, gesehen: gesehen, ausfuehren: ausfuehren, logf: logf}
+	w := &Watcher{root: root, lock: lock, gesehen: gesehen, ausfuehren: ausfuehren, logf: logf}
 	for _, a := range auftraege {
 		if a.Trigger.Watch != "" {
 			w.auftraege = append(w.auftraege, a)
@@ -198,7 +198,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 
 	// Sperre nehmen; läuft der Auftrag gerade, warten wir — die Datei
 	// liegt ja schon da, der Trigger darf nicht verloren gehen.
-	for !w.sperre.Belege(a.Name) {
+	for !w.lock.Acquire(a.Name) {
 		w.logf("watcher: auftrag %s läuft noch — input %s wartet", a.Name, rel)
 		select {
 		case <-ctx.Done():
@@ -206,7 +206,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 		case <-time.After(debounce):
 		}
 	}
-	defer w.sperre.GibFrei(a.Name)
+	defer w.lock.Release(a.Name)
 
 	// Zwischen Warten und Sperre kann ein anderer Lauf die Datei
 	// verarbeitet haben (Move nach archiv/) — noch mal hinsehen.

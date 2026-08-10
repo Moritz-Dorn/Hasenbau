@@ -1,6 +1,6 @@
 // Package scheduler feuert cron-Trigger (PLAN.md §2, §6). Er plant nur —
 // ausgeführt wird über den übergebenen Callback, und die Overlap-Sperre
-// ist die trigger-übergreifende lauf.Sperre.
+// ist die trigger-übergreifende lauf.Lock.
 package scheduler
 
 import (
@@ -11,9 +11,9 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// AusfuehrFunc führt einen Lauf aus. Sie läuft in der cron-Goroutine;
+// ExecFunc führt einen Lauf aus. Sie läuft in der cron-Goroutine;
 // die Sperre ist beim Aufruf bereits belegt und wird danach freigegeben.
-type AusfuehrFunc func(a *auftrag.Auftrag)
+type ExecFunc func(a *auftrag.Auftrag)
 
 type Scheduler struct {
 	cron *cron.Cron
@@ -22,7 +22,7 @@ type Scheduler struct {
 
 // New registriert alle Aufträge mit cron-Trigger. Aufträge mit
 // watch-Trigger gehören zum Watcher und werden ignoriert.
-func New(auftraege []*auftrag.Auftrag, sperre *lauf.Sperre, ausfuehren AusfuehrFunc, logf func(format string, args ...any)) (*Scheduler, error) {
+func New(auftraege []*auftrag.Auftrag, lock *lauf.Lock, ausfuehren ExecFunc, logf func(format string, args ...any)) (*Scheduler, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -34,11 +34,11 @@ func New(auftraege []*auftrag.Auftrag, sperre *lauf.Sperre, ausfuehren AusfuehrF
 		}
 		a := a
 		_, err := s.cron.AddFunc(a.Trigger.Cron, func() {
-			if !sperre.Belege(a.Name) {
+			if !lock.Acquire(a.Name) {
 				s.logf("scheduler: auftrag %s läuft noch — Tick übersprungen", a.Name)
 				return
 			}
-			defer sperre.GibFrei(a.Name)
+			defer lock.Release(a.Name)
 			ausfuehren(a)
 		})
 		if err != nil {

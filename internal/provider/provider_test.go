@@ -41,7 +41,7 @@ func TestHoleParstUndSortiert(t *testing.T) {
 	s, auth := testServer(t, antwort, 200)
 
 	// Trailing Slash in der baseURL darf keinen Doppel-Slash geben.
-	modelle, err := Hole(context.Background(), s.URL+"/", "geheim")
+	modelle, err := Fetch(context.Background(), s.URL+"/", "geheim")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +55,11 @@ func TestHoleParstUndSortiert(t *testing.T) {
 		t.Errorf("nicht nach ID sortiert: %v", modelle)
 	}
 	glm := modelle[1]
-	if glm.Name != "GLM 5.2" || glm.Verbindung != "local" {
+	if glm.Name != "GLM 5.2" || glm.Connection != "local" {
 		t.Errorf("Felder falsch: %+v", glm)
 	}
-	if glm.Notiz != "Grosses Modell" {
-		t.Errorf("Notiz ist nicht die erste Zeile: %q", glm.Notiz)
+	if glm.Note != "Grosses Modell" {
+		t.Errorf("Notiz ist nicht die erste Zeile: %q", glm.Note)
 	}
 	// Ohne name fällt der Anzeigename auf die ID zurück.
 	if modelle[2].Name != "ohne-namen" {
@@ -69,7 +69,7 @@ func TestHoleParstUndSortiert(t *testing.T) {
 
 func TestHoleAkzeptiertNackteListe(t *testing.T) {
 	s, _ := testServer(t, `[{"id":"a"},{"id":"b"}]`, 200)
-	modelle, err := Hole(context.Background(), s.URL, "k")
+	modelle, err := Fetch(context.Background(), s.URL, "k")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,23 +79,23 @@ func TestHoleAkzeptiertNackteListe(t *testing.T) {
 }
 
 func TestHoleFehlerpfade(t *testing.T) {
-	// HTTP-Fehler: Status und Body-Auszug gehören in die Meldung, sonst
+	// HTTP-Error: Status und Body-Auszug gehören in die Meldung, sonst
 	// rätselt der Nutzer über einen abgelaufenen Key.
 	s, _ := testServer(t, `{"detail":"Not authenticated"}`, 401)
-	_, err := Hole(context.Background(), s.URL, "falsch")
+	_, err := Fetch(context.Background(), s.URL, "falsch")
 	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "Not authenticated") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 
 	// Leere Liste ist kein stiller Erfolg — sonst löscht der Merge alles.
 	s2, _ := testServer(t, `{"data":[]}`, 200)
-	if _, err := Hole(context.Background(), s2.URL, "k"); err == nil {
+	if _, err := Fetch(context.Background(), s2.URL, "k"); err == nil {
 		t.Error("leere Modell-Liste muss ein Fehler sein")
 	}
 
 	// Müll statt JSON.
 	s3, _ := testServer(t, `<html>proxy</html>`, 200)
-	if _, err := Hole(context.Background(), s3.URL, "k"); err == nil {
+	if _, err := Fetch(context.Background(), s3.URL, "k"); err == nil {
 		t.Error("unparsbare Antwort muss ein Fehler sein")
 	}
 }
@@ -135,7 +135,7 @@ const gerüst = `{
 
 func TestMergeSchreibtNurModelleUndEnabled(t *testing.T) {
 	root := schreibeConfig(t, gerüst)
-	conf, err := LadeConfig(root)
+	conf, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,8 +147,8 @@ func TestMergeSchreibtNurModelleUndEnabled(t *testing.T) {
 		t.Errorf("baseURL %q", url)
 	}
 
-	ae := conf.Merge("scc", []Modell{
-		{ID: "kit.glm-5.2", Name: "GLM 5.2", Verbindung: "local"},
+	ae := conf.Merge("scc", []Model{
+		{ID: "kit.glm-5.2", Name: "GLM 5.2", Connection: "local"},
 		{ID: "kit.neu", Name: "Neu"},
 	})
 	if len(ae.Neu) != 1 || ae.Neu[0].ID != "kit.neu" {
@@ -163,11 +163,11 @@ func TestMergeSchreibtNurModelleUndEnabled(t *testing.T) {
 	if !ae.EnabledErgaenzt {
 		t.Error("enabled_providers muss ergänzt werden")
 	}
-	if ae.Leer() {
-		t.Error("Aenderung darf nicht leer sein")
+	if ae.Empty() {
+		t.Error("Change darf nicht leer sein")
 	}
 
-	if err := conf.Schreibe(); err != nil {
+	if err := conf.Write(); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(root, bau.OpencodeConfig))
@@ -232,53 +232,53 @@ func TestMergeSchreibtNurModelleUndEnabled(t *testing.T) {
 
 func TestMergeIdempotent(t *testing.T) {
 	root := schreibeConfig(t, gerüst)
-	modelle := []Modell{
+	modelle := []Model{
 		{ID: "kit.glm-5.2", Name: "Alter Name"},
 		{ID: "azure.o3", Name: "o3"},
 	}
-	conf, err := LadeConfig(root)
+	conf, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conf.Merge("scc", modelle)
-	if err := conf.Schreibe(); err != nil {
+	if err := conf.Write(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Zweiter Lauf gegen dieselbe Liste: nichts zu tun.
-	conf2, err := LadeConfig(root)
+	conf2, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ae := conf2.Merge("scc", modelle); !ae.Leer() {
-		t.Errorf("zweiter Merge nicht leer: %s", ae.Bericht())
+	if ae := conf2.Merge("scc", modelle); !ae.Empty() {
+		t.Errorf("zweiter Merge nicht leer: %s", ae.Report())
 	}
 }
 
 func TestBaseURLFehlerpfade(t *testing.T) {
 	// Unbekannter Provider: das Gerüst gehört handgepflegt in die Config.
 	root := schreibeConfig(t, gerüst)
-	conf, err := LadeConfig(root)
+	conf, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conf.BaseURL("anthropic"); err == nil || !strings.Contains(err.Error(), "Gerüst") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 
 	// Provider ohne options.baseURL: verständlicher Fehler statt Absturz.
 	root2 := schreibeConfig(t, `{"provider":{"scc":{"npm":"x"}}}`)
-	conf2, err := LadeConfig(root2)
+	conf2, err := LoadConfig(root2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conf2.BaseURL("scc"); err == nil || !strings.Contains(err.Error(), "baseURL") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 
 	// Bau ohne Config.
-	if _, err := LadeConfig(t.TempDir()); err == nil || !strings.Contains(err.Error(), "hasenbau init") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+	if _, err := LoadConfig(t.TempDir()); err == nil || !strings.Contains(err.Error(), "hasenbau init") {
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 }
 
@@ -293,7 +293,7 @@ func TestSchluesselAusGeteilterAuthJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key, err := Schluessel("scc")
+	key, err := Key("scc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,17 +301,17 @@ func TestSchluesselAusGeteilterAuthJSON(t *testing.T) {
 		t.Errorf("Key %q", key)
 	}
 	// oauth ohne key: klare Meldung statt leerem Bearer.
-	if _, err := Schluessel("github-copilot"); err == nil || !strings.Contains(err.Error(), "oauth") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+	if _, err := Key("github-copilot"); err == nil || !strings.Contains(err.Error(), "oauth") {
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
-	if _, err := Schluessel("gibtsnicht"); err == nil || !strings.Contains(err.Error(), "auth login") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+	if _, err := Key("gibtsnicht"); err == nil || !strings.Contains(err.Error(), "auth login") {
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 
 	// Ohne auth.json überhaupt.
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	if _, err := Schluessel("scc"); err == nil || !strings.Contains(err.Error(), "auth login") {
-		t.Errorf("unbrauchbarer Fehler: %v", err)
+	if _, err := Key("scc"); err == nil || !strings.Contains(err.Error(), "auth login") {
+		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 }
 
@@ -324,12 +324,12 @@ func TestListe(t *testing.T) {
   },
   "enabled_providers": ["scc", "nur-in-enabled"]
 }`)
-	conf, err := LadeConfig(root)
+	conf, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	liste := conf.Liste()
+	liste := conf.List()
 	// Sortiert, und die ID aus enabled_providers ohne Definition ist
 	// dabei — sonst bliebe ein Tippfehler dort unsichtbar.
 	var ids []string
@@ -340,7 +340,7 @@ func TestListe(t *testing.T) {
 		t.Fatalf("IDs = %v", ids)
 	}
 
-	nach := map[string]Eintrag{}
+	nach := map[string]Entry{}
 	for _, e := range liste {
 		nach[e.ID] = e
 	}
@@ -361,7 +361,7 @@ func TestSchluesselIDs(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", daten)
 
 	// Ohne auth.json: leere Menge, kein Fehler — das ist ein Zustand.
-	da, err := SchluesselIDs()
+	da, err := KeyIDs()
 	if err != nil || len(da) != 0 {
 		t.Fatalf("ohne auth.json: %v, %v", da, err)
 	}
@@ -373,7 +373,7 @@ func TestSchluesselIDs(t *testing.T) {
 		[]byte(`{"scc":{"type":"api","key":"geheim"},"oauth-nur":{"type":"oauth"}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	da, err = SchluesselIDs()
+	da, err = KeyIDs()
 	if err != nil {
 		t.Fatal(err)
 	}

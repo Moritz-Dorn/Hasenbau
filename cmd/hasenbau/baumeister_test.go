@@ -50,8 +50,8 @@ func TestBaumeisterGangZiehtTrace(t *testing.T) {
 	if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses_t", Summary: "abgelegt"}); err != nil {
 		t.Fatal(err)
 	}
-	roh := []byte(`{"session_id":"ses_t","schritte":[` +
-		`{"art":"tool","rolle":"assistant","tool":"read","status":"completed",` +
+	roh := []byte(`{"session_id":"ses_t","steps":[` +
+		`{"kind":"tool","role":"assistant","tool":"read","status":"completed",` +
 		`"input":"{\"filePath\":\"raeume/laderampe/sources/notiz.txt\"}"}]}`)
 	if err := st.WriteTrace(id, "ses_t", roh); err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestBaumeisterGangZiehtTrace(t *testing.T) {
 	}
 	u.Hasenbau = binaer // im echten Lauf das laufende Binary
 
-	if _, err := runner.FuehreGaengeAus(context.Background(), u, a, time.Minute); err != nil {
+	if _, err := runner.RunGaenge(context.Background(), u, a, time.Minute); err != nil {
 		log, _ := os.ReadFile(filepath.Join(root, u.Work, "gang-trace-ziehen.log"))
 		t.Fatalf("Gang gescheitert: %v\nlog: %s", err, log)
 	}
@@ -197,7 +197,7 @@ func TestPruefeEntwurfFindetSyntaxfehler(t *testing.T) {
 	}
 	// Die Meldung muss den Fehler nennen, nicht die Traceback-Kopfzeile.
 	if !strings.Contains(meldungen, "SyntaxError") {
-		t.Errorf("Meldung ohne den eigentlichen Fehler: %s", meldungen)
+		t.Errorf("Meldung ohne den eigentlichen Error: %s", meldungen)
 	}
 	// Und die Prüfung darf nichts im Bau hinterlassen — er ist ein
 	// Git-Repo, im Diff soll der Entwurf stehen, nicht sein Bytecode.

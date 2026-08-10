@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// MCPSicherstellen trägt den Rückkanal in den mcp:-Block der Bau-Config
+// EnsureMCP trägt den Rückkanal in den mcp:-Block der Bau-Config
 // ein, falls er dort fehlt, und meldet, ob geschrieben wurde.
 //
 // Das läuft bei jedem Server-Start, nicht nur bei `init`: Der Eintrag
@@ -19,7 +19,7 @@ import (
 // anpasst, behält ihn. Alles andere in der Datei fasst die Funktion
 // nicht an (Reihenfolge und Einrückung normalisiert das Schreiben
 // allerdings, wie bei `provider fetch`).
-func MCPSicherstellen(root, exe string) (bool, error) {
+func EnsureMCP(root, exe string) (bool, error) {
 	pfad := filepath.Join(root, OpencodeConfig)
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {

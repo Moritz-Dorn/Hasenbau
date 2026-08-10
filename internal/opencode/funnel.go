@@ -13,48 +13,48 @@ import (
 	sdk "github.com/sst/opencode-sdk-go"
 )
 
-// SessionEreignis ist die auf einen Lauf reduzierte Sicht auf den
+// SessionEvent ist die auf einen Lauf reduzierte Sicht auf den
 // Event-Stream. Genau eines der Felder ist gesetzt.
-type SessionEreignis struct {
-	Idle   bool        // session.idle — der Hase ist fertig
-	Fehler string      // session.error — Fehlername (+ Kurztext)
-	Tool   *ToolAufruf // message.part.updated mit Tool-Part
-	Abriss bool        // Stream neu verbunden — Ereignisse können fehlen
+type SessionEvent struct {
+	Idle        bool      // session.idle — der Hase ist fertig
+	Error       string    // session.error — Fehlername (+ Kurztext)
+	Tool        *ToolCall // message.part.updated mit Tool-Part
+	Reconnected bool      // Stream neu verbunden — Ereignisse können fehlen
 }
 
-// ToolAufruf ist ein strukturiert geloggter Tool-Call (Grundlage für
+// ToolCall ist ein strukturiert geloggter Tool-Call (Grundlage für
 // Phase 2, graben — der vollständige Trace kommt aus Session.Messages).
-type ToolAufruf struct {
+type ToolCall struct {
 	Name   string
 	CallID string
 	Status string // pending | running | completed | error
-	Fehler string
+	Error  string
 }
 
-// Funnel hält genau eine SSE-Verbindung und verteilt pro Session.
+// Funnel hält genau eine SSE-Connection und verteilt pro Session.
 type Funnel struct {
 	baseURL func() string // typischerweise supervisor.BaseURL; "" = Server weg
 	logf    func(format string, args ...any)
 
 	mu   sync.Mutex
-	abos map[string][]chan SessionEreignis
+	abos map[string][]chan SessionEvent
 }
 
-// NewFunnel baut den Funnel; Start öffnet die Verbindung.
+// NewFunnel baut den Funnel; Start öffnet die Connection.
 func NewFunnel(baseURL func() string, logf func(format string, args ...any)) *Funnel {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	return &Funnel{baseURL: baseURL, logf: logf, abos: map[string][]chan SessionEreignis{}}
+	return &Funnel{baseURL: baseURL, logf: logf, abos: map[string][]chan SessionEvent{}}
 }
 
-// Abonniere liefert die Ereignisse einer Session. Die zurückgegebene
+// Subscribe liefert die Ereignisse einer Session. Die zurückgegebene
 // Funktion meldet ab; danach wird der Kanal nicht mehr beschrieben.
-func (f *Funnel) Abonniere(sessionID string) (<-chan SessionEreignis, func()) {
+func (f *Funnel) Subscribe(sessionID string) (<-chan SessionEvent, func()) {
 	// Puffer großzügig: der Verteiler blockiert nie (sonst stünde der
 	// Stream aller Läufe still) — volle Kanäle verlieren Ereignisse
 	// und werden geloggt.
-	ch := make(chan SessionEreignis, 256)
+	ch := make(chan SessionEvent, 256)
 	f.mu.Lock()
 	f.abos[sessionID] = append(f.abos[sessionID], ch)
 	f.mu.Unlock()
@@ -78,7 +78,7 @@ func (f *Funnel) Abonniere(sessionID string) (<-chan SessionEreignis, func()) {
 
 // Start liest den Stream in einer eigenen Goroutine, bis ctx endet.
 // Verbindungsabrisse (auch Server-Restarts durch den Supervisor) werden
-// mit Backoff neu verbunden; die Abonnenten sehen dann ein Abriss-
+// mit Backoff neu verbunden; die Abonnenten sehen dann ein Reconnected-
 // Ereignis, weil zwischenzeitliche Events verloren sein können.
 func (f *Funnel) Start(ctx context.Context) {
 	go func() {
@@ -124,12 +124,12 @@ func (f *Funnel) Start(ctx context.Context) {
 	}()
 }
 
-// verteile reduziert ein Stream-Event auf ein SessionEreignis und
+// verteile reduziert ein Stream-Event auf ein SessionEvent und
 // stellt es allen Abonnenten der Session zu.
 func (f *Funnel) verteile(evt sdk.EventListResponse) {
 	switch u := evt.AsUnion().(type) {
 	case sdk.EventListResponseEventSessionIdle:
-		f.sende(u.Properties.SessionID, SessionEreignis{Idle: true})
+		f.sende(u.Properties.SessionID, SessionEvent{Idle: true})
 	case sdk.EventListResponseEventSessionError:
 		id := u.Properties.SessionID
 		if id == "" {
@@ -138,7 +138,7 @@ func (f *Funnel) verteile(evt sdk.EventListResponse) {
 			f.logf("funnel: session.error ohne Session-ID: %s", u.Properties.Error.JSON.RawJSON())
 			return
 		}
-		f.sende(id, SessionEreignis{Fehler: fehlerText(u.Properties.Error)})
+		f.sende(id, SessionEvent{Error: fehlerText(u.Properties.Error)})
 	case sdk.EventListResponseEventMessagePartUpdated:
 		p := u.Properties.Part
 		if p.Type != sdk.PartTypeTool {
@@ -148,16 +148,16 @@ func (f *Funnel) verteile(evt sdk.EventListResponse) {
 		if !ok {
 			return
 		}
-		f.sende(p.SessionID, SessionEreignis{Tool: &ToolAufruf{
+		f.sende(p.SessionID, SessionEvent{Tool: &ToolCall{
 			Name:   tp.Tool,
 			CallID: tp.CallID,
 			Status: string(tp.State.Status),
-			Fehler: tp.State.Error,
+			Error:  tp.State.Error,
 		}})
 	}
 }
 
-func (f *Funnel) sende(sessionID string, e SessionEreignis) {
+func (f *Funnel) sende(sessionID string, e SessionEvent) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, ch := range f.abos[sessionID] {
@@ -177,9 +177,9 @@ func (f *Funnel) meldeAbriss() {
 	for id, kanaele := range f.abos {
 		for _, ch := range kanaele {
 			select {
-			case ch <- SessionEreignis{Abriss: true}:
+			case ch <- SessionEvent{Reconnected: true}:
 			default:
-				f.logf("funnel: Abonnent der Session %s hängt — Abriss verworfen", id)
+				f.logf("funnel: Abonnent der Session %s hängt — Reconnected verworfen", id)
 			}
 		}
 	}

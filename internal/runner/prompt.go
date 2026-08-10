@@ -13,21 +13,21 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 )
 
-// SummaryQuelle liefert die letzten nicht-leeren Summaries eines
+// SummarySource liefert die letzten nicht-leeren Summaries eines
 // Auftrags, älteste zuerst. *store.Store erfüllt das Interface.
-type SummaryQuelle interface {
+type SummarySource interface {
 	RecentSummaries(auftrag string, n int) ([]string, error)
 }
 
-// BauePrompt baut den Prompt-Text. Fehlende Kontext-Dateien sind ein
+// BuildPrompt baut den Prompt-Text. Fehlende Kontext-Dateien sind ein
 // Fehler vor dem LLM-Call — nie ein stiller Lücken-Prompt.
-func BauePrompt(u *lauf.Umgebung, a *auftrag.Auftrag, quelle SummaryQuelle) (string, error) {
+func BuildPrompt(u *lauf.Environment, a *auftrag.Auftrag, quelle SummarySource) (string, error) {
 	var b strings.Builder
 	b.WriteString(a.Body)
 
 	for i, k := range a.Context {
 		if k.File != "" {
-			pfad, err := u.Ersetze(k.File)
+			pfad, err := u.Substitute(k.File)
 			if err != nil {
 				return "", fmt.Errorf("kontext %d: %w", i+1, err)
 			}
