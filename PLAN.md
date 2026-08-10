@@ -826,6 +826,14 @@ Alles hier ist ungeprüft. Nicht raten — nachschlagen oder ausprobieren.
      verweigert (`DeniedError` geht als Tool-Fehler an den Hasen, der
      Lauf bricht nicht ab); `bash` fehlte im Toolset. Keine
      Escape-Datei entstand.
+   - **Nachtrag 2026-08-10 (Baumeister, Hasenbau-xfm):** Ein
+     erlaubtes `edit`-Pattern muss **nicht** unter `raeume/` liegen.
+     Der Baumeister schreibt mit `"gaenge/entwurf/**": allow` in einem
+     echten Lauf sauber dorthin — Patterns matchen gegen
+     `path.relative(worktree, datei)`, und der Worktree ist der
+     Bau-Root, nicht `raeume/`. Damit kann jeder Bau-relative Pfad ein
+     Schreibziel sein; die Rollen-Konvention (§4) ist Konvention, keine
+     Grenze der Permissions.
 6. ~~Agent-Reload: Wie werden generierte Agenten wirksam, ohne den Server
    neu zu starten?~~ **Verifiziert 2026-07-13 (opencode 1.15.13,
    Test-Bau + Quellcode):** Agent-Definitionen werden pro Instanz
