@@ -23,6 +23,12 @@ type Lauf struct {
 	TokensIn  int64
 	TokensOut int64
 	CostCent  int64
+
+	// ToolSignature ist die geordnete Tool-Folge des Laufs, z.B.
+	// 'read>write>hasenbau_summary'. Leer heißt zweierlei: der Lauf hat
+	// nichts angefasst, oder er wurde nie ausgewertet — zu unterscheiden
+	// über tool_calls (Hasenbau-4cx.1).
+	ToolSignature string
 }
 
 // StartLauf legt die laeufe-Zeile an (status 'running') und stempelt
@@ -76,6 +82,12 @@ type LaufResult struct {
 	TokensIn  int64
 	TokensOut int64
 	CostCent  int64
+
+	// ToolSignature ist die geordnete Tool-Folge des Laufs, z.B.
+	// 'read>write>hasenbau_summary'. Leer heißt zweierlei: der Lauf hat
+	// nichts angefasst, oder er wurde nie ausgewertet — zu unterscheiden
+	// über tool_calls (Hasenbau-4cx.1).
+	ToolSignature string
 }
 
 // EndLauf schreibt den Endzustand und pflegt auftrag_state:
@@ -138,11 +150,11 @@ func (s *Store) LaufByID(id int64) (*Lauf, error) {
 		SELECT id, auftrag, "trigger", COALESCE(input,''), started,
 		       ended, status, COALESCE(session_id,''), COALESCE(summary,''),
 		       COALESCE(error,''), COALESCE(tokens_in,0), COALESCE(tokens_out,0),
-		       COALESCE(cost_cent,0)
+		       COALESCE(cost_cent,0), COALESCE(tool_signature,'')
 		FROM laeufe WHERE id = ?`, id).Scan(
 		&l.ID, &l.Auftrag, &l.Trigger, &l.Input, &l.Started, &ended,
 		&l.Status, &l.SessionID, &l.Summary, &l.Error, &l.TokensIn,
-		&l.TokensOut, &l.CostCent)
+		&l.TokensOut, &l.CostCent, &l.ToolSignature)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("store: kein Lauf mit ID %d", id)
 	}

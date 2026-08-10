@@ -1,9 +1,9 @@
 // Package store persistiert, was der Hasenbau tut: Läufe,
-// Auftrags-Zustand, Notizen der Hasen und den Idempotenz-Backstop
-// (PLAN.md §5). SQLite im WAL-Modus, pure Go (modernc.org/sqlite,
-// kein cgo). Bewusst klein —
-// vier Tabellen, nicht dreißig. Nicht verwechseln mit Beads (§9):
-// Beads trackt, wie der Hasenbau gebaut wird.
+// Auftrags-Zustand, Notizen der Hasen, den Verlauf jedes Laufs und den
+// Idempotenz-Backstop (PLAN.md §5). SQLite im WAL-Modus, pure Go
+// (modernc.org/sqlite, kein cgo). Bewusst klein — sechs Tabellen,
+// nicht dreißig. Nicht verwechseln mit Beads (§9): Beads trackt, wie
+// der Hasenbau gebaut wird.
 package store
 
 import (
@@ -120,6 +120,29 @@ var migrations = [][]string{
 		// wären danach unlesbar; sie fliegen raus, und `hasenbau dig`
 		// holt den Trace bei Bedarf wieder vom Server.
 		`DELETE FROM trace`,
+	},
+	{
+		// Die Tool-Calls eines Laufs, normalisiert (Hasenbau-4cx.1).
+		// Der Trace daneben bleibt: er ist das Protokoll zum Lesen,
+		// das hier ist dasselbe zum Rechnen. Ohne diese Tabelle wäre
+		// jede Frage nach „welche Position variiert über N Läufe" ein
+		// JSON-Scan.
+		`CREATE TABLE tool_calls (
+			lauf          INTEGER NOT NULL REFERENCES laeufe(id),
+			nr            INTEGER NOT NULL,  -- Position in Ausführungsreihenfolge, ab 1
+			tool          TEXT NOT NULL,
+			args_json     TEXT NOT NULL,     -- vollständige Argumente, wie aufgerufen
+			status        TEXT NOT NULL,     -- completed | error | …
+			error         TEXT,              -- Begründung bei status='error'
+			duration_ms   INTEGER,           -- NULL, wenn der Trace keine Zeiten hatte
+			PRIMARY KEY (lauf, nr)
+		)`,
+		`CREATE INDEX idx_tool_calls_tool ON tool_calls(tool)`,
+		// Die geordnete Tool-Folge eines Laufs, z.B.
+		// 'read>write>hasenbau_summary'. Redundant zu tool_calls und
+		// genau deshalb da: der Vergleich zweier Läufe ist ein
+		// String-Vergleich statt eines Joins.
+		`ALTER TABLE laeufe ADD COLUMN tool_signature TEXT`,
 	},
 }
 

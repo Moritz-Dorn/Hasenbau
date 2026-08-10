@@ -34,6 +34,7 @@ type LaufStore interface {
 	StartLauf(auftrag, trigger, ausloeser string) (int64, error)
 	EndLauf(id int64, e store.LaufResult) error
 	WriteTrace(lauf int64, sessionID string, roh []byte) error
+	WriteToolCalls(lauf int64, calls []store.ToolCall) error
 }
 
 // statusInterval ist der Vorgabe-Takt, in dem der Runner den Zustand
@@ -358,9 +359,11 @@ warten:
 	return erg, nil
 }
 
-// storeTrace schreibt den Verlauf zum Lauf. Ein Fehler dabei wird
-// gemeldet, scheitert den Lauf aber nie: der Trace ist Material für
-// später, das Ergebnis des Laufs hängt nicht an ihm.
+// storeTrace schreibt den Verlauf zum Lauf — einmal als Protokoll zum
+// Lesen (trace) und einmal normalisiert zum Rechnen (tool_calls, §8
+// Phase 2). Ein Fehler dabei wird gemeldet, scheitert den Lauf aber
+// nie: beides ist Material für später, das Ergebnis des Laufs hängt
+// nicht daran.
 func (r *Runner) storeTrace(id int64, erg haseResult, logf func(string, ...any)) {
 	if erg.Trace == nil || erg.SessionID == "" {
 		return
@@ -371,6 +374,9 @@ func (r *Runner) storeTrace(id int64, erg haseResult, logf func(string, ...any))
 	}
 	if err != nil {
 		logf("lauf %d: Trace nicht abgelegt: %v", id, err)
+	}
+	if err := r.Store.WriteToolCalls(id, toolCalls(erg.Trace)); err != nil {
+		logf("lauf %d: Tool-Calls nicht abgelegt: %v", id, err)
 	}
 }
 

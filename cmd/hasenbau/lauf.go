@@ -45,6 +45,7 @@ func openLaufContext(root string, logger *log.Logger) (*laufContext, error) {
 		st.Close()
 		return nil, err
 	}
+	backfillToolCalls(st, logger.Printf)
 	auftraege, err := loadAndGenerate(root)
 	if err != nil {
 		st.Close()

@@ -246,6 +246,24 @@ func cleanupLaeufe(st *store.Store, logf func(string, ...any)) error {
 	return nil
 }
 
+// backfillToolCalls zieht die Tool-Calls der Läufe nach, die schon
+// einen Trace haben, aber noch keine Zeilen (Hasenbau-4cx.1).
+//
+// Läuft bei jedem Start und ist trotzdem billig: die Auswahl ist die
+// Bedingung, und sobald alles nachgezogen ist, liefert sie nichts mehr.
+// Ein Fehler dabei hält niemanden auf — die Analyse ist dann eben
+// lückenhaft, aber kein Lauf hängt daran.
+func backfillToolCalls(st *store.Store, logf func(string, ...any)) {
+	n, err := st.BackfillToolCalls(runner.ToolCallsFromTrace)
+	if err != nil {
+		logf("Tool-Calls nachziehen: %v", err)
+		return
+	}
+	if n > 0 {
+		logf("Tool-Calls von %d Lauf/Läufen nachgezogen", n)
+	}
+}
+
 // loadAndGenerate lädt die Aufträge und schreibt die generierten
 // Agenten (§6: beim Laden der Definitionen, nicht pro Lauf). Läuft vor
 // dem Server-Start — dispose braucht es hier deshalb nicht.
@@ -297,6 +315,7 @@ func cmdDaemon(root string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
+	backfillToolCalls(st, logger.Printf)
 	auftraege, err := loadAndGenerate(root)
 	if err != nil {
 		logger.Print(err)

@@ -231,7 +231,7 @@ Parser lehnt es mit klarer Meldung ab, kein stilles No-op.
 
 ## 5. Datenmodell
 
-SQLite, WAL-Modus. Bewusst klein — vier Tabellen, nicht dreißig.
+SQLite, WAL-Modus. Bewusst klein — sechs Tabellen, nicht dreißig.
 (DuckDB wäre hier falsch: OLAP-Engine für einen OLTP-Workload aus vielen
 kleinen Writes und Punkt-Reads. Falls später Analysen über viele Läufe
 gebraucht werden, kann DuckDB direkt auf diese SQLite-Datei querien.)
@@ -343,6 +343,41 @@ den Trace wie bisher und trägt sie nach; `-live` erzwingt den
 Server-Weg mit ungekürzten Ausgaben. Gekappt wird, was die Verdichtung
 nicht braucht: Tool-Ausgaben und Fehlertexte bei 8 KiB, mit Hinweis —
 Werkzeug, Argumente und Status bleiben vollständig.
+
+**Derselbe Verlauf noch einmal, normalisiert** — der Trace ist das
+Protokoll zum *Lesen*, diese Tabelle dasselbe zum *Rechnen*
+(Hasenbau-4cx.1):
+
+```sql
+CREATE TABLE tool_calls (
+  lauf          INTEGER NOT NULL REFERENCES laeufe(id),
+  nr            INTEGER NOT NULL,  -- Position in Ausführungsreihenfolge, ab 1
+  tool          TEXT NOT NULL,
+  args_json     TEXT NOT NULL,     -- vollständige Argumente, wie aufgerufen
+  status        TEXT NOT NULL,     -- completed | error | …
+  error         TEXT,              -- Begründung bei status='error'
+  duration_ms   INTEGER,
+  PRIMARY KEY (lauf, nr)
+);
+-- dazu in laeufe: tool_signature TEXT  -- 'read>write>hasenbau_summary'
+```
+
+Die Redundanz ist der Zweck. Ohne sie wäre jede Frage nach „welche
+Position variiert über N Läufe" ein JSON-Scan, und genau diese Frage
+ist die deterministische Antwort auf die harte Stelle aus §8: **was
+über die Läufe variiert, ist der Parameter; was konstant bleibt, ist
+die Konstante.** Aus einem einzelnen Trace ist das prinzipiell nicht
+entscheidbar — aus zwanzig schon, und ohne Modell.
+
+Die Signatur in `laeufe` ist ihrerseits redundant zu den Zeilen und
+macht den Vergleich zweier Läufe zu einem String-Vergleich statt einem
+Join. Fehlversuche stehen mit drin: sie gehören zur Wahrheit über den
+Lauf, und wer sie beim Vergleichen nicht will, filtert die Zeilen —
+aus einer Signatur, aus der sie schon herausgerechnet sind, bekommt
+sie niemand zurück. Leer heißt „hat nichts angefasst", `NULL` heißt
+„nie ausgewertet"; das ist nicht dasselbe. Läufe mit Trace, aber ohne
+Zeilen zieht der Hasenbau beim Start nach — ohne Marker, die Auswahl
+ist die Bedingung und damit idempotent.
 
 ---
 

@@ -468,3 +468,53 @@ Sortiere ein.
 		t.Errorf("Lauf = %+v", l)
 	}
 }
+
+// Hasenbau-4cx.1: Aus dem Trace werden Zeilen zum Rechnen. Genommen
+// wird der Trace und nicht der Event-Stream — der meldet denselben
+// Aufruf dreimal.
+func TestToolCallsAusTrace(t *testing.T) {
+	start := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	ende := start.Add(1500 * time.Millisecond)
+	tr := &opencode.Trace{Steps: []opencode.TraceStep{
+		{Kind: "text", Role: "user", Text: "los"},
+		{Kind: "tool", Tool: "read", Input: `{"path":"a"}`, Status: "completed", Start: &start, End: &ende},
+		{Kind: "reasoning", Text: "denk"},
+		{Kind: "tool", Tool: "write", Input: `{"path":"b"}`, Status: "error", Error: "permission denied"},
+	}}
+
+	calls := toolCalls(tr)
+	if len(calls) != 2 {
+		t.Fatalf("%d Aufrufe, erwartet 2 (text und reasoning gehören nicht dazu)", len(calls))
+	}
+	if calls[0].Nr != 1 || calls[0].Tool != "read" || calls[0].DurationMs != 1500 {
+		t.Errorf("erster Aufruf: %+v", calls[0])
+	}
+	if calls[1].Nr != 2 || calls[1].Status != "error" || calls[1].Error != "permission denied" {
+		t.Errorf("zweiter Aufruf: %+v", calls[1])
+	}
+	if s := store.Signature(calls); s != "read>write" {
+		t.Errorf("Signatur = %q", s)
+	}
+
+	if calls := toolCalls(nil); calls != nil {
+		t.Errorf("ohne Trace: %+v", calls)
+	}
+}
+
+// ToolCallsFromTrace ist derselbe Weg über abgelegtes JSON — der
+// Nachzug alter Läufe hängt daran.
+func TestToolCallsAusAbgelegtemTrace(t *testing.T) {
+	roh := []byte(`{"session_id":"ses_1","steps":[
+		{"kind":"tool","tool":"glob","input":"{}","status":"completed"},
+		{"kind":"text","role":"assistant","text":"fertig"}]}`)
+	calls, err := ToolCallsFromTrace(roh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || calls[0].Tool != "glob" {
+		t.Errorf("calls = %+v", calls)
+	}
+	if _, err := ToolCallsFromTrace([]byte("kein json")); err == nil {
+		t.Error("kaputtes JSON muss ein Fehler sein")
+	}
+}
