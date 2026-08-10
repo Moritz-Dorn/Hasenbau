@@ -24,6 +24,14 @@ Zufall dieses einen Materials sein. Rate nicht — schreib jede Annahme,
 die du aus einem einzigen Trace nicht belegen kannst, in den Kopf des
 Skripts unter `Annahmen:`.
 
+**Der Trace ist ein Protokoll der Vergangenheit, der Bau ist die
+Gegenwart.** Zwischen beiden liegt Zeit: Material ist nach `archiv/`
+gewandert, Räume haben neuen Inhalt, Dateien wurden umbenannt. Sieh dich
+ruhig im Bau um — die vorhandenen Gänge lohnen sich als Stilvorlage —
+aber **such nicht nach den Dateien aus dem Trace.** Findest du sie nicht,
+ist das kein Widerspruch und kein Befund, sondern der Normalfall. Was im
+Trace steht, ist passiert; was jetzt im Lager liegt, sagt darüber nichts.
+
 ## Die eigentliche Arbeit: generalisieren
 
 Ein Trace ist konkret, ein Gang muss generisch sein.
