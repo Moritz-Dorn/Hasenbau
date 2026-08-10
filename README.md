@@ -8,9 +8,9 @@ Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 (Verdichtung und Rückkanal) sind fertig** — der Referenz-Auftrag
 `pdf-einlagern` läuft Ende-zu-Ende, `hasenbau dig` zieht Traces, der
 MCP-Rückkanal steht, und der Baumeister verdichtet einen Lauf zu einem
-Gang-Entwurf (siehe [`beispiele/`](beispiele/)). Als nächstes: die
-Befund-Analyse über viele Läufe, damit die Verdichtung nicht aus einem
-einzelnen Trace raten muss. `PLAN.md` ist der Spec.
+Gang-Entwurf (siehe [`beispiele/`](beispiele/)). `hasenbau findings`
+rechnet inzwischen über viele Läufe, damit die Verdichtung nicht aus
+einem einzelnen Trace raten muss. `PLAN.md` ist der Spec.
 
 ## Die Idee
 
@@ -73,6 +73,7 @@ hasenbau describe hase <name>     # effektive Permissions je Auftrag
 hasenbau describe gang <datei>    # Zweck und alle Aufträge, die ihn rufen
 hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
 hasenbau dig <lauf-id>  # Trace eines Laufs — Input für den Baumeister
+hasenbau findings <auftrag>  # was sich über die Läufe rechnen lässt (kein Modell)
 hasenbau baumeister <ziel> # Baumeister auf einen Lauf ansetzen
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
 hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
@@ -102,8 +103,8 @@ Gesprächsgrundlage, kein fertiger Gang.
 
 Ein Hasen-Template kann Hintergrundwissen anfordern: `knows_hasenbau:
 true` bindet eine mitgelieferte Einführung in den Hasenbau ein (Begriffe,
-Ablauf, Trace-Aufbau, Grenzen), `wissen: [pfade]` eigene Dateien aus dem
-Bau. Beides landet im generierten Agenten und gilt damit nur für diesen
+Ablauf, Trace-Aufbau, Grenzen), `knowledge: [pfade]` eigene Dateien aus
+dem Bau. Beides landet im generierten Agenten und gilt damit nur für diesen
 Hasen — anders als `instructions` in der opencode.json, das
 Workspace-weit für *jeden* Agenten gilt. Die Einführung steckt bewusst im
 Binary statt im Bau: so passt sie immer zur installierten Version, statt

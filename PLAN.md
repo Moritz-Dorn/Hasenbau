@@ -715,6 +715,26 @@ Golden-Test in `internal/hase` hält den generierten Agenten der
 ausgelieferten Beispiel-Dateien fest, damit eine Änderung an den Räumen
 sofort auffällt.
 
+**`hasenbau findings <auftrag>` rechnet, bevor jemand fragt** ✅
+*(2026-08-10, Hasenbau-4cx.2)*. Deterministisch, ohne Server und ohne
+Modell: das Anschauen kostet nichts, ist reproduzierbar, und jeder
+Vorschlag nennt die Läufe, auf denen er beruht. Drei Arten — der
+Gang-Kandidat (das häufigste zusammenhängende Werkzeug-Muster, dazu je
+Position, ob die Argumente variieren), die Permission-Reibung
+(gescheiterte Aufrufe nach Werkzeug, Grund und Zielpfad) und Laufzeit
+samt Ausreißern. Ausgabe als nummerierte Markdown-Liste — die Nummer
+ist der Griff, „arbeite 2 aus" der nächste Satz — oder `-json` für den
+Einsatz in einem Gang.
+
+Häufigkeit schlägt Länge: ein langes Muster in drei von zwanzig Läufen
+trägt keine Generalisierung, ein kurzes in allen zwanzig schon. Unter
+drei Läufen entsteht gar kein Gang-Kandidat; zwei sind kein Muster,
+sondern ein Zufall zu zweit.
+
+Der Name ist englisch wie alles außer den sieben Begriffen aus §1 —
+in der Prosa heißt die Sache weiter Befund, so wie `dig` einen Trace
+gräbt.
+
 **Bekannte Grenze:** Aus *einem* Trace ist prinzipiell nicht
 entscheidbar, was Parameter und was Konstante war. Das Modell antwortet
 trotzdem plausibel und schreibt die Eigenheiten des ersten Materials als
@@ -722,7 +742,8 @@ Regel fest. Der `Annahmen:`-Block im Skriptkopf und die Anweisung „lieber
 nichts schreiben" dämpfen das, heilen es nicht — Stufe 1 liefert
 Gesprächsgrundlagen, keine einsatzfähigen Gänge. Die Antwort darauf ist
 nicht ein besserer Prompt, sondern mehr Material: der Argument-Diff über
-N Läufe sagt empirisch, welche Position variiert (Epic Hasenbau-4cx).
+N Läufe sagt empirisch, welche Position variiert — genau das tut
+`hasenbau findings` (Epic Hasenbau-4cx).
 Zweitens kann der Baumeister sein Skript nicht ausführen — `bash: deny`
 ist unbedingt, Templates dürfen Rechte nur verengen. Deshalb prüft
 `hasenbau baumeister` neue Entwürfe nach dem Lauf auf Syntax

@@ -44,6 +44,8 @@ Befehle:
   describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
   new <res> <name>      Gerüst anlegen (auftrag, hase)
   dig [-json] <id>      Trace eines Laufs ziehen (Baumeister-Input)
+  findings <auftrag>    was sich über die Läufe rechnen lässt: Gang-
+                        Kandidaten, Reibung, Ausreißer (kein Modell)
   baumeister <ziel>     Baumeister-Auftrag (aus hasenbau.yaml) auf einen
                         Lauf ansetzen; <ziel> ist eine Lauf-ID oder ein
                         Auftrag (dann dessen letzter Lauf)
@@ -107,6 +109,8 @@ func run(args []string, out, errw io.Writer) int {
 		return 2
 	case "dig":
 		return cmdDig(bau, rest[1:], out, errw)
+	case "findings":
+		return cmdFindings(bau, rest[1:], out, errw)
 	case "baumeister":
 		return cmdBaumeister(bau, rest[1:], out, errw)
 	case "get":
