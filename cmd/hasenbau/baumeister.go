@@ -113,7 +113,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 			"(PLAN.md §8/§10). Lies das Skript, dann trag den Gang selbst ein; der\n"+
 			"Vorschlag steht im Kopf der Datei.\n")
 	}
-	fmt.Fprintf(out, "\nDen Trace dieses Laufs zeigt `hasenbau graben %d`.\n", quelle.ID)
+	fmt.Fprintf(out, "\nDer Trace, aus dem er gearbeitet hat: `hasenbau graben %d`.\n", quelle.ID)
 
 	if laufFehler != nil {
 		return 1
