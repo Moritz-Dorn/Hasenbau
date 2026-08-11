@@ -407,36 +407,21 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 // Speicher: so übersteht der Deckel einen Daemon-Neustart, und
 // ausgerechnet ein Crash-Loop bekommt nicht jedes Mal frisches Budget.
 func (w *Watcher) platzFrei(a *auftrag.Auftrag) (time.Duration, error) {
+	if !a.Throttle.An() {
+		return 0, nil
+	}
 	jetzt := w.jetzt()
-
-	// Das Tagesfenster zuerst: es kostet keine Abfrage. Es begrenzt nur
-	// den START — ein Lauf, der um 05:55 beginnt und eine halbe Stunde
-	// braucht, läuft zu Ende. Ein Fenster, das mitten ins Schreiben
-	// schneidet, produziert halbe Ergebnisse (§7).
-	if f := a.Throttle.Between; f != nil {
-		if warten := f.Until(jetzt); warten > 0 {
-			return warten, nil
+	var starts []time.Time
+	if a.Throttle.Max > 0 {
+		var err error
+		if starts, err = w.db.LaeufeSince(a.Name, jetzt.Add(-a.Throttle.Per)); err != nil {
+			return 0, err
 		}
 	}
-	if a.Throttle.Max <= 0 {
-		return 0, nil
-	}
-	starts, err := w.db.LaeufeSince(a.Name, jetzt.Add(-a.Throttle.Per))
-	if err != nil {
-		return 0, err
-	}
-	if len(starts) < a.Throttle.Max {
-		return 0, nil
-	}
-	// Der älteste Lauf im Fenster fällt als erster heraus. Sind es mehr
-	// als Max (etwa weil `hasenbau lauf` den Deckel umgeht), zählen wir
-	// von dem, der als Max-letzter herausfällt.
-	frei := starts[len(starts)-a.Throttle.Max].Add(a.Throttle.Per)
-	if warten := frei.Sub(jetzt); warten > 0 {
-		return warten, nil
-	}
-	// Grenzfall: die Uhr ist während der Abfrage weitergelaufen.
-	return time.Millisecond, nil
+	// Die Rechnung selbst steht in auftrag.Throttle, damit `hasenbau
+	// status` dieselbe benutzt und nicht etwas anderes vorhersagt, als
+	// hier passiert (Hasenbau-do0.4).
+	return a.Throttle.Wait(jetzt, starts), nil
 }
 
 // warteAufStabileGroesse wartet, bis die Datei über zwei Ticks dieselbe

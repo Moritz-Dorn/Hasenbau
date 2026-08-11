@@ -121,7 +121,7 @@ func TestParseThrottle(t *testing.T) {
 	if a.Throttle.Max != 5 || a.Throttle.Per != time.Hour {
 		t.Errorf("Throttle = %+v", a.Throttle)
 	}
-	if !a.Throttle.An() || a.Throttle.String() != "5 Läufe je 1h0m0s" {
+	if !a.Throttle.An() || a.Throttle.String() != "5 Läufe je 1h" {
 		t.Errorf("An=%v String=%q", a.Throttle.An(), a.Throttle)
 	}
 
@@ -242,7 +242,7 @@ func TestParseThrottleBetween(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if beides.Throttle.String() != "5 Läufe je 1h0m0s, nur 22:00-06:00" {
+	if beides.Throttle.String() != "5 Läufe je 1h, nur 22:00-06:00" {
 		t.Errorf("String = %q", beides.Throttle)
 	}
 
@@ -260,6 +260,78 @@ func TestParseThrottleBetween(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), f.erwartet) {
 			t.Errorf("%q: Fehler %q enthält nicht %q", f.block, err, f.erwartet)
+		}
+	}
+}
+
+// Hasenbau-do0.4: Wait ist die eine Rechnung, die Watcher und Status
+// teilen. Reine Funktion, deshalb ohne Uhr und ohne DB prüfbar.
+func TestThrottleWait(t *testing.T) {
+	um := func(h, m int) time.Time { return time.Date(2026, 3, 10, h, m, 0, 0, time.UTC) }
+	starts := func(ts ...time.Time) []time.Time { return ts }
+
+	rate := Throttle{Max: 2, Per: time.Hour}
+	nachts := Throttle{Between: &Window{From: 22 * 60, To: 6 * 60}}
+	beides := Throttle{Max: 2, Per: time.Hour, Between: &Window{From: 22 * 60, To: 6 * 60}}
+
+	faelle := []struct {
+		name   string
+		t      Throttle
+		jetzt  time.Time
+		starts []time.Time
+		warten time.Duration
+	}{
+		{"Rate: Platz frei", rate, um(12, 0), starts(um(11, 30)), 0},
+		{"Rate: voll", rate, um(12, 0), starts(um(11, 30), um(11, 45)), 30 * time.Minute},
+		// starts sind laut Vertrag nur die Läufe IM Fenster; um 12:31
+		// gehört der von 11:30 nicht mehr dazu.
+		{"Rate: einer herausgefallen", rate, um(12, 31), starts(um(11, 45)), 0},
+		{"Fenster: offen", nachts, um(23, 0), nil, 0},
+		{"Fenster: zu", nachts, um(14, 0), nil, 8 * time.Hour},
+		{"beides: offen und Platz", beides, um(23, 0), starts(um(22, 30)), 0},
+		{"beides: offen, aber voll", beides, um(23, 0), starts(um(22, 30), um(22, 45)), 30 * time.Minute},
+		// Der Platz fiele um 06:20 frei — da ist das Fenster schon zu,
+		// also gilt der spätere Zeitpunkt: 22:00.
+		{"beides: Platz fällt nach Fensterschluss frei", beides, um(5, 50),
+			starts(um(5, 20), um(5, 30)), 16*time.Hour + 10*time.Minute},
+		{"ungedrosselt", Throttle{}, um(12, 0), nil, 0},
+	}
+	for _, f := range faelle {
+		if got := f.t.Wait(f.jetzt, f.starts); got != f.warten {
+			t.Errorf("%s: Wait = %v, erwartet %v", f.name, got, f.warten)
+		}
+	}
+
+	// Mehr Läufe als Max im Fenster (`hasenbau lauf` umgeht den Deckel):
+	// gezählt wird von dem, der als Max-letzter herausfällt.
+	if got := rate.Wait(um(12, 0), starts(um(11, 10), um(11, 30), um(11, 45))); got != 30*time.Minute {
+		t.Errorf("übervolles Fenster: Wait = %v, erwartet 30m", got)
+	}
+}
+
+func TestWindowLaenge(t *testing.T) {
+	if got := (Window{From: 22 * 60, To: 6 * 60}).Laenge(); got != 8*time.Hour {
+		t.Errorf("über Mitternacht: %v", got)
+	}
+	if got := (Window{From: 9 * 60, To: 17 * 60}).Laenge(); got != 8*time.Hour {
+		t.Errorf("normal: %v", got)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	faelle := map[time.Duration]string{
+		time.Hour:                    "1h",
+		8 * time.Hour:                "8h",
+		8*time.Hour + 44*time.Minute: "8h44m",
+		30 * time.Minute:             "30m",
+		90 * time.Second:             "1m30s",
+		10 * time.Second:             "10s",
+		2*time.Hour + 30*time.Minute: "2h30m",
+		time.Hour + 2*time.Second:    "1h0m2s",
+	}
+	for d, erwartet := range faelle {
+		if got := FormatDuration(d); got != erwartet {
+			t.Errorf("FormatDuration(%v) = %q, erwartet %q", d, got, erwartet)
 		}
 	}
 }

@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/findings"
@@ -193,6 +195,83 @@ func writeMonitored(st *store.Store, ueberwacht []string, gesamt int, out io.Wri
 		}
 	}
 	fmt.Fprintln(out, "\n  Ganz: `hasenbau findings <auftrag>` — ausarbeiten lassen: `hasenbau baumeister -finding <n> <auftrag>`")
+}
+
+// drossel beschreibt den Zustand eines gedrosselten Auftrags für die
+// Anzeige (Hasenbau-do0.4). Ein Deckel, den man nicht sieht, ist von
+// einem hängenden Daemon nicht zu unterscheiden: wer 200 PDFs ablegt
+// und abends nachsieht, muss erkennen können, dass sich etwas staut —
+// und zwar planmäßig.
+type drossel struct {
+	Auftrag   string
+	Throttle  auftrag.Throttle
+	Eingang   int           // Dateien, die gerade im Glob liegen
+	Warten    time.Duration // bis zum nächsten möglichen Start; 0 = jetzt
+	Naechster time.Time
+}
+
+// drosselStand rechnet den Zustand aller gedrosselten Aufträge.
+//
+// Der Rückstau ist bewusst nur die Zahl der Glob-Treffer und nicht „die
+// noch nicht gesehenen": das zu wissen hieße, jede Datei zu hashen, und
+// `status` ist der billige Befehl. Bei einem Auftrag mit `after: move`
+// — dem Normalfall — ist beides ohnehin dasselbe, denn ein geglückter
+// Lauf räumt seinen Input weg.
+func drosselStand(root string, st *store.Store, auftraege []*auftrag.Auftrag) []drossel {
+	jetzt := time.Now()
+	var out []drossel
+	for _, a := range auftraege {
+		if !a.Throttle.An() {
+			continue
+		}
+		d := drossel{Auftrag: a.Name, Throttle: a.Throttle}
+		if a.Trigger.Watch != "" {
+			if treffer, err := filepath.Glob(filepath.Join(root, a.Trigger.Watch)); err == nil {
+				d.Eingang = len(treffer)
+			}
+		}
+		var starts []time.Time
+		if a.Throttle.Max > 0 {
+			starts, _ = st.LaeufeSince(a.Name, jetzt.Add(-a.Throttle.Per))
+		}
+		d.Warten = a.Throttle.Wait(jetzt, starts)
+		d.Naechster = jetzt.Add(d.Warten)
+		out = append(out, d)
+	}
+	return out
+}
+
+// writeDrosseln meldet die gedrosselten Aufträge im Status.
+func writeDrosseln(stand []drossel, out io.Writer) {
+	if len(stand) == 0 {
+		return
+	}
+	breite := 0
+	for _, d := range stand {
+		breite = max(breite, len(d.Auftrag))
+	}
+	fmt.Fprintf(out, "\nGedrosselt (%d)\n", len(stand))
+	for _, d := range stand {
+		fmt.Fprintf(out, "  %-*s  %s\n", breite, d.Auftrag, d.Throttle)
+		var teile []string
+		if d.Eingang > 0 {
+			teile = append(teile, fmt.Sprintf("%s im Eingang", anzahlDateien(d.Eingang)))
+		}
+		if d.Warten == 0 {
+			teile = append(teile, "nächster Lauf: jetzt")
+		} else {
+			teile = append(teile, fmt.Sprintf("nächster Lauf frühestens %s (in %s)",
+				d.Naechster.Local().Format("15:04"), auftrag.FormatDuration(d.Warten.Round(time.Minute))))
+		}
+		fmt.Fprintf(out, "  %-*s  %s\n", breite, "", strings.Join(teile, ", "))
+	}
+}
+
+func anzahlDateien(n int) string {
+	if n == 1 {
+		return "1 Datei"
+	}
+	return fmt.Sprintf("%d Dateien", n)
 }
 
 // monitoredNames sammelt die überwachten Aufträge in Definitionsreihenfolge.

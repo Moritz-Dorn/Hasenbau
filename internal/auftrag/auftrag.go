@@ -104,11 +104,25 @@ type Throttle struct {
 // An sagt, ob der Auftrag überhaupt gedrosselt ist.
 func (t Throttle) An() bool { return t.Max > 0 || t.Between != nil }
 
+// FormatDuration kürzt die Go-Schreibweise für die Anzeige: „1h0m0s"
+// ist als Fenstergröße korrekt und in einem Dashboard nur laut.
+// Sekunden bleiben stehen, wo es welche gibt.
+func FormatDuration(d time.Duration) string {
+	s := d.String()
+	if d >= time.Minute && strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if d >= time.Hour && strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
 // String beschreibt den Deckel für Menschen.
 func (t Throttle) String() string {
 	var teile []string
 	if t.Max > 0 {
-		teile = append(teile, fmt.Sprintf("%d Läufe je %s", t.Max, t.Per))
+		teile = append(teile, fmt.Sprintf("%d Läufe je %s", t.Max, FormatDuration(t.Per)))
 	}
 	if t.Between != nil {
 		teile = append(teile, "nur "+t.Between.String())
@@ -117,6 +131,44 @@ func (t Throttle) String() string {
 		return "ungedrosselt"
 	}
 	return strings.Join(teile, ", ")
+}
+
+// Wait sagt, wie lange ein Lauf noch warten muss; 0 heißt „jetzt".
+// `starts` sind die Startzeitpunkte der Läufe im rollenden Fenster,
+// aufsteigend — bei Max == 0 wird die Liste nicht angesehen.
+//
+// Eine reine Funktion, und das mit Absicht: der Watcher entscheidet
+// damit, ob er losläuft, und `hasenbau status` sagt damit voraus, wann
+// es weitergeht. Zwei Rechnungen für dieselbe Frage liefen auseinander,
+// und dann zeigte das Dashboard etwas anderes an, als der Daemon tut
+// (Hasenbau-do0.4).
+func (t Throttle) Wait(jetzt time.Time, starts []time.Time) time.Duration {
+	// Das Tagesfenster zuerst: es kostet keine Abfrage.
+	if t.Between != nil {
+		if warten := t.Between.Until(jetzt); warten > 0 {
+			return warten
+		}
+	}
+	if t.Max <= 0 || len(starts) < t.Max {
+		return 0
+	}
+	// Der älteste Lauf im Fenster fällt als erster heraus. Sind es mehr
+	// als Max (etwa weil `hasenbau lauf` den Deckel umgeht), zählt der,
+	// der als Max-letzter herausfällt.
+	frei := starts[len(starts)-t.Max].Add(t.Per)
+	warten := frei.Sub(jetzt)
+	if warten <= 0 {
+		// Grenzfall: die Uhr ist während der Abfrage weitergelaufen.
+		return time.Millisecond
+	}
+	// Fällt der Platz erst frei, wenn das Fenster schon wieder zu ist,
+	// gilt der spätere der beiden Zeitpunkte.
+	if t.Between != nil {
+		if nach := t.Between.Until(jetzt.Add(warten)); nach > 0 {
+			return warten + nach
+		}
+	}
+	return warten
 }
 
 // Window ist ein Tagesfenster in **Ortszeit** — „nachts" meint die Nacht
@@ -160,6 +212,15 @@ func (w Window) Until(t time.Time) time.Duration {
 
 func (w Window) String() string {
 	return fmt.Sprintf("%02d:%02d-%02d:%02d", w.From/60, w.From%60, w.To/60, w.To%60)
+}
+
+// Laenge ist die Dauer eines geöffneten Fensters.
+func (w Window) Laenge() time.Duration {
+	minuten := w.To - w.From
+	if w.UeberMitternacht() {
+		minuten += 24 * 60
+	}
+	return time.Duration(minuten) * time.Minute
 }
 
 // parseWindow liest "22:00-06:00".

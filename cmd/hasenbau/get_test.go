@@ -258,7 +258,8 @@ func TestDescribeAuftragZeigtZeitlimit(t *testing.T) {
 	if code := run([]string{"-bau", bau, "describe", "auftrag", "mit"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "1h30m0s") || !strings.Contains(out.String(), "hase_timeout") {
+	// Gekürzte Schreibweise seit Hasenbau-do0.4: „1h30m", nicht „1h30m0s".
+	if !strings.Contains(out.String(), "1h30m") || !strings.Contains(out.String(), "hase_timeout") {
 		t.Errorf("Zeitlimit des Auftrags fehlt:\n%s", out.String())
 	}
 
@@ -267,7 +268,7 @@ func TestDescribeAuftragZeigtZeitlimit(t *testing.T) {
 	if code := run([]string{"-bau", bau, "describe", "auftrag", "ohne"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "30m0s") || !strings.Contains(out.String(), "Vorgabe") {
+	if !strings.Contains(out.String(), "30m ") || !strings.Contains(out.String(), "Vorgabe") {
 		t.Errorf("Vorgabe fehlt:\n%s", out.String())
 	}
 }

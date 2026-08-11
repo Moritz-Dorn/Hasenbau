@@ -690,6 +690,13 @@ func cmdStatus(root string, out, errw io.Writer) int {
 	// davor, damit hier dieselben Zahlen stehen wie unter `hasenbau
 	// findings` — Altläufe mit Trace, aber ohne Aufrufzeilen zählten
 	// sonst nicht mit.
+	// Was gedrosselt ist und wann es weitergeht (Hasenbau-do0.4). Vor den
+	// Befunden, weil „es staut sich planmäßig" die dringendere Auskunft
+	// ist als „hier wäre ein Gang-Kandidat".
+	if defFehler == nil {
+		writeDrosseln(drosselStand(root, st, auftraege), out)
+	}
+
 	if ueberwacht := monitoredNames(auftraege); defFehler == nil && len(ueberwacht) > 0 {
 		backfillToolCalls(st, func(format string, args ...any) {
 			fmt.Fprintf(errw, format+"\n", args...)

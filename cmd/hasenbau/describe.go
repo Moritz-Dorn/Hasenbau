@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
@@ -261,12 +262,21 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 	}
 	ab.field("Hase", "%s  →  Agent %s", a.Hase, hase.AgentName(a))
 	if a.HaseTimeout > 0 {
-		ab.field("Zeitlimit", "%s für den LLM-Schritt (hase_timeout)", a.HaseTimeout)
+		ab.field("Zeitlimit", "%s für den LLM-Schritt (hase_timeout)", auftrag.FormatDuration(a.HaseTimeout))
 	} else {
-		ab.field("Zeitlimit", "%s (Vorgabe; hase_timeout: nicht gesetzt)", runner.DefaultHaseTimeout)
+		ab.field("Zeitlimit", "%s (Vorgabe; hase_timeout: nicht gesetzt)", auftrag.FormatDuration(runner.DefaultHaseTimeout))
 	}
 	if a.Throttle.An() {
 		ab.field("Deckel", "%s  (throttle)", a.Throttle)
+		// Die ausgerechnete Folge: „5 je Stunde" und „nur nachts" sind
+		// einzeln klar, zusammen rechnet sie niemand gern im Kopf.
+		if f := a.Throttle.Between; f != nil && a.Throttle.Max > 0 {
+			ab.field("", "macht höchstens %d Läufe je Nacht (%s geöffnet)",
+				a.Throttle.Max*int(f.Laenge()/a.Throttle.Per), auftrag.FormatDuration(f.Laenge()))
+		}
+		if a.Throttle.Between != nil && a.Throttle.Max == 0 {
+			ab.field("", "verschiebt nur — ohne max/per ist die Zahl der Läufe je Nacht unbegrenzt")
+		}
 	}
 	// Erfasst wird immer alles; das Flag entscheidet nur, ob die Befunde
 	// ungefragt in `hasenbau status` stehen (Hasenbau-4cx.3).
@@ -325,6 +335,28 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 				fmt.Fprintf(out, "  %s %s\n", n.Action, n.From)
 			} else {
 				fmt.Fprintf(out, "  %s %s -> %s\n", n.Action, n.From, n.To)
+			}
+		}
+	}
+
+	// Der aktuelle Stand der Drossel — die Definition sagt, was gelten
+	// soll, das hier sagt, was gerade gilt (Hasenbau-do0.4).
+	if a.Throttle.An() {
+		if st, err := store.Open(dbPath(root)); err == nil {
+			stand := drosselStand(root, st, []*auftrag.Auftrag{a})
+			st.Close()
+			if len(stand) == 1 {
+				d := stand[0]
+				fmt.Fprint(out, "\nGedrosselt\n")
+				if d.Eingang > 0 {
+					fmt.Fprintf(out, "  %s im Eingang\n", anzahlDateien(d.Eingang))
+				}
+				if d.Warten == 0 {
+					fmt.Fprintln(out, "  nächster Lauf: jetzt")
+				} else {
+					fmt.Fprintf(out, "  nächster Lauf frühestens %s (in %s)\n",
+						d.Naechster.Local().Format("15:04"), auftrag.FormatDuration(d.Warten.Round(time.Minute)))
+				}
 			}
 		}
 	}

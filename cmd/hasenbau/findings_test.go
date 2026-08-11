@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,6 +152,102 @@ func TestStatusOhneUeberwachungSchweigt(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Überwacht") {
 		t.Errorf("Abschnitt ohne überwachte Aufträge:\n%s", out.String())
+	}
+}
+
+// Hasenbau-do0.4: Ein Deckel, den man nicht sieht, ist von einem
+// hängenden Daemon nicht zu unterscheiden. Wer 200 Dateien ablegt und
+// abends nachsieht, muss erkennen können: es staut sich, und planmäßig.
+func TestStatusZeigtDenRueckstauGedrosselterAuftraege(t *testing.T) {
+	root := t.TempDir()
+	schreibe := func(rel, inhalt string) {
+		pfad := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(pfad), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(pfad, []byte(inhalt), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schreibe("hasen/archivar.md", "---\nmodel: scc/kit.x\n---\nSortiere ein.\n")
+	schreibe("auftraege/pdf-einlagern.md", `---
+trigger:
+  watch: raeume/eingang/*.pdf
+hase: archivar
+throttle:
+  max: 2
+  per: 1h
+raeume:
+  out: raeume/lager/
+---
+Lege ab.
+`)
+	schreibe("auftraege/ungedrosselt.md", `---
+trigger:
+  cron: "0 7 * * *"
+hase: archivar
+raeume:
+  out: raeume/lager/
+---
+Berichte.
+`)
+	for i := 0; i < 7; i++ {
+		schreibe(fmt.Sprintf("raeume/eingang/%d.pdf", i), "material")
+	}
+
+	// Das Fenster ist voll: zwei Läufe in der letzten Stunde.
+	st, err := store.Open(filepath.Join(root, "state", "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		id, err := st.StartLauf("pdf-einlagern", "watch", "x.pdf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.EndLauf(id, store.LaufResult{Status: "ok"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.Close()
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "status"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	got := out.String()
+	for _, muss := range []string{
+		"\nGedrosselt (1)",
+		"pdf-einlagern", "2 Läufe je 1h",
+		"7 Dateien im Eingang",
+		"nächster Lauf frühestens",
+	} {
+		if !strings.Contains(got, muss) {
+			t.Errorf("Status ohne %q:\n%s", muss, got)
+		}
+	}
+	// Der ungedrosselte Auftrag gehört nicht in den Abschnitt.
+	abschnitt := got[strings.Index(got, "\nGedrosselt ("):]
+	if i := strings.Index(abschnitt, "\nÜberwacht"); i >= 0 {
+		abschnitt = abschnitt[:i]
+	}
+	if strings.Contains(abschnitt, "ungedrosselt") {
+		t.Errorf("ungedrosselter Auftrag im Abschnitt:\n%s", abschnitt)
+	}
+
+	// Und ohne gedrosselten Auftrag schweigt der Status dazu.
+	if err := os.Remove(filepath.Join(root, "auftraege", "pdf-einlagern.md")); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := run([]string{"-bau", root, "status"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	// Auf die Abschnitts-Überschrift prüfen, nicht auf das Wort: der
+	// Temp-Pfad dieses Tests trägt den Testnamen und damit selbst ein
+	// „Gedrosselt" — die Zeile „Bau: …" reichte als Fehlalarm.
+	if strings.Contains(out.String(), "\nGedrosselt (") {
+		t.Errorf("Abschnitt ohne gedrosselte Aufträge:\n%s", out.String())
 	}
 }
 
