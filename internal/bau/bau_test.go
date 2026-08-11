@@ -1,6 +1,7 @@
 package bau
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestInitInFremdemRepoLegtEigenesAn(t *testing.T) {
 	}
 
 	root := filepath.Join(parent, "bau")
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
@@ -35,7 +36,7 @@ func TestInitInFremdemRepoLegtEigenesAn(t *testing.T) {
 
 func TestInitLegtLayoutAn(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "neuer-bau")
-	created, err := Init(root)
+	created, err := Init(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,9 +68,56 @@ func TestInitLegtLayoutAn(t *testing.T) {
 	}
 }
 
+// Ein frischer Bau muss den Rückkanal-Eintrag schon haben: ohne ihn
+// bekommt kein Hase `hasenbau_summary` und `hasenbau_notiz`, und
+// `describe bau` meldet den frischen Bau als PRÜFEN. Der Eintrag gehört
+// außerdem in den Root-Commit — käme er erst beim ersten Daemon-Start
+// dazu, wäre der Bau ab da schmutzig.
+func TestInitTraegtRueckkanalEin(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "neuer-bau")
+	// Ein Binary, das es gibt: die Diagnose prüft den Pfad.
+	exe := filepath.Join(tmp, "hasenbau")
+	if err := os.WriteFile(exe, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Init(root, exe); err != nil {
+		t.Fatal(err)
+	}
+
+	if c := checkMCP(root); !c.OK {
+		t.Errorf("frischer Bau, Rückkanal-Prüfung: %s — %s", c.Detail, c.Hint)
+	}
+	roh, err := os.ReadFile(filepath.Join(root, OpencodeConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(roh, &m); err != nil {
+		t.Fatal(err)
+	}
+	mcp, _ := m["mcp"].(map[string]any)
+	eintrag, ok := mcp[MCPEintrag].(map[string]any)
+	if !ok {
+		t.Fatalf("kein mcp.%s in %s", MCPEintrag, roh)
+	}
+	befehl, _ := eintrag["command"].([]any)
+	if len(befehl) != 4 || befehl[0] != exe || befehl[2] != root {
+		t.Errorf("command = %v", befehl)
+	}
+
+	out, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > 0 {
+		t.Errorf("frischer Bau ist nicht sauber:\n%s", out)
+	}
+}
+
 func TestInitIstIdempotentUndNichtDestruktiv(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,7 +128,7 @@ func TestInitIstIdempotentUndNichtDestruktiv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, err := Init(root)
+	created, err := Init(root, "/opt/hasenbau")
 	if err != nil {
 		t.Fatalf("zweites Init: %v", err)
 	}
@@ -101,7 +149,7 @@ func TestInitLehntDateiAlsRootAb(t *testing.T) {
 	if err := os.WriteFile(f, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Init(f); err == nil {
+	if _, err := Init(f, "/opt/hasenbau"); err == nil {
 		t.Error("Init auf einer Datei muss fehlschlagen")
 	}
 }

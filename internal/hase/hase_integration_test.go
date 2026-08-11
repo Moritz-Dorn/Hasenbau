@@ -67,7 +67,9 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	if _, err := bau.Init(root); err != nil {
+	// Der Rückkanal-Eintrag zeigt hier ins Leere: geprüft wird die
+	// Permission-Auflösung des Agenten, nicht das Werkzeug-Angebot.
+	if _, err := bau.Init(root, filepath.Join(root, "kein-hasenbau")); err != nil {
 		t.Fatal(err)
 	}
 	schreibeTemplate(t, root, "archivar", templateArchivar)

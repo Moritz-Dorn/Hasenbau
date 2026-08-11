@@ -20,9 +20,18 @@ func leseConfig(t *testing.T, root string) map[string]any {
 	return roh
 }
 
+// Ausgangslage ist eine Bau-Config **ohne** mcp-Block: so sieht sie von
+// Hand geschrieben aus, und so sahen Baue aus, die `hasenbau init` vor
+// dem Rückkanal-Eintrag angelegt hat. Ein frischer Bau hat den Eintrag
+// heute schon (siehe TestInitTraegtRueckkanalEin) und taugt hier nicht
+// mehr als Ausgangslage.
 func TestMCPSicherstellen(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, OpencodeConfig),
+		[]byte(opencodeJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -31,7 +40,7 @@ func TestMCPSicherstellen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !update.Written {
-		t.Fatal("frischer Bau: nichts geschrieben")
+		t.Fatal("Config ohne mcp-Block: nichts geschrieben")
 	}
 	if update.Previous != "" {
 		t.Errorf("neuer Eintrag hat keinen Vorgänger, gemeldet: %q", update.Previous)
@@ -73,7 +82,7 @@ func TestMCPSicherstellen(t *testing.T) {
 // korrigiert, und der alte Pfad kommt zurück, damit es im Log auffällt.
 func TestMCPSicherstellenKorrigiertVeraltetesBinary(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := EnsureMCP(root, "/tmp/wegwerf/hasenbau"); err != nil {
@@ -100,7 +109,7 @@ func TestMCPSicherstellenKorrigiertVeraltetesBinary(t *testing.T) {
 // eigene Felder überleben.
 func TestMCPSicherstellenLaesstHandarbeitStehen(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	pfad := filepath.Join(root, OpencodeConfig)
@@ -138,7 +147,7 @@ func TestMCPSicherstellenLaesstHandarbeitStehen(t *testing.T) {
 // kaputt — er entsteht kanonisch neu.
 func TestMCPSicherstellenRepariertLeerenBefehl(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	pfad := filepath.Join(root, OpencodeConfig)
@@ -163,7 +172,7 @@ func TestMCPSicherstellenRepariertLeerenBefehl(t *testing.T) {
 // Fremde mcp-Server bleiben unangetastet.
 func TestMCPSicherstellenNebenFremdenServern(t *testing.T) {
 	root := t.TempDir()
-	if _, err := Init(root); err != nil {
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
 		t.Fatal(err)
 	}
 	pfad := filepath.Join(root, OpencodeConfig)

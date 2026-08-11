@@ -49,23 +49,9 @@ func TestDescribeBauSchweigtWennAllesStimmt(t *testing.T) {
 	if code := run([]string{"init", bau}, &out, &errw); code != 0 {
 		t.Fatalf("init: exit %d, stderr %q", code, errw.String())
 	}
-	// Der Rückkanal-Eintrag entsteht erst beim Server-Start; hier von
-	// Hand auf ein Binary, das es gibt.
-	conf := filepath.Join(bau, ".opencode-home", "opencode", "opencode.json")
-	roh, err := os.ReadFile(conf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	neu := strings.Replace(string(roh), `"plugin": []`,
-		`"plugin": [], "mcp": {"hasenbau": {"type":"local","command":["`+exe+`","mcp"],"enabled":true}}`, 1)
-	if err := os.WriteFile(conf, []byte(neu), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
+	// Nichts von Hand nachtragen: `init` legt auch den Rückkanal-Eintrag
+	// an, und er zeigt auf dieses Test-Binary — also auf ein Binary, das
+	// es gibt.
 	out.Reset()
 	errw.Reset()
 	if code := run([]string{"-bau", bau, "describe", "bau"}, &out, &errw); code != 0 {
@@ -77,6 +63,29 @@ func TestDescribeBauSchweigtWennAllesStimmt(t *testing.T) {
 	}
 	if !strings.Contains(got, "Nichts zu tun") {
 		t.Errorf("Ausgabe:\n%s", got)
+	}
+}
+
+// `hasenbau init unterverzeichnis` darf keinen relativen Pfad in den
+// Rückkanal-Eintrag schreiben: opencode startet `hasenbau -bau <root>
+// mcp` mit einem CWD, das nicht das des Aufrufers ist, und relativ
+// aufgelöst zeigte der Eintrag dann irgendwohin.
+func TestInitMachtDenBauPfadAbsolut(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("ohne git nicht prüfbar")
+	}
+	t.Chdir(t.TempDir()) // stellt das alte CWD am Testende wieder her
+
+	var out, errw strings.Builder
+	if code := run([]string{"init", "relativer-bau"}, &out, &errw); code != 0 {
+		t.Fatalf("init: exit %d, stderr %q", code, errw.String())
+	}
+	roh, err := os.ReadFile(filepath.Join("relativer-bau", ".opencode-home", "opencode", "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(roh), `"relativer-bau"`) {
+		t.Errorf("relativer Bau-Pfad im Rückkanal-Eintrag:\n%s", roh)
 	}
 }
 
