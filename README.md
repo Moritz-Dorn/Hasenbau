@@ -59,7 +59,7 @@ ihres Auftrags.
 ## Benutzen
 
 ```bash
-hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config)
+hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config, Rückkanal)
 hasenbau new hase <name>   # Template-Gerüst anlegen, kommentiert
 hasenbau new auftrag <name> -hase <hase>   # Auftrags-Gerüst anlegen
 hasenbau daemon            # Trigger scharf schalten (cron + watch)
@@ -89,7 +89,9 @@ Datenbank schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf
 getan hat (der nächste Lauf desselben Auftrags bekommt sie als Kontext),
 und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
 `hasenbau dig`. Dahinter steckt ein MCP-Server, den opencode als
-`hasenbau mcp` startet; eingetragen wird er beim Daemon-Start selbst.
+`hasenbau mcp` startet; eingetragen wird er von `hasenbau init`, und
+jeder Daemon- oder Lauf-Start korrigiert den Eintrag auf das gerade
+laufende Binary.
 
 `hasenbau baumeister <lauf-id|auftrag>` setzt den Baumeister auf einen
 Lauf an: er liest dessen Trace und schreibt daraus einen Gang-Entwurf

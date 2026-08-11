@@ -992,6 +992,16 @@ Binary und sagt im Log, wenn er dabei etwas korrigiert hat. Zusatz-
 Argumente, `env`, `type` und `enabled` bleiben stehen — Handarbeit am
 Eintrag überlebt, nur das veraltete Binary nicht.
 
+**Angelegt wird der Eintrag schon von `hasenbau init`**, nicht erst beim
+ersten Server-Start. Eine Bau-Config ohne `mcp.hasenbau` ist
+unvollständig: `describe bau` meldet den fabrikneuen Bau als PRÜFEN, und
+wer vor dem ersten Lauf hineinsieht, findet die Werkzeuge nicht, die die
+Hasen laut §8 haben. Er entsteht vor dem Root-Commit und steht damit
+darin, statt den Bau ab dem ersten Lauf schmutzig zu machen. Der Pfad
+des Baus wird dafür absolut gemacht: opencode startet den Eintrag mit
+einem CWD, das nicht das des Aufrufers ist — `hasenbau init unterverz`
+schriebe sonst ein relatives `-bau unterverz` hinein.
+
 **Ein Rückkanal, der nicht hochkommt, hält den Lauf an.** Scheitert der
 MCP-Client, sagt opencode nichts: der Server startet normal, loggt keine
 Zeile, und der Hase bekommt die Werkzeuge einfach nicht. Sein Prompt
