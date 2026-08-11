@@ -523,9 +523,47 @@ gesehenen": das zu wissen hieße, jede Datei zu hashen, und `status` ist
 der billige Befehl (§12). Bei einem Auftrag mit `after: move` — dem
 Normalfall — ist beides ohnehin dasselbe.
 
-Der Deckel gilt **pro Auftrag**. Ein Bau-weiter über alle Aufträge wäre
-das, was ein Budget wirklich schützt — zehn Aufträge mit je 5/h sind
-50/h —, ist aber bewusst zurückgestellt (Epic Hasenbau-do0).
+**Darüber steht der Bau-weite Deckel** ✅ *(2026-08-11, Hasenbau-cvf)*.
+`throttle:` in `hasenbau.yaml` gilt über **alle** Aufträge zusammen:
+
+```yaml
+throttle:
+  max: 20
+  per: 1h
+```
+
+Der Deckel je Auftrag schützt einen Auftrag vor sich selbst; dieser
+schützt das Budget vor allen zusammen — zehn Aufträge mit je 5/h sind
+50/h. Beide gelten nebeneinander, der engere bindet.
+
+Zwei Unterschiede zum Deckel je Auftrag, und beide sind der Grund für
+den anderen Ort im Code:
+
+- **Er sitzt im Runner, nicht im Watcher.** Ein Budget-Deckel, der
+  cron-Läufe nicht mitzählt, wäre keiner — das Geld ist dasselbe. Durch
+  `runner.Execute` geht jeder Lauf. `manual` wird weiter durchgelassen
+  und weiter mitgezählt: die Regel „wer selbst davorsteht, wartet nicht"
+  gilt für beide Deckel. Ein wartender cron-Lauf hält dabei die
+  Overlap-Sperre, und der nächste Tick wird davon wie immer übersprungen
+  — Ticks stauen sich also nicht auf.
+- **Er braucht eine eigene Sperre.** Beim Deckel je Auftrag genügt die
+  `lauf.Lock`, weil jeder Lauf desselben Auftrags dieselbe Sperre
+  braucht. Bau-weit gilt das nicht: zwei Arbeiter *verschiedener*
+  Aufträge halten verschiedene Sperren und sähen sonst beide gleichzeitig
+  denselben letzten Platz. Deshalb liegt die Prüfung mit dem Anlegen der
+  `laeufe`-Zeile in einem kritischen Abschnitt — sobald die Zeile steht,
+  zählt der Lauf für den nächsten Prüfer mit. Ohne das kamen im Test 20
+  von 5 erlaubten Läufen durch.
+
+Die Sperre gilt je Prozess, und das reicht: gedrosselte Läufe startet
+nur der Daemon. `hasenbau lauf` läuft als `manual` und wird ohnehin
+durchgelassen.
+
+**Sichtbar in `hasenbau status`** als eigener Block über den Aufträgen,
+weil er über ihnen gilt — er kann bindend sein, während jeder Auftrag
+für sich noch Platz hätte. Ist `hasenbau.yaml` unlesbar, sagt der Status
+das ausdrücklich: dann gilt *kein* Deckel, und wer einen eingetragen hat,
+hielte sich sonst für geschützt.
 
 **`monitored:` steuert die Meldung, nicht die Erfassung.** Aufgezeichnet
 wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet

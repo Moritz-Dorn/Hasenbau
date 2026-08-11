@@ -132,6 +132,13 @@ Gedrosselt (1)
                  195 Dateien im Eingang, nächster Lauf frühestens 22:00 (in 8h44m)
 ```
 
+Darüber steht ein Bau-weiter Deckel: `throttle: {max: 20, per: 1h}` in
+`hasenbau.yaml` gilt über **alle** Aufträge zusammen. Der Deckel je
+Auftrag schützt einen Auftrag vor sich selbst, dieser das Budget vor
+allen — zehn Aufträge mit je 5/h sind 50/h. Er zählt auch cron-Läufe
+mit, denn deren Kosten sind dieselben; `hasenbau lauf` wird weiterhin
+durchgelassen und mitgezählt.
+
 Ein Auftrag mit `monitored: true` im Frontmatter wird routinemäßig
 beurteilt: seine Befunde stehen dann in `hasenbau status`, ohne dass
 jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet
