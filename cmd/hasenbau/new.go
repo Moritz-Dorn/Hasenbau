@@ -256,6 +256,14 @@ hase: %[2]s
 # Zeitlimit des LLM-Schritts. Ohne Angabe gilt die Vorgabe (30m).
 # hase_timeout: 60m
 
+# Deckel: höchstens so viele Läufe je rollendem Fenster. Gezählt wird
+# aus der Lauf-Historie, nicht aus einem Zähler — der Deckel übersteht
+# also einen Neustart. Beide Felder oder keines. `+"`hasenbau lauf`"+`
+# umgeht ihn, zählt aber mit.
+# throttle:
+#   max: 5
+#   per: 1h
+
 # Routinemäßig melden: dann stehen die Befunde dieses Auftrags in
 # `+"`hasenbau status`"+`. Das steuert nur die Meldung — erfasst wird
 # ohnehin alles, und `+"`hasenbau findings %[1]s`"+` rechnet auch ohne.

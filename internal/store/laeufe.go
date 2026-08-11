@@ -239,6 +239,34 @@ func (s *Store) RecentLaeufeByAuftrag(auftrag string, n int) ([]Lauf, error) {
 	return scanLaeufe(rows)
 }
 
+// LaeufeSince liefert die Startzeitpunkte aller Läufe eines Auftrags
+// seit `since`, älteste zuerst — die Grundlage des Deckels aus §6
+// (Hasenbau-do0.2).
+//
+// Alle, unabhängig vom Status: ein Lauf, der scheitert, hat das Modell
+// trotzdem gekostet. Ein Deckel, der nur `ok` zählt, wäre bei einem
+// kaputten Auftrag gar keiner — der bekäme endlos frisches Budget.
+func (s *Store) LaeufeSince(auftrag string, since time.Time) ([]time.Time, error) {
+	rows, err := s.db.Query(`
+		SELECT started FROM laeufe
+		WHERE auftrag = ? AND started > ?
+		ORDER BY started ASC`, auftrag, since.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("store: Läufe von %q seit %s lesen: %w", auftrag, since, err)
+	}
+	defer rows.Close()
+
+	var out []time.Time
+	for rows.Next() {
+		var t time.Time
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("store: Startzeit scannen: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // RecentSummaries liefert die jüngsten nicht-leeren Summaries eines
 // Auftrags in chronologischer Reihenfolge (älteste zuerst) — so wandern
 // sie direkt in den Prompt (§6, Kontext-Schicht).

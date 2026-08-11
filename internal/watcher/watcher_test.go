@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -15,24 +16,54 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/lauf"
 )
 
-type fakeGesehen struct {
-	mu    sync.Mutex
-	menge map[string]bool
+// fakeDB steht für die Bau-DB: der gesehen-Backstop und die Läufe, aus
+// denen der Deckel rechnet.
+type fakeDB struct {
+	mu     sync.Mutex
+	menge  map[string]bool
+	starts map[string][]time.Time
+	fehler error // wenn gesetzt, scheitert LaeufeSince
 }
 
-func neuerFakeGesehen() *fakeGesehen { return &fakeGesehen{menge: map[string]bool{}} }
+func neuerFakeDB() *fakeDB {
+	return &fakeDB{menge: map[string]bool{}, starts: map[string][]time.Time{}}
+}
 
-func (f *fakeGesehen) IsSeen(auftrag, hash string) (bool, error) {
+func (f *fakeDB) IsSeen(auftrag, hash string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.menge[auftrag+"/"+hash], nil
 }
 
-func (f *fakeGesehen) MarkSeen(auftrag, hash string) error {
+func (f *fakeDB) MarkSeen(auftrag, hash string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.menge[auftrag+"/"+hash] = true
 	return nil
+}
+
+func (f *fakeDB) LaeufeSince(auftrag string, since time.Time) ([]time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fehler != nil {
+		return nil, f.fehler
+	}
+	var out []time.Time
+	for _, t := range f.starts[auftrag] {
+		if t.After(since) {
+			out = append(out, t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Before(out[j]) })
+	return out, nil
+}
+
+// vermerkeLauf schreibt einen Lauf in die Historie — das tut sonst der
+// Runner, den es im Watcher-Test nicht gibt.
+func (f *fakeDB) vermerkeLauf(auftrag string, t time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.starts[auftrag] = append(f.starts[auftrag], t)
 }
 
 type aufruf struct {
@@ -49,10 +80,10 @@ func watchAuftrag(debounce time.Duration) *auftrag.Auftrag {
 }
 
 // starte baut einen Watcher mit Aufruf-Kanal und optionalem Verhalten.
-func starte(t *testing.T, root string, a *auftrag.Auftrag, gesehen SeenStore, verhalten func(input string) error) (<-chan aufruf, func()) {
+func starte(t *testing.T, root string, a *auftrag.Auftrag, db Store, verhalten func(input string) error) (<-chan aufruf, func()) {
 	t.Helper()
 	aufrufe := make(chan aufruf, 16)
-	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), gesehen,
+	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), db,
 		func(a *auftrag.Auftrag, input string) error {
 			if verhalten != nil {
 				if err := verhalten(input); err != nil {
@@ -95,7 +126,7 @@ func erwarteKeinenAufruf(t *testing.T, aufrufe <-chan aufruf, dauer time.Duratio
 
 func TestNeueDateiFeuert(t *testing.T) {
 	root := t.TempDir()
-	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeGesehen(), nil)
+	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeDB(), nil)
 	defer stop()
 
 	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
@@ -106,7 +137,7 @@ func TestNeueDateiFeuert(t *testing.T) {
 
 func TestPartiellerWriteWartetAufStabileGroesse(t *testing.T) {
 	root := t.TempDir()
-	aufrufe, stop := starte(t, root, watchAuftrag(150*time.Millisecond), neuerFakeGesehen(), nil)
+	aufrufe, stop := starte(t, root, watchAuftrag(150*time.Millisecond), neuerFakeDB(), nil)
 	defer stop()
 
 	// Datei wächst über mehrere Debounce-Ticks — wie eine langsame Kopie.
@@ -128,7 +159,7 @@ func TestPartiellerWriteWartetAufStabileGroesse(t *testing.T) {
 
 func TestGesehenBackstopUeberspringt(t *testing.T) {
 	root := t.TempDir()
-	gesehen := neuerFakeGesehen()
+	gesehen := neuerFakeDB()
 	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), gesehen, nil)
 
 	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
@@ -153,14 +184,14 @@ func TestNachholenBeimStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeGesehen(), nil)
+	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeDB(), nil)
 	defer stop()
 	erwarteAufruf(t, aufrufe, "raeume/eingang/liegengeblieben.txt")
 }
 
 func TestNichtPassendeDateienIgnoriert(t *testing.T) {
 	root := t.TempDir()
-	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeGesehen(), nil)
+	aufrufe, stop := starte(t, root, watchAuftrag(50*time.Millisecond), neuerFakeDB(), nil)
 	defer stop()
 
 	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/notiz.pdf"), []byte("x"), 0o644); err != nil {
@@ -197,7 +228,7 @@ func TestVollerEingangLaeuftDurchEinenArbeiter(t *testing.T) {
 	var mu sync.Mutex
 	var reihenfolge []string
 	fertig := make(chan struct{})
-	w, err := New(root, []*auftrag.Auftrag{watchAuftrag(time.Millisecond)}, lauf.NewLock(), neuerFakeGesehen(),
+	w, err := New(root, []*auftrag.Auftrag{watchAuftrag(time.Millisecond)}, lauf.NewLock(), neuerFakeDB(),
 		func(a *auftrag.Auftrag, input string) error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -256,7 +287,7 @@ func TestWartenWirdEinmalGemeldet(t *testing.T) {
 	var mu sync.Mutex
 	var wartezeilen int
 	aufrufe := make(chan aufruf, 4)
-	w, err := New(root, []*auftrag.Auftrag{a}, sperre, neuerFakeGesehen(),
+	w, err := New(root, []*auftrag.Auftrag{a}, sperre, neuerFakeDB(),
 		func(a *auftrag.Auftrag, input string) error {
 			aufrufe <- aufruf{a.Name, input}
 			return nil
@@ -294,9 +325,111 @@ func TestWartenWirdEinmalGemeldet(t *testing.T) {
 	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
 }
 
+// Hasenbau-do0.2: Der Deckel rechnet aus der Lauf-Historie, nicht aus
+// einem Zähler im Speicher — ein frisch gestarteter Daemon findet das
+// Fenster deshalb voll vor und wartet, statt neu anzufangen.
+func TestDeckelUeberstehtDenNeustart(t *testing.T) {
+	root := t.TempDir()
+	a := watchAuftrag(20 * time.Millisecond)
+	a.Throttle = auftrag.Throttle{Max: 2, Per: 2 * time.Second}
+
+	db := neuerFakeDB()
+	// Zwei Läufe liegen im Fenster — aus einem früheren Daemon-Leben.
+	// Der ältere fällt in einer halben Sekunde heraus.
+	jetzt := time.Now()
+	db.vermerkeLauf(a.Name, jetzt.Add(-1500*time.Millisecond))
+	db.vermerkeLauf(a.Name, jetzt.Add(-1000*time.Millisecond))
+
+	aufrufe, stop := starte(t, root, a, db, nil)
+	defer stop()
+
+	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Das Fenster ist voll: kein Lauf, obwohl die Datei bereit liegt.
+	erwarteKeinenAufruf(t, aufrufe, 300*time.Millisecond)
+	// Sobald der älteste Lauf herausfällt, geht es los.
+	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
+}
+
+// Der Deckel taktet einen Stapel: drei Dateien, zwei Plätze je Fenster —
+// die dritte wartet, bis wieder Platz ist.
+func TestDeckelTaktetDenStapel(t *testing.T) {
+	root := t.TempDir()
+	a := watchAuftrag(10 * time.Millisecond)
+	a.Throttle = auftrag.Throttle{Max: 2, Per: time.Second}
+
+	db := neuerFakeDB()
+	var mu sync.Mutex
+	var zeiten []time.Time
+	aufrufe := make(chan aufruf, 8)
+	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), db,
+		func(a *auftrag.Auftrag, input string) error {
+			// Was sonst der Runner tut: der Lauf landet in der Historie
+			// und zählt damit für den Deckel.
+			jetzt := time.Now()
+			db.vermerkeLauf(a.Name, jetzt)
+			mu.Lock()
+			zeiten = append(zeiten, jetzt)
+			mu.Unlock()
+			aufrufe <- aufruf{a.Name, input}
+			return nil
+		}, t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); w.Stop() }()
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 3; i++ {
+		pfad := filepath.Join(root, fmt.Sprintf("raeume/eingang/%d.txt", i))
+		// Unterschiedlicher Inhalt: der gesehen-Backstop greift über den
+		// Hash, drei gleiche Dateien wären zwei übersprungene Läufe.
+		if err := os.WriteFile(pfad, []byte(fmt.Sprintf("material %d", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		select {
+		case <-aufrufe:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("nur %d von 3 Läufen", i)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	// Die ersten beiden dürfen sofort, der dritte erst, wenn der erste
+	// aus dem Fenster gefallen ist.
+	if abstand := zeiten[2].Sub(zeiten[0]); abstand < a.Throttle.Per {
+		t.Errorf("dritter Lauf nach %s, Fenster ist %s — der Deckel greift nicht", abstand, a.Throttle.Per)
+	}
+	if abstand := zeiten[1].Sub(zeiten[0]); abstand > 500*time.Millisecond {
+		t.Errorf("zweiter Lauf erst nach %s — der Deckel bremst zu früh", abstand)
+	}
+}
+
+// Ohne throttle: bleibt alles, wie es war — die Historie wird gar nicht
+// erst befragt.
+func TestOhneDeckelKeineAbfrage(t *testing.T) {
+	root := t.TempDir()
+	db := neuerFakeDB()
+	db.fehler = os.ErrPermission // eine Abfrage würde auffallen
+
+	aufrufe, stop := starte(t, root, watchAuftrag(20*time.Millisecond), db, nil)
+	defer stop()
+	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
+}
+
 func TestFehlgeschlagenerLaufLandetNichtInGesehen(t *testing.T) {
 	root := t.TempDir()
-	gesehen := neuerFakeGesehen()
+	gesehen := neuerFakeDB()
 	fehlschlag := true
 	var mu sync.Mutex
 

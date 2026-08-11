@@ -36,17 +36,23 @@ const DefaultDebounce = 2 * time.Second
 // gesehen-Tabelle (Backstop, §7).
 type ExecFunc func(a *auftrag.Auftrag, input string) error
 
-// SeenStore ist der Idempotenz-Backstop; *store.Store erfüllt ihn.
-type SeenStore interface {
+// Store ist, was der Watcher aus der Bau-DB braucht: den
+// Idempotenz-Backstop (§7) und die vergangenen Läufe für den Deckel
+// (§6). *store.Store erfüllt ihn.
+type Store interface {
 	IsSeen(auftrag, hash string) (bool, error)
 	MarkSeen(auftrag, hash string) error
+
+	// LaeufeSince liefert die Startzeitpunkte aller Läufe des Auftrags
+	// seit `since`, älteste zuerst.
+	LaeufeSince(auftrag string, since time.Time) ([]time.Time, error)
 }
 
 type Watcher struct {
 	root       string
 	auftraege  []*auftrag.Auftrag // nur watch-Trigger
 	lock       *lauf.Lock
-	gesehen    SeenStore
+	db         Store
 	ausfuehren ExecFunc
 	logf       func(format string, args ...any)
 
@@ -137,12 +143,12 @@ func (arb *arbeiter) fertig() {
 // New baut den Watcher für alle Aufträge mit watch-Trigger. Die
 // Watch-Verzeichnisse (= Verzeichnisanteil des Globs) werden angelegt —
 // sie sind die Eingangs-Räume der Aufträge.
-func New(root string, auftraege []*auftrag.Auftrag, lock *lauf.Lock, gesehen SeenStore, ausfuehren ExecFunc, logf func(format string, args ...any)) (*Watcher, error) {
+func New(root string, auftraege []*auftrag.Auftrag, lock *lauf.Lock, db Store, ausfuehren ExecFunc, logf func(format string, args ...any)) (*Watcher, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
 	w := &Watcher{
-		root: root, lock: lock, gesehen: gesehen, ausfuehren: ausfuehren, logf: logf,
+		root: root, lock: lock, db: db, ausfuehren: ausfuehren, logf: logf,
 		arbeiter: map[string]*arbeiter{},
 	}
 	for _, a := range auftraege {
@@ -183,15 +189,14 @@ func (w *Watcher) Start(ctx context.Context) error {
 	w.wg.Add(1)
 	go w.lausche(ctx, verzeichnisse)
 
-	// Die Arbeiter zuerst: sie blockieren am Wecker, und der ist
-	// gepuffert — ein Nachhol-Fund geht auch dann nicht verloren, wenn er
-	// vor dem ersten Schlafen des Arbeiters eintrifft.
-	for _, a := range w.auftraege {
-		w.wg.Add(1)
-		go w.arbeite(ctx, w.arbeiter[a.Name])
-	}
-
-	// Nachholen: vorhandene Dateien als Trigger behandeln.
+	// Nachholen: vorhandene Dateien als Trigger behandeln (§7).
+	//
+	// Vollständig VOR dem ersten Arbeiter, nicht nebenher: „ältester
+	// zuerst" gilt nur über das, was der Arbeiter beim Zugreifen kennt.
+	// Liefe er schon, während der Glob noch meldet, griffe er sich den
+	// ältesten der ersten paar Treffer — und die Reihenfolge des ganzen
+	// Rückstaus hinge daran, wie schnell die Schleife hier ist. Der
+	// Wecker ist gepuffert, das Signal geht dabei nicht verloren.
 	for _, a := range w.auftraege {
 		treffer, err := filepath.Glob(filepath.Join(w.root, a.Trigger.Watch))
 		if err != nil {
@@ -204,6 +209,11 @@ func (w *Watcher) Start(ctx context.Context) error {
 			}
 			w.arbeiter[a.Name].melde(rel)
 		}
+	}
+
+	for _, a := range w.auftraege {
+		w.wg.Add(1)
+		go w.arbeite(ctx, w.arbeiter[a.Name])
 	}
 	return nil
 }
@@ -299,7 +309,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 	if err != nil {
 		return fmt.Errorf("hash: %w", err)
 	}
-	schon, err := w.gesehen.IsSeen(a.Name, hash)
+	schon, err := w.db.IsSeen(a.Name, hash)
 	if err != nil {
 		return err
 	}
@@ -308,23 +318,54 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 		return nil
 	}
 
-	// Sperre nehmen; läuft der Auftrag gerade, warten wir — die Datei
-	// liegt ja schon da, der Trigger darf nicht verloren gehen. Der
-	// Gegner ist hier nur noch ein anderer Trigger desselben Auftrags
-	// (cron oder `hasenbau lauf`); die übrigen Inputs stehen in der Menge
-	// des Arbeiters und drängeln nicht mit.
+	// Sperre nehmen und den Deckel prüfen — in dieser Reihenfolge und in
+	// einer Schleife. Beides zusammen, weil sonst ein Fenster entstünde,
+	// durch das der Deckel überschritten wird: wer erst den Deckel prüft
+	// und dann auf die Sperre wartet, rechnet mit dem Stand von vorhin,
+	// und der Lauf, auf den er wartet, hat inzwischen den letzten Platz
+	// verbraucht. Unter der Sperre gilt die Zahl, denn jeder Lauf dieses
+	// Auftrags braucht dieselbe Sperre.
 	//
-	// Gemeldet wird das einmal, nicht bei jedem Versuch: die Wiederholung
-	// trug keine neue Information und füllte bei einem vollen Eingang das
-	// Log schneller, als es jemand lesen konnte.
-	if !w.lock.Acquire(a.Name) {
-		w.logf("watcher: auftrag %s läuft noch — input %s wartet", a.Name, rel)
-		for !w.lock.Acquire(a.Name) {
+	// Ist kein Platz frei, wird die Sperre wieder abgegeben: ein
+	// schlafender Arbeiter darf einen cron-Lauf nicht eine Stunde lang
+	// blockieren.
+	//
+	// Gemeldet wird beides einmal, nicht bei jedem Versuch: die
+	// Wiederholung trug keine neue Information und füllte bei einem
+	// vollen Eingang das Log schneller, als es jemand lesen konnte.
+	gemeldet := false
+	for {
+		if !w.lock.Acquire(a.Name) {
+			if !gemeldet {
+				w.logf("watcher: auftrag %s läuft noch — input %s wartet", a.Name, rel)
+				gemeldet = true
+			}
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(debounce):
 			}
+			continue
+		}
+
+		warten, err := w.platzFrei(a)
+		if err != nil {
+			w.lock.Release(a.Name)
+			return err
+		}
+		if warten == 0 {
+			break // Platz frei, Sperre bleibt bei uns
+		}
+		w.lock.Release(a.Name)
+		if !gemeldet {
+			w.logf("watcher: auftrag %s gedrosselt (%s) — input %s wartet %s",
+				a.Name, a.Throttle, rel, warten.Round(time.Second))
+			gemeldet = true
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(warten):
 		}
 	}
 	defer w.lock.Release(a.Name)
@@ -338,7 +379,37 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 	if err := w.ausfuehren(a, rel); err != nil {
 		return err
 	}
-	return w.gesehen.MarkSeen(a.Name, hash)
+	return w.db.MarkSeen(a.Name, hash)
+}
+
+// platzFrei prüft den Deckel des Auftrags (throttle:, §6). Rückgabe 0 =
+// ein Lauf darf jetzt starten; sonst die Zeit, bis der älteste Lauf aus
+// dem rollenden Fenster fällt und einen Platz freigibt.
+//
+// Gezählt wird aus der laeufe-Tabelle statt aus einem Zähler im
+// Speicher: so übersteht der Deckel einen Daemon-Neustart, und
+// ausgerechnet ein Crash-Loop bekommt nicht jedes Mal frisches Budget.
+func (w *Watcher) platzFrei(a *auftrag.Auftrag) (time.Duration, error) {
+	if !a.Throttle.An() {
+		return 0, nil
+	}
+	jetzt := time.Now()
+	starts, err := w.db.LaeufeSince(a.Name, jetzt.Add(-a.Throttle.Per))
+	if err != nil {
+		return 0, err
+	}
+	if len(starts) < a.Throttle.Max {
+		return 0, nil
+	}
+	// Der älteste Lauf im Fenster fällt als erster heraus. Sind es mehr
+	// als Max (etwa weil `hasenbau lauf` den Deckel umgeht), zählen wir
+	// von dem, der als Max-letzter herausfällt.
+	frei := starts[len(starts)-a.Throttle.Max].Add(a.Throttle.Per)
+	if warten := frei.Sub(jetzt); warten > 0 {
+		return warten, nil
+	}
+	// Grenzfall: die Uhr ist während der Abfrage weitergelaufen.
+	return time.Millisecond, nil
 }
 
 // warteAufStabileGroesse wartet, bis die Datei über zwei Ticks dieselbe

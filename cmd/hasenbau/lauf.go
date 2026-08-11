@@ -137,6 +137,13 @@ func cmdLauf(root, name, input string, errw io.Writer) int {
 		logger.Print(err)
 		return 1
 	}
+	// Der Deckel (throttle:, §6) gilt hier nicht — und zwar von Bauart,
+	// nicht aus Versehen: er sitzt im Watcher, und dieser Weg geht nicht
+	// durch ihn. Wer selbst davorsteht, wartet nicht auf das nächste
+	// Fenster. Gezählt wird der Lauf trotzdem, denn Execute schreibt wie
+	// jeder andere seine laeufe-Zeile — die Nacht lässt sich so nicht
+	// heimlich verdoppeln (Hasenbau-do0.2).
+	//
 	// Nicht noch einmal ausgeben: der Runner hat den Fehlschlag schon
 	// samt Grund geloggt, und zwar über denselben logger (Hasenbau-vwr).
 	if _, err := k.Runner.Execute(k.Ctx, ziel, "manual", input); err != nil {

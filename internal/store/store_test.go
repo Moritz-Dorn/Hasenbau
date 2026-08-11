@@ -151,6 +151,52 @@ func TestGesehenBackstop(t *testing.T) {
 	}
 }
 
+// Hasenbau-do0.2: Grundlage des Deckels. Alle Läufe zählen, auch die
+// gescheiterten — ein Lauf, der scheitert, hat das Modell trotzdem
+// gekostet, und ein Deckel, der nur ok zählt, wäre bei einem kaputten
+// Auftrag gar keiner.
+func TestLaeufeSinceZaehltAlleZustaende(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	for _, status := range []string{"ok", "failed", "aborted"} {
+		id, err := s.StartLauf("pdf-einlagern", "watch", "x.pdf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.EndLauf(id, LaufResult{Status: status, Error: "egal"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.StartLauf("anderer", "cron", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	starts, err := s.LaeufeSince("pdf-einlagern", time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(starts) != 3 {
+		t.Errorf("%d Läufe im Fenster, erwartet 3 (ok, failed, aborted)", len(starts))
+	}
+	for i := 1; i < len(starts); i++ {
+		if starts[i].Before(starts[i-1]) {
+			t.Errorf("nicht aufsteigend: %v vor %v", starts[i], starts[i-1])
+		}
+	}
+	// Ein Fenster in der Zukunft ist leer — der Vergleich ist echt.
+	spaet, err := s.LaeufeSince("pdf-einlagern", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spaet) != 0 {
+		t.Errorf("%d Läufe nach dem Fenster", len(spaet))
+	}
+}
+
 func TestLaufBeginneUndBeende(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "hasenbau.db"))
 	if err != nil {

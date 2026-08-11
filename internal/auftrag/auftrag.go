@@ -35,6 +35,10 @@ type Auftrag struct {
 	// (gemessen: 12m und >30m für dasselbe Material, Hasenbau-uh0).
 	HaseTimeout time.Duration
 
+	// Throttle deckelt, wie oft dieser Auftrag laufen darf. Der
+	// Nullwert heißt „ungedrosselt".
+	Throttle Throttle
+
 	// Monitored schaltet die routinemäßige MELDUNG ein, nicht die
 	// Erfassung: aufgezeichnet und analysierbar ist immer alles, und
 	// `hasenbau findings <auftrag>` rechnet über jeden Auftrag. Wer das
@@ -75,6 +79,31 @@ func (t Trigger) Kind() string {
 	default:
 		return TriggerWatch
 	}
+}
+
+// Throttle ist der Deckel eines Auftrags: höchstens Max Läufe je Per
+// (Hasenbau-do0.2). Max == 0 heißt ungedrosselt.
+//
+// Gezählt wird nicht mitlaufend, sondern aus der laeufe-Tabelle (§5):
+// ein Zähler im Speicher wäre nach jedem Daemon-Neustart wieder voll,
+// und ausgerechnet ein Crash-Loop bekäme so jedes Mal frisches Budget.
+// Das Fenster ist rollend — fünf pro Stunde heißt nicht „fünf, dann zur
+// vollen Stunde wieder fünf", sondern dass zu jedem Zeitpunkt höchstens
+// fünf Läufe in der zurückliegenden Stunde stehen.
+type Throttle struct {
+	Max int
+	Per time.Duration
+}
+
+// An sagt, ob der Auftrag überhaupt gedrosselt ist.
+func (t Throttle) An() bool { return t.Max > 0 }
+
+// String beschreibt den Deckel für Menschen.
+func (t Throttle) String() string {
+	if !t.An() {
+		return "ungedrosselt"
+	}
+	return fmt.Sprintf("%d Läufe je %s", t.Max, t.Per)
 }
 
 // Gang ist ein deterministischer Vorverarbeitungs-Schritt.
@@ -147,9 +176,13 @@ type header struct {
 		Run     string   `yaml:"run"`
 		Timeout duration `yaml:"timeout"`
 	} `yaml:"gaenge"`
-	Hase        string            `yaml:"hase"`
-	HaseTimeout *duration         `yaml:"hase_timeout"`
-	Monitored   bool              `yaml:"monitored"`
+	Hase        string    `yaml:"hase"`
+	HaseTimeout *duration `yaml:"hase_timeout"`
+	Monitored   bool      `yaml:"monitored"`
+	Throttle    *struct {
+		Max int       `yaml:"max"`
+		Per *duration `yaml:"per"`
+	} `yaml:"throttle"`
 	CWD         string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
 	Raeume      map[string]string `yaml:"raeume"`
 	Context     []struct {
@@ -243,6 +276,27 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("hase_timeout: 0 ist kein Zeitlimit — Feld weglassen für die Vorgabe des Runners")
 		}
 		a.HaseTimeout = time.Duration(*fm.HaseTimeout)
+	}
+
+	// Der Deckel braucht beide Hälften: eine Zahl ohne Fenster ist keine
+	// Rate, ein Fenster ohne Zahl deckelt nichts. Beides einzeln
+	// hinzuschreiben sieht aus wie eine Drossel und ist keine — deshalb
+	// ein Ladefehler und kein stilles Ignorieren.
+	if fm.Throttle != nil {
+		t := fm.Throttle
+		switch {
+		case t.Max < 0:
+			return nil, fehler("throttle: max muss > 0 sein (throttle: weglassen für ungedrosselt)")
+		case t.Max > 0 && t.Per == nil:
+			return nil, fehler("throttle: max ohne per — höchstens %d Läufe je … was?", t.Max)
+		case t.Max == 0 && t.Per != nil:
+			return nil, fehler("throttle: per ohne max — das Fenster deckelt nichts")
+		case t.Max == 0 && t.Per == nil:
+			return nil, fehler("throttle: leer — Feld weglassen für ungedrosselt")
+		case *t.Per == 0:
+			return nil, fehler("throttle: per: 0 ist kein Fenster — Feld weglassen für ungedrosselt")
+		}
+		a.Throttle = Throttle{Max: t.Max, Per: time.Duration(*t.Per)}
 	}
 
 	// Sessions ankern immer am Bau-Root: Räume dürfen eigene Git-Repos

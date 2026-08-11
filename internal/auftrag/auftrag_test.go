@@ -106,6 +106,53 @@ Guten Morgen.
 	}
 }
 
+// Hasenbau-do0.2: Der Deckel braucht beide Hälften. Eine Zahl ohne
+// Fenster ist keine Rate, ein Fenster ohne Zahl deckelt nichts — beides
+// sieht aus wie eine Drossel und ist keine.
+func TestParseThrottle(t *testing.T) {
+	kopf := func(block string) []byte {
+		return []byte("---\ntrigger:\n  watch: raeume/eingang/*.pdf\nhase: archivar\n" + block + "---\nTu was.\n")
+	}
+
+	a, err := Parse("einlagern", kopf("throttle:\n  max: 5\n  per: 1h\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Throttle.Max != 5 || a.Throttle.Per != time.Hour {
+		t.Errorf("Throttle = %+v", a.Throttle)
+	}
+	if !a.Throttle.An() || a.Throttle.String() != "5 Läufe je 1h0m0s" {
+		t.Errorf("An=%v String=%q", a.Throttle.An(), a.Throttle)
+	}
+
+	// Ohne den Block ist der Auftrag ungedrosselt — der Nullwert trägt das.
+	ohne, err := Parse("einlagern", kopf(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ohne.Throttle.An() || ohne.Throttle.String() != "ungedrosselt" {
+		t.Errorf("ohne throttle: %+v", ohne.Throttle)
+	}
+
+	fehlerfaelle := []struct{ block, erwartet string }{
+		{"throttle:\n  max: 5\n", "max ohne per"},
+		{"throttle:\n  per: 1h\n", "per ohne max"},
+		{"throttle:\n  max: 5\n  per: 0s\n", "per: 0 ist kein Fenster"},
+		{"throttle:\n  max: -1\n  per: 1h\n", "max muss > 0 sein"},
+		{"throttle:\n  max: 0\n", "leer"},
+	}
+	for _, f := range fehlerfaelle {
+		_, err := Parse("einlagern", kopf(f.block))
+		if err == nil {
+			t.Errorf("%q: kein Fehler", f.block)
+			continue
+		}
+		if !strings.Contains(err.Error(), f.erwartet) {
+			t.Errorf("%q: Fehler %q enthält nicht %q", f.block, err, f.erwartet)
+		}
+	}
+}
+
 func TestParseCronTrigger(t *testing.T) {
 	src := `---
 trigger:
