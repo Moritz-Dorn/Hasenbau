@@ -405,6 +405,10 @@ hase: archivar                     # → Template hasen/archivar.md
 # hase_timeout: 60m                # Zeitlimit des LLM-Schritts; Vorgabe 30m
 monitored: true                    # Befunde routinemäßig melden (§8)
 
+throttle:                          # höchstens so viele Läufe je Fenster
+  max: 5
+  per: 1h
+
 raeume:
   input: raeume/laderampe/sources/
   work:  raeume/laderampe/work/
@@ -437,6 +441,43 @@ demselben Trace war einmal nach 12 Minuten fertig und lief einmal nach
 dieselben 30 Minuten dagegen absurd großzügig. `hase_timeout: 0` ist
 ein Ladefehler und kein „unbegrenzt": ein Lauf darf lange dauern, nie
 für immer.
+
+**`throttle:` deckelt, wie oft ein Auftrag laufen darf** ✅ *(2026-08-11,
+Hasenbau-do0.2)*. `max` Läufe je `per` — ein rollendes Fenster, kein
+Kalenderfenster: fünf pro Stunde heißt nicht „fünf, dann zur vollen
+Stunde wieder fünf", sondern dass zu jedem Zeitpunkt höchstens fünf
+Läufe in der zurückliegenden Stunde stehen. Beide Felder oder keines;
+eine Zahl ohne Fenster ist keine Rate, ein Fenster ohne Zahl deckelt
+nichts, und beides sieht aus wie eine Drossel — deshalb ein Ladefehler
+statt eines stillen No-ops.
+
+Drei Entscheidungen dahinter:
+
+- **Gezählt wird aus der `laeufe`-Tabelle, nicht aus einem Zähler im
+  Speicher.** Ein Zähler wäre nach jedem Daemon-Neustart wieder leer,
+  und ausgerechnet ein Crash-Loop bekäme so jedes Mal frisches Budget.
+  Die Frage „wie viele Läufe in der letzten Stunde" beantwortet §5
+  ohnehin schon.
+- **Alle Zustände zählen, auch `failed` und `aborted`.** Ein Lauf, der
+  scheitert, hat das Modell trotzdem gekostet. Ein Deckel, der nur `ok`
+  zählt, wäre bei einem kaputten Auftrag gar keiner.
+- **Geprüft wird unter der Overlap-Sperre.** Wer erst den Deckel prüft
+  und dann auf die Sperre wartet, rechnet mit dem Stand von vorhin — und
+  der Lauf, auf den er wartet, hat inzwischen den letzten Platz
+  verbraucht. Unter der Sperre gilt die Zahl, denn jeder Lauf desselben
+  Auftrags braucht dieselbe Sperre. Ist kein Platz frei, wird die Sperre
+  wieder abgegeben: ein schlafender Arbeiter darf einen cron-Lauf nicht
+  eine Stunde lang blockieren.
+
+**`hasenbau lauf` umgeht den Deckel, zählt aber mit.** Von Bauart, nicht
+aus Versehen: die Drossel sitzt im Watcher, und der manuelle Weg geht
+nicht durch ihn. Wer selbst davorsteht, wartet nicht auf das nächste
+Fenster — seine `laeufe`-Zeile entsteht trotzdem, die Nacht lässt sich
+so nicht heimlich verdoppeln.
+
+Der Deckel gilt **pro Auftrag**. Ein Bau-weiter über alle Aufträge wäre
+das, was ein Budget wirklich schützt — zehn Aufträge mit je 5/h sind
+50/h —, ist aber bewusst zurückgestellt (Epic Hasenbau-do0).
 
 **`monitored:` steuert die Meldung, nicht die Erfassung.** Aufgezeichnet
 wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet
@@ -637,8 +678,17 @@ wieder ein — derselbe Mechanismus, der oben schon die Idempotenz trägt.
 Ein Rückstau übersteht damit jeden Neustart, ohne dass irgendwo Zustand
 mitgeschrieben würde.
 
-Der Arbeiter ist außerdem die Stelle, an der eine Drossel ansetzen kann:
-„jetzt nicht" sagt man einem, nicht zweihundert (Epic Hasenbau-do0).
+Der Arbeiter ist außerdem die Stelle, an der die Drossel ansetzt: „jetzt
+nicht" sagt man einem, nicht zweihundert. Genau dort hängt seit
+Hasenbau-do0.2 der Deckel aus §6 (`throttle:`) — 200 Dateien laufen dann
+nicht mehr als Sprint durch, sondern im vorgegebenen Takt.
+
+Der Nachhol-Glob läuft dabei **vollständig vor dem ersten Arbeiter**.
+„Ältester zuerst" gilt nur über das, was der Arbeiter beim Zugreifen
+kennt; liefe er schon, während der Glob noch meldet, hinge die
+Reihenfolge des ganzen Rückstaus daran, wie schnell diese Schleife ist.
+Erst als Test unter Last aufgefallen — vorher war sie schnell genug, um
+richtig auszusehen.
 
 ---
 

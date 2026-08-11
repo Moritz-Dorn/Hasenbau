@@ -106,6 +106,15 @@ selbst ein. Aus einem einzelnen Trace ist nicht sicher zu erkennen, was
 Parameter und was Konstante war; ein Entwurf ist deshalb eine
 Gesprächsgrundlage, kein fertiger Gang.
 
+Wer 200 PDFs auf einmal ablegt, will sie selten alle sofort verarbeitet
+haben. `throttle: {max: 5, per: 1h}` deckelt einen Auftrag auf fünf
+Läufe je rollender Stunde; der Rest wartet in `sources/`, denn die
+Warteschlange ist das Dateisystem und übersteht damit jeden Neustart.
+Gezählt wird aus der Lauf-Historie statt aus einem Zähler im Speicher —
+sonst bekäme ausgerechnet ein Crash-Loop nach jedem Neustart frisches
+Budget. Gescheiterte Läufe zählen mit: gekostet haben sie trotzdem.
+`hasenbau lauf` umgeht den Deckel, zählt aber mit.
+
 Ein Auftrag mit `monitored: true` im Frontmatter wird routinemäßig
 beurteilt: seine Befunde stehen dann in `hasenbau status`, ohne dass
 jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet
