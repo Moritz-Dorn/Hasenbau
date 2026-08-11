@@ -93,17 +93,103 @@ func (t Trigger) Kind() string {
 type Throttle struct {
 	Max int
 	Per time.Duration
+
+	// Between begrenzt die Tageszeit, zu der ein Lauf STARTEN darf;
+	// nil = jederzeit. Beide Knöpfe gehören meist zusammen: ein Fenster
+	// allein verschiebt die Arbeit nur in die Nacht, es deckelt sie
+	// nicht (Hasenbau-do0.3).
+	Between *Window
 }
 
 // An sagt, ob der Auftrag überhaupt gedrosselt ist.
-func (t Throttle) An() bool { return t.Max > 0 }
+func (t Throttle) An() bool { return t.Max > 0 || t.Between != nil }
 
 // String beschreibt den Deckel für Menschen.
 func (t Throttle) String() string {
-	if !t.An() {
+	var teile []string
+	if t.Max > 0 {
+		teile = append(teile, fmt.Sprintf("%d Läufe je %s", t.Max, t.Per))
+	}
+	if t.Between != nil {
+		teile = append(teile, "nur "+t.Between.String())
+	}
+	if len(teile) == 0 {
 		return "ungedrosselt"
 	}
-	return fmt.Sprintf("%d Läufe je %s", t.Max, t.Per)
+	return strings.Join(teile, ", ")
+}
+
+// Window ist ein Tagesfenster in **Ortszeit** — „nachts" meint die Nacht
+// des Menschen, der den Bau betreibt, nicht die von UTC. Gespeichert als
+// Minuten seit Mitternacht.
+//
+// Halboffen [From, To): ein Fenster 22:00-06:00 lässt um 06:00 keinen
+// Lauf mehr starten. Sonst hinge an der Sekunde, ob noch einer losgeht.
+type Window struct {
+	From, To int // Minuten seit Mitternacht
+}
+
+// UeberMitternacht sagt, ob das Fenster den Tageswechsel überspannt —
+// der Normalfall für „nachts", nicht der Sonderfall.
+func (w Window) UeberMitternacht() bool { return w.From > w.To }
+
+// Contains sagt, ob t im Fenster liegt.
+func (w Window) Contains(t time.Time) bool {
+	m := t.Hour()*60 + t.Minute()
+	if w.UeberMitternacht() {
+		return m >= w.From || m < w.To
+	}
+	return m >= w.From && m < w.To
+}
+
+// Until liefert 0, wenn t im Fenster liegt, sonst die Zeit bis zum
+// nächsten Öffnen. Gerechnet wird über time.Date, nicht über Addition
+// von 24h: an einem Tag mit Zeitumstellung sind es nicht 24 Stunden,
+// und dann öffnete das Fenster eine Stunde daneben.
+func (w Window) Until(t time.Time) time.Duration {
+	if w.Contains(t) {
+		return 0
+	}
+	auf := time.Date(t.Year(), t.Month(), t.Day(), 0, w.From, 0, 0, t.Location())
+	if !auf.After(t) {
+		morgen := t.AddDate(0, 0, 1)
+		auf = time.Date(morgen.Year(), morgen.Month(), morgen.Day(), 0, w.From, 0, 0, t.Location())
+	}
+	return auf.Sub(t)
+}
+
+func (w Window) String() string {
+	return fmt.Sprintf("%02d:%02d-%02d:%02d", w.From/60, w.From%60, w.To/60, w.To%60)
+}
+
+// parseWindow liest "22:00-06:00".
+func parseWindow(s string) (*Window, error) {
+	von, bis, ok := strings.Cut(s, "-")
+	if !ok {
+		return nil, fmt.Errorf("braucht die Form \"HH:MM-HH:MM\", bekam %q", s)
+	}
+	a, err := parseUhrzeit(strings.TrimSpace(von))
+	if err != nil {
+		return nil, err
+	}
+	b, err := parseUhrzeit(strings.TrimSpace(bis))
+	if err != nil {
+		return nil, err
+	}
+	// Gleicher Anfang und gleiches Ende ist nicht zu entscheiden: leeres
+	// Fenster oder ganzer Tag? Lieber ablehnen als raten.
+	if a == b {
+		return nil, fmt.Errorf("Anfang und Ende sind gleich (%q) — leeres Fenster oder ganzer Tag? Feld weglassen für jederzeit", s)
+	}
+	return &Window{From: a, To: b}, nil
+}
+
+func parseUhrzeit(s string) (int, error) {
+	t, err := time.Parse("15:04", s)
+	if err != nil {
+		return 0, fmt.Errorf("ungültige Uhrzeit %q, erwartet HH:MM", s)
+	}
+	return t.Hour()*60 + t.Minute(), nil
 }
 
 // Gang ist ein deterministischer Vorverarbeitungs-Schritt.
@@ -180,12 +266,13 @@ type header struct {
 	HaseTimeout *duration `yaml:"hase_timeout"`
 	Monitored   bool      `yaml:"monitored"`
 	Throttle    *struct {
-		Max int       `yaml:"max"`
-		Per *duration `yaml:"per"`
+		Max     int       `yaml:"max"`
+		Per     *duration `yaml:"per"`
+		Between string    `yaml:"between"`
 	} `yaml:"throttle"`
-	CWD         string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
-	Raeume      map[string]string `yaml:"raeume"`
-	Context     []struct {
+	CWD     string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
+	Raeume  map[string]string `yaml:"raeume"`
+	Context []struct {
 		File          string `yaml:"file"`
 		LastSummaries *int   `yaml:"last_summaries"`
 	} `yaml:"context"`
@@ -291,12 +378,22 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("throttle: max ohne per — höchstens %d Läufe je … was?", t.Max)
 		case t.Max == 0 && t.Per != nil:
 			return nil, fehler("throttle: per ohne max — das Fenster deckelt nichts")
-		case t.Max == 0 && t.Per == nil:
-			return nil, fehler("throttle: leer — Feld weglassen für ungedrosselt")
-		case *t.Per == 0:
+		case t.Max > 0 && *t.Per == 0:
 			return nil, fehler("throttle: per: 0 ist kein Fenster — Feld weglassen für ungedrosselt")
+		case t.Max == 0 && t.Between == "":
+			return nil, fehler("throttle: leer — Feld weglassen für ungedrosselt")
 		}
-		a.Throttle = Throttle{Max: t.Max, Per: time.Duration(*t.Per)}
+		a.Throttle = Throttle{Max: t.Max}
+		if t.Per != nil {
+			a.Throttle.Per = time.Duration(*t.Per)
+		}
+		if t.Between != "" {
+			fenster, err := parseWindow(t.Between)
+			if err != nil {
+				return nil, fehler("throttle.between: %v", err)
+			}
+			a.Throttle.Between = fenster
+		}
 	}
 
 	// Sessions ankern immer am Bau-Root: Räume dürfen eigene Git-Repos

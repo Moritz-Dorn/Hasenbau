@@ -60,7 +60,22 @@ type Watcher struct {
 	wg       sync.WaitGroup
 	cancel   context.CancelFunc
 	arbeiter map[string]*arbeiter // Auftragsname → sein einziger Verarbeiter
+
+	// jetzt liefert die Zeit. Im Test steuerbar, weil ein Zeitfenster
+	// gegen die Wanduhr zu prüfen den Test davon abhängig machte, zu
+	// welcher Tageszeit er läuft (vgl. Hasenbau-eav).
+	jetzt func() time.Time
+
+	// maxWarten begrenzt einen einzelnen Schlaf. Der Rest wird nach dem
+	// Aufwachen neu gerechnet — ein Tagesfenster hängt an der Wanduhr,
+	// und die springt: NTP, Sommerzeit, ein zugeklappter Laptop. Ein
+	// einziger Timer über acht Stunden wachte dann eine Stunde daneben
+	// auf. Neu rechnen kostet eine Abfrage je Minute.
+	maxWarten time.Duration
 }
+
+// DefaultMaxWarten ist die Obergrenze eines einzelnen Schlafs.
+const DefaultMaxWarten = time.Minute
 
 // arbeiter ist der einzige Verarbeiter eines Auftrags (Hasenbau-do0.1).
 // Vorher bekam jede Datei ihre eigene Goroutine, und alle drehten in der
@@ -149,7 +164,9 @@ func New(root string, auftraege []*auftrag.Auftrag, lock *lauf.Lock, db Store, a
 	}
 	w := &Watcher{
 		root: root, lock: lock, db: db, ausfuehren: ausfuehren, logf: logf,
-		arbeiter: map[string]*arbeiter{},
+		arbeiter:  map[string]*arbeiter{},
+		jetzt:     time.Now,
+		maxWarten: DefaultMaxWarten,
 	}
 	for _, a := range auftraege {
 		if a.Trigger.Watch != "" {
@@ -365,7 +382,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(warten):
+		case <-time.After(min(warten, w.maxWarten)):
 		}
 	}
 	defer w.lock.Release(a.Name)
@@ -390,10 +407,20 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 // Speicher: so übersteht der Deckel einen Daemon-Neustart, und
 // ausgerechnet ein Crash-Loop bekommt nicht jedes Mal frisches Budget.
 func (w *Watcher) platzFrei(a *auftrag.Auftrag) (time.Duration, error) {
-	if !a.Throttle.An() {
+	jetzt := w.jetzt()
+
+	// Das Tagesfenster zuerst: es kostet keine Abfrage. Es begrenzt nur
+	// den START — ein Lauf, der um 05:55 beginnt und eine halbe Stunde
+	// braucht, läuft zu Ende. Ein Fenster, das mitten ins Schreiben
+	// schneidet, produziert halbe Ergebnisse (§7).
+	if f := a.Throttle.Between; f != nil {
+		if warten := f.Until(jetzt); warten > 0 {
+			return warten, nil
+		}
+	}
+	if a.Throttle.Max <= 0 {
 		return 0, nil
 	}
-	jetzt := time.Now()
 	starts, err := w.db.LaeufeSince(a.Name, jetzt.Add(-a.Throttle.Per))
 	if err != nil {
 		return 0, err

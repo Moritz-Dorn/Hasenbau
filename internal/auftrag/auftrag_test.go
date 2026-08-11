@@ -153,6 +153,117 @@ func TestParseThrottle(t *testing.T) {
 	}
 }
 
+// Hasenbau-do0.3: Das Tagesfenster. Gerechnet wird gegen übergebene
+// Zeitpunkte, nie gegen die Wanduhr — sonst hinge der Test daran, zu
+// welcher Tageszeit er läuft (vgl. Hasenbau-eav).
+func TestWindowContainsUndUntil(t *testing.T) {
+	nachts := Window{From: 22 * 60, To: 6 * 60} // über Mitternacht
+	tags := Window{From: 9 * 60, To: 17 * 60}   // normal
+	um := func(h, m int) time.Time {
+		return time.Date(2026, 3, 10, h, m, 0, 0, time.UTC)
+	}
+
+	faelle := []struct {
+		name   string
+		w      Window
+		t      time.Time
+		drin   bool
+		warten time.Duration
+	}{
+		{"nachts mittendrin", nachts, um(23, 30), true, 0},
+		{"nachts nach Mitternacht", nachts, um(2, 0), true, 0},
+		{"nachts am Anfang", nachts, um(22, 0), true, 0},
+		{"nachts am Ende ist draußen", nachts, um(6, 0), false, 16 * time.Hour},
+		{"nachts kurz davor", nachts, um(21, 30), false, 30 * time.Minute},
+		{"nachts am Nachmittag", nachts, um(14, 0), false, 8 * time.Hour},
+		{"tags mittendrin", tags, um(12, 0), true, 0},
+		{"tags am Anfang", tags, um(9, 0), true, 0},
+		{"tags am Ende ist draußen", tags, um(17, 0), false, 16 * time.Hour},
+		{"tags davor", tags, um(7, 30), false, 90 * time.Minute},
+	}
+	for _, f := range faelle {
+		if drin := f.w.Contains(f.t); drin != f.drin {
+			t.Errorf("%s: Contains = %v, erwartet %v", f.name, drin, f.drin)
+		}
+		if warten := f.w.Until(f.t); warten != f.warten {
+			t.Errorf("%s: Until = %v, erwartet %v", f.name, warten, f.warten)
+		}
+	}
+
+	if !nachts.UeberMitternacht() || tags.UeberMitternacht() {
+		t.Error("UeberMitternacht falsch")
+	}
+	if nachts.String() != "22:00-06:00" {
+		t.Errorf("String = %q", nachts.String())
+	}
+}
+
+// Zeitumstellung: die Nacht auf den 29.03.2026 ist in Berlin 23 Stunden
+// lang. Wer bis zum Öffnen einfach 24h addiert, landet eine Stunde
+// daneben — deshalb rechnet Until über time.Date.
+func TestWindowUeberstehtDieZeitumstellung(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip("ohne tzdata nicht prüfbar")
+	}
+	w := Window{From: 22 * 60, To: 6 * 60}
+	// Samstag 28.03. um 07:00 — das Fenster öffnet am selben Abend 22:00.
+	// Dazwischen liegt keine Umstellung, aber der Tag danach ist kurz.
+	vor := time.Date(2026, 3, 28, 7, 0, 0, 0, berlin)
+	if got := w.Until(vor); got != 15*time.Hour {
+		t.Errorf("Until = %v, erwartet 15h", got)
+	}
+	// Sonntag 29.03. um 07:00, nach der Umstellung auf Sommerzeit:
+	// bis 22:00 Ortszeit sind es 15 Stunden Wanduhr.
+	nach := time.Date(2026, 3, 29, 7, 0, 0, 0, berlin)
+	if got := w.Until(nach); got != 15*time.Hour {
+		t.Errorf("Until nach der Umstellung = %v, erwartet 15h", got)
+	}
+}
+
+func TestParseThrottleBetween(t *testing.T) {
+	kopf := func(block string) []byte {
+		return []byte("---\ntrigger:\n  watch: raeume/eingang/*.pdf\nhase: archivar\n" + block + "---\nTu was.\n")
+	}
+
+	a, err := Parse("einlagern", kopf("throttle:\n  between: \"22:00-06:00\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nur ein Fenster, ohne Rate — erlaubt: „nur nachts, so viele wie nötig".
+	if a.Throttle.Between == nil || a.Throttle.Between.From != 22*60 || a.Throttle.Between.To != 6*60 {
+		t.Fatalf("Between = %+v", a.Throttle.Between)
+	}
+	if !a.Throttle.An() || a.Throttle.String() != "nur 22:00-06:00" {
+		t.Errorf("String = %q", a.Throttle)
+	}
+
+	beides, err := Parse("einlagern", kopf("throttle:\n  max: 5\n  per: 1h\n  between: \"22:00-06:00\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beides.Throttle.String() != "5 Läufe je 1h0m0s, nur 22:00-06:00" {
+		t.Errorf("String = %q", beides.Throttle)
+	}
+
+	fehlerfaelle := []struct{ block, erwartet string }{
+		{"throttle:\n  between: \"22:00\"\n", "HH:MM-HH:MM"},
+		{"throttle:\n  between: \"25:00-06:00\"\n", "ungültige Uhrzeit"},
+		{"throttle:\n  between: \"22:00-22:00\"\n", "Anfang und Ende sind gleich"},
+		{"throttle:\n  between: \"abends-morgens\"\n", "ungültige Uhrzeit"},
+	}
+	for _, f := range fehlerfaelle {
+		_, err := Parse("einlagern", kopf(f.block))
+		if err == nil {
+			t.Errorf("%q: kein Fehler", f.block)
+			continue
+		}
+		if !strings.Contains(err.Error(), f.erwartet) {
+			t.Errorf("%q: Fehler %q enthält nicht %q", f.block, err, f.erwartet)
+		}
+	}
+}
+
 func TestParseCronTrigger(t *testing.T) {
 	src := `---
 trigger:

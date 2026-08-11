@@ -260,9 +260,13 @@ hase: %[2]s
 # aus der Lauf-Historie, nicht aus einem Zähler — der Deckel übersteht
 # also einen Neustart. Beide Felder oder keines. `+"`hasenbau lauf`"+`
 # umgeht ihn, zählt aber mit.
+# between begrenzt zusätzlich die Tageszeit, zu der ein Lauf STARTEN
+# darf (Ortszeit, über Mitternacht erlaubt); ein laufender wird nie
+# abgeschnitten. Allein verschiebt es nur — es deckelt nicht.
 # throttle:
 #   max: 5
 #   per: 1h
+#   between: "22:00-06:00"
 
 # Routinemäßig melden: dann stehen die Befunde dieses Auftrags in
 # `+"`hasenbau status`"+`. Das steuert nur die Meldung — erfasst wird

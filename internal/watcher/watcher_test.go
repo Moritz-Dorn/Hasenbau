@@ -427,6 +427,102 @@ func TestOhneDeckelKeineAbfrage(t *testing.T) {
 	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
 }
 
+// uhr ist eine gestellte Uhr. Ein Tagesfenster gegen die Wanduhr zu
+// prüfen machte den Test davon abhängig, zu welcher Tageszeit er läuft —
+// nachts um drei wäre er grün und mittags rot (vgl. Hasenbau-eav).
+type uhr struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (u *uhr) jetzt() time.Time {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.t
+}
+
+func (u *uhr) stelle(t time.Time) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.t = t
+}
+
+func um(h, m int) time.Time { return time.Date(2026, 3, 10, h, m, 0, 0, time.UTC) }
+
+// Hasenbau-do0.3: Außerhalb des Fensters startet nichts — und sobald es
+// aufgeht, läuft der wartende Input.
+func TestZeitfensterHaeltDenStartZurueck(t *testing.T) {
+	root := t.TempDir()
+	a := watchAuftrag(10 * time.Millisecond)
+	a.Throttle = auftrag.Throttle{Between: &auftrag.Window{From: 22 * 60, To: 6 * 60}}
+
+	u := &uhr{t: um(14, 0)} // Nachmittag: zu
+	aufrufe := make(chan aufruf, 4)
+	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), neuerFakeDB(),
+		func(a *auftrag.Auftrag, input string) error {
+			aufrufe <- aufruf{a.Name, input}
+			return nil
+		}, t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.jetzt = u.jetzt
+	w.maxWarten = 10 * time.Millisecond // sonst schliefe er bis heute Abend
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); w.Stop() }()
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	erwarteKeinenAufruf(t, aufrufe, 300*time.Millisecond)
+
+	u.stelle(um(23, 0)) // Fenster auf
+	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
+}
+
+// Das Fenster begrenzt nur den START. Ein Lauf, der um 05:55 beginnt und
+// eine halbe Stunde braucht, läuft zu Ende — ein Fenster, das mitten ins
+// Schreiben schneidet, produziert halbe Ergebnisse.
+func TestZeitfensterUnterbrichtKeinenLaufendenLauf(t *testing.T) {
+	root := t.TempDir()
+	a := watchAuftrag(10 * time.Millisecond)
+	a.Throttle = auftrag.Throttle{Between: &auftrag.Window{From: 22 * 60, To: 6 * 60}}
+
+	u := &uhr{t: um(5, 55)} // kurz vor Fensterschluss
+	fertig := make(chan error, 1)
+	w, err := New(root, []*auftrag.Auftrag{a}, lauf.NewLock(), neuerFakeDB(),
+		func(a *auftrag.Auftrag, input string) error {
+			// Mitten im Lauf schließt das Fenster.
+			u.stelle(um(6, 30))
+			time.Sleep(50 * time.Millisecond)
+			fertig <- nil
+			return nil
+		}, t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.jetzt = u.jetzt
+	w.maxWarten = 10 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); w.Stop() }()
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-fertig:
+	case <-time.After(10 * time.Second):
+		t.Fatal("der Lauf wurde beim Fensterschluss abgeschnitten")
+	}
+}
+
 func TestFehlgeschlagenerLaufLandetNichtInGesehen(t *testing.T) {
 	root := t.TempDir()
 	gesehen := neuerFakeDB()
