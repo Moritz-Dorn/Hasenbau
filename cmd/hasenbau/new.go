@@ -256,6 +256,11 @@ hase: %[2]s
 # Zeitlimit des LLM-Schritts. Ohne Angabe gilt die Vorgabe (30m).
 # hase_timeout: 60m
 
+# Routinemäßig melden: dann stehen die Befunde dieses Auftrags in
+# `+"`hasenbau status`"+`. Das steuert nur die Meldung — erfasst wird
+# ohnehin alles, und `+"`hasenbau findings %[1]s`"+` rechnet auch ohne.
+# monitored: true
+
 # Die Rollen sind Konvention, kein Gesetz: input (Drop-Zone), work
 # (Scratch dieses Laufs, $WORK), out (Ziel), done (Archiv des
 # Rohmaterials), quarantine (was schiefging). Schreibrecht bekommt der

@@ -80,6 +80,32 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	}
 }
 
+// Hasenbau-4cx.3: monitored steuert die Meldung, nicht die Erfassung —
+// und fehlt es, wird eben nicht gemeldet.
+func TestParseMonitored(t *testing.T) {
+	if a, err := Parse("pdf-einlagern", []byte(beispiel)); err != nil {
+		t.Fatal(err)
+	} else if a.Monitored {
+		t.Errorf("ohne Feld überwacht: %+v", a.Monitored)
+	}
+
+	src := `---
+trigger:
+  cron: "0 7 * * *"
+hase: melder
+monitored: true
+---
+Guten Morgen.
+`
+	a, err := Parse("morgenpost", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Monitored {
+		t.Error("monitored: true nicht übernommen")
+	}
+}
+
 func TestParseCronTrigger(t *testing.T) {
 	src := `---
 trigger:

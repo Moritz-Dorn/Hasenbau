@@ -214,7 +214,7 @@ func permissionFriction(history []store.LaufTools) []Finding {
 	for _, g := range gruppen {
 		f := Finding{
 			Kind:   KindPermission,
-			Title:  fmt.Sprintf("%s scheitert wiederholt (%dx in %d Läufen)", g.tool, g.anzahl, len(g.laeufe)),
+			Title:  fmt.Sprintf("%s scheitert wiederholt (%dx in %s)", g.tool, g.anzahl, anzahlLaeufe(len(g.laeufe))),
 			Detail: g.grund,
 			Laeufe: sortiert(g.laeufe),
 		}
@@ -281,6 +281,15 @@ func costAndDuration(history []store.LaufTools, laeufe []store.Lauf) (Finding, b
 		f.Detail = "Keine Ausreißer."
 	}
 	return f, true
+}
+
+// anzahlLaeufe hält den Plural gerade — die Titel stehen seit
+// Hasenbau-4cx.3 auch im Status, und dort fällt „1 Läufen" auf.
+func anzahlLaeufe(n int) string {
+	if n == 1 {
+		return "1 Lauf"
+	}
+	return fmt.Sprintf("%d Läufen", n)
 }
 
 func teuerstesWerkzeug(history []store.LaufTools) (string, int64) {

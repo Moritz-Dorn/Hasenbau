@@ -625,11 +625,15 @@ func cmdStatus(root string, out, errw io.Writer) int {
 		return 1
 	}
 
+	// Einmal geladen, zweimal gebraucht: für die Zählung „was liegt
+	// hier" und für die Meldung der überwachten Aufträge.
+	auftraege, defFehler := loadDefinitions(root)
+
 	fmt.Fprintf(out, "Bau: %s\n", root)
 
 	// Was der Bau kennt — die Frage „was liegt hier" beantwortet sich
 	// nicht aus der Datenbank, sondern aus den Definitionen.
-	if auftraege, err := loadDefinitions(root); err == nil {
+	if defFehler == nil {
 		hasen := map[string]bool{}
 		for _, a := range auftraege {
 			hasen[a.Hase] = true
@@ -681,6 +685,17 @@ func cmdStatus(root string, out, errw io.Writer) int {
 			a.Auftrag, fmtTime(a.LastLauf), fmtTime(a.LastOk), a.ErrorStreak)
 	}
 	w.Flush()
+
+	// Was routinemäßig gemeldet wird (Hasenbau-4cx.3). Der Backfill
+	// davor, damit hier dieselben Zahlen stehen wie unter `hasenbau
+	// findings` — Altläufe mit Trace, aber ohne Aufrufzeilen zählten
+	// sonst nicht mit.
+	if ueberwacht := monitoredNames(auftraege); defFehler == nil && len(ueberwacht) > 0 {
+		backfillToolCalls(st, func(format string, args ...any) {
+			fmt.Fprintf(errw, format+"\n", args...)
+		})
+		writeMonitored(st, ueberwacht, len(auftraege), out)
+	}
 
 	// Die jüngsten Läufe gehören dazu: „was ist passiert" heißt selten
 	// „wie viele", meistens „welche".

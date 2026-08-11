@@ -55,15 +55,10 @@ func (s selector) String() string { return fmt.Sprintf("%s#%d", s.Auftrag, s.Nr)
 // gewählten heraus. Der Fehler nennt, was es stattdessen gibt — bei
 // einer falschen Nummer ist das die halbe Antwort.
 func resolveFinding(st *store.Store, sel selector, n int) (findings.Report, findings.Finding, error) {
-	history, err := st.ToolCallHistory(sel.Auftrag, n)
+	report, err := analyzeAuftrag(st, sel.Auftrag, n)
 	if err != nil {
 		return findings.Report{}, findings.Finding{}, err
 	}
-	laeufe, err := st.RecentLaeufeByAuftrag(sel.Auftrag, n)
-	if err != nil {
-		return findings.Report{}, findings.Finding{}, err
-	}
-	report := findings.Analyze(sel.Auftrag, history, laeufe)
 	if sel.Nr > len(report.Findings) {
 		return report, findings.Finding{}, fmt.Errorf(
 			"Befund %d gibt es nicht — %s hat %d (`hasenbau findings %s`)",
@@ -142,6 +137,103 @@ func digFinding(st *store.Store, sel selector, alsJSON bool, out, errw io.Writer
 	return 0
 }
 
+// maxGemeldet begrenzt, wie viele Befunde je überwachtem Auftrag im
+// Status stehen. Der Status ist ein Dashboard, keine Analyse — wer alle
+// sehen will, ruft `hasenbau findings <auftrag>`.
+const maxGemeldet = 3
+
+// statusLaeufe ist die Tiefe der Auswertung im Status. Dieselbe Zahl wie
+// die Vorgabe von `hasenbau findings`, damit beide dasselbe melden.
+const statusLaeufe = 20
+
+// writeMonitored meldet die Befunde der überwachten Aufträge
+// (Hasenbau-4cx.3). Das Flag steuert genau das und nichts sonst:
+// erfasst wird immer alles, und `hasenbau findings <auftrag>` rechnet
+// über jeden Auftrag — überwacht heißt nur, ungefragt gemeldet zu
+// werden.
+func writeMonitored(st *store.Store, ueberwacht []string, gesamt int, out io.Writer) {
+	if len(ueberwacht) == 0 {
+		return
+	}
+
+	// Auftragsnamen sind per ValidName ASCII, deshalb reicht die
+	// Byte-Länge als Spaltenbreite.
+	breite := 0
+	for _, name := range ueberwacht {
+		breite = max(breite, len(name))
+	}
+
+	fmt.Fprintf(out, "\nÜberwacht  (%d von %d Aufträgen)\n", len(ueberwacht), gesamt)
+	for _, name := range ueberwacht {
+		zeile := func(format string, args ...any) {
+			fmt.Fprintf(out, "  %-*s  %s\n", breite, name, fmt.Sprintf(format, args...))
+		}
+		report, err := analyzeAuftrag(st, name, statusLaeufe)
+		if err != nil {
+			zeile("nicht auswertbar: %v", err)
+			continue
+		}
+		switch {
+		case report.Laeufe == 0:
+			zeile("noch kein ausgewerteter Lauf")
+			continue
+		case len(report.Findings) == 0:
+			// Auch das ist eine Meldung: nichts gefunden über N Läufe
+			// heißt, dass der Auftrag rund läuft.
+			zeile("keine Befunde über %s", anzahlLaeufe(report.Laeufe))
+			continue
+		}
+		zeile("%s über %s", anzahlBefunde(len(report.Findings)), anzahlLaeufe(report.Laeufe))
+		for i, f := range report.Findings {
+			if i == maxGemeldet {
+				fmt.Fprintf(out, "      … und %d weitere\n", len(report.Findings)-maxGemeldet)
+				break
+			}
+			fmt.Fprintf(out, "      %d. %s\n", i+1, f.Title)
+		}
+	}
+	fmt.Fprintln(out, "\n  Ganz: `hasenbau findings <auftrag>` — ausarbeiten lassen: `hasenbau baumeister -finding <n> <auftrag>`")
+}
+
+// monitoredNames sammelt die überwachten Aufträge in Definitionsreihenfolge.
+func monitoredNames(auftraege []*auftrag.Auftrag) []string {
+	var out []string
+	for _, a := range auftraege {
+		if a.Monitored {
+			out = append(out, a.Name)
+		}
+	}
+	return out
+}
+
+func anzahlBefunde(n int) string {
+	if n == 1 {
+		return "1 Befund"
+	}
+	return fmt.Sprintf("%d Befunde", n)
+}
+
+func anzahlLaeufe(n int) string {
+	if n == 1 {
+		return "1 Lauf"
+	}
+	return fmt.Sprintf("%d Läufe", n)
+}
+
+// analyzeAuftrag holt das Material eines Auftrags aus der DB und rechnet
+// darüber — der gemeinsame Kern von `findings` und der Status-Meldung.
+func analyzeAuftrag(st *store.Store, name string, n int) (findings.Report, error) {
+	history, err := st.ToolCallHistory(name, n)
+	if err != nil {
+		return findings.Report{}, err
+	}
+	laeufe, err := st.RecentLaeufeByAuftrag(name, n)
+	if err != nil {
+		return findings.Report{}, err
+	}
+	return findings.Analyze(name, history, laeufe), nil
+}
+
 func cmdFindings(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
 	fs.SetOutput(errw)
@@ -165,18 +257,11 @@ func cmdFindings(root string, args []string, out, errw io.Writer) int {
 	// Altläufe, deren Trace erst später entstand, zählen sonst nicht mit.
 	backfillToolCalls(st, log.New(errw, "", log.LstdFlags).Printf)
 
-	history, err := st.ToolCallHistory(name, *n)
+	report, err := analyzeAuftrag(st, name, *n)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	laeufe, err := st.RecentLaeufeByAuftrag(name, *n)
-	if err != nil {
-		fmt.Fprintln(errw, err)
-		return 1
-	}
-
-	report := findings.Analyze(name, history, laeufe)
 	if *alsJSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")

@@ -75,6 +75,85 @@ func TestFindingsOhneServer(t *testing.T) {
 	}
 }
 
+// Hasenbau-4cx.3: `monitored: true` bringt die Befunde eines Auftrags
+// ungefragt in den Status — und sonst nichts. Der nicht überwachte
+// Auftrag bleibt vollständig analysierbar, er wird nur nicht gemeldet.
+func TestStatusMeldetNurUeberwachteAuftraege(t *testing.T) {
+	root := baueDefinitionsBau(t) // pdf-einlagern überwacht, tagesbericht nicht
+	st, err := store.Open(filepath.Join(root, "state", "hasenbau.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"pdf-einlagern", "tagesbericht"} {
+		for i := 0; i < 3; i++ {
+			id, err := st.StartLauf(name, "watch", fmt.Sprintf("sources/%d.pdf", i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.EndLauf(id, store.LaufResult{Status: "ok", SessionID: "ses"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.WriteToolCalls(id, []store.ToolCall{
+				{Tool: "read", Args: fmt.Sprintf(`{"path":"sources/%d.pdf"}`, i), Status: "completed"},
+				{Tool: "write", Args: `{"path":"raeume/lager/x.md"}`, Status: "completed"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	st.Close()
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "status"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	got := out.String()
+	for _, muss := range []string{
+		"Überwacht  (1 von 2 Aufträgen)",
+		"pdf-einlagern", "2 Befunde über 3 Läufe", "read → write",
+		"hasenbau findings <auftrag>",
+	} {
+		if !strings.Contains(got, muss) {
+			t.Errorf("Status ohne %q:\n%s", muss, got)
+		}
+	}
+	// Nur im Abschnitt prüfen: in der Auftrags-Tabelle darüber steht
+	// tagesbericht zu Recht.
+	abschnitt := got[strings.Index(got, "Überwacht  ("):]
+	if i := strings.Index(abschnitt, "\nDie letzten Läufe"); i >= 0 {
+		abschnitt = abschnitt[:i]
+	}
+	if strings.Contains(abschnitt, "tagesbericht") {
+		t.Errorf("nicht überwachter Auftrag wird gemeldet:\n%s", abschnitt)
+	}
+
+	// Erfasst wird trotzdem alles: derselbe Auftrag, von Hand gefragt.
+	out.Reset()
+	if code := run([]string{"-bau", root, "findings", "tagesbericht"}, &out, &errw); code != 0 {
+		t.Fatalf("findings tagesbericht: exit %d, stderr %q", code, errw.String())
+	}
+	for _, muss := range []string{"Befunde zu tagesbericht", "3 ausgewertete Läufe", "read → write"} {
+		if !strings.Contains(out.String(), muss) {
+			t.Errorf("nicht überwachter Auftrag nicht analysierbar (%q):\n%s", muss, out.String())
+		}
+	}
+}
+
+// Ohne überwachten Auftrag schweigt der Status dazu — ein leerer
+// Abschnitt wäre eine Zeile, die niemand mehr liest.
+func TestStatusOhneUeberwachungSchweigt(t *testing.T) {
+	bau := t.TempDir()
+	laufMitNotizen(t, bau).Close()
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "status"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	if strings.Contains(out.String(), "Überwacht") {
+		t.Errorf("Abschnitt ohne überwachte Aufträge:\n%s", out.String())
+	}
+}
+
 func TestFindingsFehlerpfade(t *testing.T) {
 	var out, errw strings.Builder
 	if code := run([]string{"-bau", t.TempDir(), "findings"}, &out, &errw); code != 2 {

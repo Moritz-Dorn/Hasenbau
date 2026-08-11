@@ -35,6 +35,13 @@ type Auftrag struct {
 	// (gemessen: 12m und >30m für dasselbe Material, Hasenbau-uh0).
 	HaseTimeout time.Duration
 
+	// Monitored schaltet die routinemäßige MELDUNG ein, nicht die
+	// Erfassung: aufgezeichnet und analysierbar ist immer alles, und
+	// `hasenbau findings <auftrag>` rechnet über jeden Auftrag. Wer das
+	// Feld setzt, sagt nur, dass er die Befunde dieses Auftrags
+	// ungefragt sehen will — in `hasenbau status` (Hasenbau-4cx.3).
+	Monitored bool
+
 	Context []Context
 	After   []After
 	Body    string // Prompt-Kern
@@ -142,6 +149,7 @@ type header struct {
 	} `yaml:"gaenge"`
 	Hase        string            `yaml:"hase"`
 	HaseTimeout *duration         `yaml:"hase_timeout"`
+	Monitored   bool              `yaml:"monitored"`
 	CWD         string            `yaml:"cwd"` // abgelehnt — bleibt im Schema für die klare Fehlermeldung
 	Raeume      map[string]string `yaml:"raeume"`
 	Context     []struct {
@@ -175,10 +183,11 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	}
 
 	a := &Auftrag{
-		Name:   name,
-		Hase:   fm.Hase,
-		Raeume: fm.Raeume,
-		Body:   strings.TrimSpace(body),
+		Name:      name,
+		Hase:      fm.Hase,
+		Monitored: fm.Monitored,
+		Raeume:    fm.Raeume,
+		Body:      strings.TrimSpace(body),
 	}
 
 	// Trigger: genau eines von watch, cron oder manuell.

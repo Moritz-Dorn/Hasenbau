@@ -36,6 +36,7 @@ gaenge:
     run: python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
     timeout: 120s
 hase: archivar
+monitored: true
 raeume:
   input: raeume/laderampe/sources/
   work:  raeume/laderampe/work/

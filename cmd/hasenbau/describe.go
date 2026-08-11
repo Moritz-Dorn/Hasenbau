@@ -265,6 +265,13 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 	} else {
 		ab.field("Zeitlimit", "%s (Vorgabe; hase_timeout: nicht gesetzt)", runner.DefaultHaseTimeout)
 	}
+	// Erfasst wird immer alles; das Flag entscheidet nur, ob die Befunde
+	// ungefragt in `hasenbau status` stehen (Hasenbau-4cx.3).
+	if a.Monitored {
+		ab.field("Überwacht", "ja  (monitored: true — Befunde stehen in `hasenbau status`)")
+	} else {
+		ab.field("Überwacht", "nein  (analysierbar bleibt er: `hasenbau findings %s`)", a.Name)
+	}
 	ab.done()
 
 	if len(a.Gaenge) > 0 {
