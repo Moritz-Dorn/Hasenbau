@@ -56,7 +56,171 @@ Ein „Bau" ist eine mit `hasenbau init` erzeugte Instanz — nicht dieses
 Repo. Sessions ankern immer am Bau-Root; die Hasen sehen nur die Räume
 ihres Auftrags.
 
+## Der erste Bau
+
+Sechs Schritte bis zum ersten Lauf. Der Bau liegt **außerhalb dieses
+Repos**: ein Hase liest die `AGENTS.md` in seinem Arbeitsverzeichnis, und
+die hier gehört zum Bauen des Hasenbaus, nicht zum Einsortieren von PDFs.
+
+**1. Bau anlegen.**
+
+```bash
+go build -o ~/bin/hasenbau ./cmd/hasenbau
+hasenbau init ~/meinbau
+```
+
+Das legt das Layout an, macht den Bau zu einem Git-Repo mit Root-Commit —
+ohne den bekommt er bei opencode keine eigene Projekt-ID, und die
+Raum-Permissions der Hasen greifen nicht — und trägt den Rückkanal in die
+Bau-Config ein.
+
+Jeder weitere Befehl braucht den Bau: entweder `-bau ~/meinbau` **vor**
+dem Unterbefehl oder einmal `cd ~/meinbau`, denn der Vorgabewert ist das
+aktuelle Verzeichnis. Die Beispiele unten setzen das `cd` voraus.
+
+**2. Provider eintragen.** Ein Bau bringt seine Provider selbst mit;
+`auth.json` teilt nur die Schlüssel, nicht die Definitionen. Das Gerüst
+gehört von Hand in den `provider:`-Block von
+`.opencode-home/opencode/opencode.json`:
+
+```json
+"provider": {
+  "scc": {
+    "npm": "@ai-sdk/openai-compatible",
+    "name": "SCC KI Toolbox",
+    "options": {"baseURL": "https://beispiel.invalid/api/v1"}
+  }
+}
+```
+
+Die Modell-Liste holt danach `hasenbau provider fetch scc` am Endpoint —
+Diff anzeigen, dann auf Zuruf schreiben. `hasenbau get provider` sagt,
+was der Bau kennt und was holbar ist.
+
+**3. Den Referenz-Auftrag übernehmen.** Statt bei Null anzufangen:
+
+```bash
+cp -f <hasenbau-repo>/beispiele/auftraege/pdf-einlagern.md auftraege/
+cp -f <hasenbau-repo>/beispiele/hasen/archivar.md          hasen/
+cp -f <hasenbau-repo>/beispiele/gaenge/pdf_to_md.py        gaenge/
+```
+
+Zwei Handgriffe bleiben: `pdftotext` (poppler) muss im PATH sein, und das
+`model:` in `hasen/archivar.md` muss auf ein Modell zeigen, das der Bau
+aus Schritt 2 kennt.
+
+**4. Nachsehen, ob alles steht.**
+
+```bash
+hasenbau describe bau
+```
+
+Genau ein Punkt darf hier offen sein:
+
+```
+PRÜFEN  Agenten        nicht generiert: pdf-einlagern__archivar
+                       → der nächste Daemon- oder Lauf-Start schreibt sie
+```
+
+Das ist kein Fehler, sondern die Reihenfolge: den opencode-Agenten
+erzeugt der Hasenbau aus Template und Auftrag, wenn er die Definitionen
+lädt. Alles andere — Layout, Git-Commit, Bau-Config, Rückkanal-Binary —
+muss `ok` sein, denn das sind die Dinge, die man sonst erst an einem
+Lauf merkt, der komisch aussieht.
+
+**5. Der erste Lauf, von Hand.** Erst einen gezielten Lauf, dann die
+Trigger — so sieht man den Fehler am Auftrag und nicht am Daemon:
+
+```bash
+mkdir -p raeume/laderampe/sources
+cp -f ~/irgendwas.pdf raeume/laderampe/sources/
+hasenbau lauf pdf-einlagern raeume/laderampe/sources/irgendwas.pdf
+```
+
+Das `mkdir` ist nur beim allerersten Mal nötig: welche Räume es gibt,
+sagt der Auftrag, und angelegt werden sie beim Lauf — `raeume/` ist nach
+`init` deshalb leer. Das zweite Argument ist der `$INPUT` des Gangs;
+Gänge laufen mit dem Bau-Root als Arbeitsverzeichnis, der Pfad ist also
+Bau-relativ.
+
+**6. Ansehen, was passiert ist.**
+
+```bash
+hasenbau get laeufe            # eine Zeile je Lauf: Status, Dauer, Kosten
+hasenbau describe lauf <id>    # Notizen aus dem Rückkanal, Fehler, Tool-Calls
+```
+
+Ging der Lauf schief, steht der Grund in `describe lauf` und das
+`$WORK`-Verzeichnis bleibt absichtlich liegen — mit dem Log jedes Gangs
+darin. `describe bau` zählt solche Reste ab da als offenen Punkt: sie
+sind Nachlass zum Ansehen, kein Fehler.
+
+Erst wenn das stimmt, lohnt der Daemon — der macht dasselbe, nur ohne
+dass jemand danebensteht.
+
+## Im Alltag: starten und stoppen
+
+`hasenbau daemon` schaltet die Trigger scharf (cron + watch) und läuft
+**im Vordergrund**, mit dem Log auf stderr:
+
+```bash
+cd ~/meinbau
+hasenbau daemon
+```
+
+Beendet wird er mit Ctrl-C oder `SIGTERM`; beides ist derselbe Weg, er
+meldet `sauber beendet` und geht mit 0. Ein Lauf, der dabei mitten in der
+Arbeit ist, wird als `aborted` geschlossen — sein `$WORK`-Verzeichnis
+bleibt absichtlich liegen, `describe bau` erinnert später daran.
+
+**Definitionen liest der Daemon beim Start.** Wer an `auftraege/`,
+`hasen/` oder `hasenbau.yaml` etwas ändert, startet ihn neu; Material in
+den Räumen ist davon natürlich nicht betroffen, das ist ja der Trigger.
+
+**Ein `hasenbau lauf` daneben ist erlaubt** und der normale Weg, einen
+einzelnen Auftrag zu prüfen, während der Daemon läuft: er startet seinen
+eigenen opencode-Server auf einem eigenen Port, und die SQLite teilen
+sich beide im WAL-Modus. Der Auftrags-Deckel (`throttle:`) gilt für ihn
+nicht — wer selbst davorsteht, wartet nicht auf das nächste Fenster —,
+gezählt wird sein Lauf trotzdem.
+
+Wird der Prozess **hart** abgeschossen (`kill -9`, Stromausfall), bleiben
+Läufe als `running` in der Datenbank stehen. Der nächste Start von
+`daemon` oder `lauf` räumt sie ab: geprüft wird, ob der Wirt-Prozess noch
+lebt, tote Zeilen werden als `aborted` mit Grund geschlossen und stehen
+im Log. Ein gleichzeitig laufender zweiter Hasenbau bleibt unangetastet.
+
+Dauerhaft läuft er als systemd-User-Unit. `opencode` muss im PATH der
+Unit stehen — der Daemon startet es als Kind-Prozess:
+
+```ini
+# ~/.config/systemd/user/hasenbau.service
+[Unit]
+Description=Hasenbau
+After=network.target
+
+[Service]
+ExecStart=%h/bin/hasenbau -bau %h/meinbau daemon
+Environment=PATH=%h/.opencode/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user enable --now hasenbau    # starten, und beim Login mit
+systemctl --user stop hasenbau            # stoppen (SIGTERM, sauberes Ende)
+journalctl --user -u hasenbau -f          # zusehen
+hasenbau status                           # was liegt hier, was ist passiert
+```
+
+Nach einem Rebuild des Binaries an einen anderen Pfad zieht der nächste
+Start den Rückkanal-Eintrag automatisch nach und sagt es im Log.
+
 ## Benutzen
+
+Alle Befehle im Überblick:
 
 ```bash
 hasenbau init <bau>        # leeren Bau anlegen (Git-Repo, isolierte Config, Rückkanal)
@@ -157,12 +321,6 @@ Workspace-weit für *jeden* Agenten gilt. Die Einführung steckt bewusst im
 Binary statt im Bau: so passt sie immer zur installierten Version, statt
 als veraltete Kopie mitzulaufen.
 
-Stirbt der Daemon mitten in einem Lauf, bleibt dessen Zeile auf
-`laeuft` stehen. `hasenbau daemon` und `hasenbau lauf` räumen deshalb
-beim Start die Läufe ab, deren Prozess nicht mehr lebt — sie werden als
-`abgebrochen` mit Grund geschlossen. Ein gleichzeitig laufender zweiter
-Hasenbau-Prozess bleibt unangetastet; im Zweifel wird nichts abgeräumt.
-
 Die lesenden Befehle folgen dem Vorbild von `kubectl`: **`get`** zeigt
 eine Zeile pro Objekt (`get laeufe`, `get lauf <id>`, `get provider`),
 **`describe`** ein Objekt im Detail samt allem, was der Hasenbau darüber
@@ -180,12 +338,12 @@ Raum-Permissions nicht; ein Rückkanal-Eintrag auf ein verschwundenes
 Binary nimmt den Hasen still ihre Werkzeuge weg. Beides merkt man sonst
 erst an einem Lauf, der komisch aussieht.
 
-Ein Bau bringt seine custom Provider selbst mit — `auth.json` teilt nur
-die Schlüssel, nicht die Definitionen (PLAN.md §3). Das Gerüst (`npm`,
-`options.baseURL`) gehört handgepflegt in
-`.opencode-home/opencode/opencode.json`; die Modell-Liste hält
-`hasenbau provider fetch` am Endpoint des Providers aktuell — Diff
-anzeigen, dann auf Zuruf schreiben, nie automatisch.
+Dass ein Bau seine custom Provider selbst mitbringt, ist keine Schlamperei
+im Setup, sondern die Isolation (PLAN.md §3): `auth.json` teilt die
+Schlüssel, die Definitionen bleiben im Bau. Deshalb der handgepflegte
+`provider:`-Block aus Schritt 2 oben, und deshalb schreibt `hasenbau
+provider fetch` die Modell-Liste nie automatisch, sondern zeigt erst den
+Diff.
 
 ## Build & Test
 
