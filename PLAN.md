@@ -614,6 +614,32 @@ Backstop für den Fall, dass der Move fehlschlug.
 oder nach `quarantaene/` — niemals nach `archiv/`. Sonst verschwindet
 Material lautlos.
 
+### Die vierte Falle: der volle Eingang
+
+Wer 200 PDFs auf einmal ablegt, findet die drei oberen alle erfüllt und
+trotzdem ein kaputtes System. Ursprünglich bekam jeder Glob-Treffer
+seine eigene Goroutine, und alle drehten in der Overlap-Sperre: 200
+Goroutinen, von denen 199 im Sekundentakt meldeten, dass sie warten. Sie
+taten dasselbe wie einer — nur lauter, und in zufälliger Reihenfolge,
+denn Go-Mutexe sind nicht FIFO.
+
+**Ein Arbeiter je Auftrag, ältester Input zuerst** ✅ *(2026-08-11,
+Hasenbau-do0.1)*. Die gemeldeten Inputs stehen in einer Menge, der
+Arbeiter nimmt sich den mit der ältesten `mtime` — die Reihenfolge, die
+ein Mensch erwartet, wenn er einen Stapel abarbeiten lässt. Bei
+gleicher `mtime` entscheidet der Pfad, sonst käme derselbe Stapel bei
+zwei Läufen verschieden heraus.
+
+Eine Warteschlange braucht es dafür nicht: **das Dateisystem ist die
+Warteschlange.** Ein Input bleibt in `sources/`, bis ein geglückter Lauf
+ihn per `after: move` wegräumt, und beim Start liest der Glob alles
+wieder ein — derselbe Mechanismus, der oben schon die Idempotenz trägt.
+Ein Rückstau übersteht damit jeden Neustart, ohne dass irgendwo Zustand
+mitgeschrieben würde.
+
+Der Arbeiter ist außerdem die Stelle, an der eine Drossel ansetzen kann:
+„jetzt nicht" sagt man einem, nicht zweihundert (Epic Hasenbau-do0).
+
 ---
 
 ## 8. Phasen
