@@ -106,6 +106,13 @@ selbst ein. Aus einem einzelnen Trace ist nicht sicher zu erkennen, was
 Parameter und was Konstante war; ein Entwurf ist deshalb eine
 Gesprächsgrundlage, kein fertiger Gang.
 
+Ein Auftrag mit `monitored: true` im Frontmatter wird routinemäßig
+beurteilt: seine Befunde stehen dann in `hasenbau status`, ohne dass
+jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet
+wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet
+auch über die, die es nicht setzen. Wer es später nachträgt, bekommt die
+Historie mitgeliefert.
+
 Ein Hasen-Template kann Hintergrundwissen anfordern: `knows_hasenbau:
 true` bindet eine mitgelieferte Einführung in den Hasenbau ein (Begriffe,
 Ablauf, Trace-Aufbau, Grenzen), `knowledge: [pfade]` eigene Dateien aus

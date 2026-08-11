@@ -10,6 +10,10 @@ gaenge:
 
 hase: archivar
 
+# Befunde dieses Auftrags stehen in `hasenbau status`. Steuert nur die
+# Meldung — `hasenbau findings pdf-einlagern` rechnet auch ohne.
+monitored: true
+
 raeume:
   input: raeume/laderampe/sources/
   work:  raeume/laderampe/work/

@@ -403,6 +403,7 @@ gaenge:                            # deterministisch, läuft VOR dem Hasen
 
 hase: archivar                     # → Template hasen/archivar.md
 # hase_timeout: 60m                # Zeitlimit des LLM-Schritts; Vorgabe 30m
+monitored: true                    # Befunde routinemäßig melden (§8)
 
 raeume:
   input: raeume/laderampe/sources/
@@ -436,6 +437,20 @@ demselben Trace war einmal nach 12 Minuten fertig und lief einmal nach
 dieselben 30 Minuten dagegen absurd großzügig. `hase_timeout: 0` ist
 ein Ladefehler und kein „unbegrenzt": ein Lauf darf lange dauern, nie
 für immer.
+
+**`monitored:` steuert die Meldung, nicht die Erfassung.** Aufgezeichnet
+wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet
+über jeden — auch über einen, der das Feld nicht setzt. Wer es setzt,
+sagt nur: *diesen* Auftrag will ich ungefragt beurteilt sehen. Seine
+Befunde stehen dann in `hasenbau status`, und ein cron-Auftrag kann ihn
+regelmäßig durch `hasenbau findings` schicken. Die Trennung ist
+Absicht — ein Flag, das mitschneidet, ist eines, bei dem man später
+merkt, dass man es hätte setzen sollen; eines, das nur meldet, kann man
+jederzeit nachziehen und bekommt die Historie mitgeliefert.
+
+Der Schlüssel ist englisch wie alle Formatschlüssel außer den sieben
+Begriffen aus §1 — in der Prosa und in der Ausgabe heißt die Sache
+weiter „überwacht".
 
 ### Hasen-Templates und generierte Agenten
 
@@ -736,6 +751,17 @@ sondern ein Zufall zu zweit.
 Der Name ist englisch wie alles außer den sieben Begriffen aus §1 —
 in der Prosa heißt die Sache weiter Befund, so wie `dig` einen Trace
 gräbt.
+
+**`monitored: true` bringt die Befunde eines Auftrags von selbst in den
+Blick** ✅ *(2026-08-11, Hasenbau-4cx.3)*. `hasenbau status` meldet für
+jeden so markierten Auftrag, wie viele Befunde über wie viele Läufe
+stehen, und nennt die ersten drei beim Titel; alles weitere holt
+`hasenbau findings <auftrag>`. Auch „keine Befunde über 12 Läufe" wird
+gemeldet — dass ein Auftrag rund läuft, ist eine Auskunft. Das Flag
+entscheidet nur darüber; erfasst und analysierbar bleibt jeder Auftrag
+(§6). Vor der Meldung zieht der Status die Aufrufe der Altläufe nach,
+damit dort dieselben Zahlen stehen wie unter `findings` — ohne das
+zählte ein Lauf mit Trace, aber ohne Aufrufzeilen nicht mit.
 
 **Stufe 2: der Baumeister arbeitet einen Befund aus, keinen Trace** ✅
 *(2026-08-10, Hasenbau-4cx.4)*. `hasenbau baumeister -finding <n>
