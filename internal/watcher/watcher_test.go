@@ -2,8 +2,11 @@ package watcher
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -164,6 +167,131 @@ func TestNichtPassendeDateienIgnoriert(t *testing.T) {
 		t.Fatal(err)
 	}
 	erwarteKeinenAufruf(t, aufrufe, 400*time.Millisecond)
+}
+
+// Hasenbau-do0.1: Ein voller Eingang ergibt einen Arbeiter, nicht 200
+// Goroutinen — und er nimmt sich die Dateien in der Reihenfolge, in der
+// sie angekommen sind.
+func TestVollerEingangLaeuftDurchEinenArbeiter(t *testing.T) {
+	const anzahl = 200
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "raeume/eingang"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Namen aufsteigend, mtimes absteigend: Wer nach Glob-Reihenfolge
+	// arbeitet, kommt genau falsch heraus.
+	basis := time.Now().Add(-24 * time.Hour)
+	var erwartet []string
+	for i := 0; i < anzahl; i++ {
+		rel := fmt.Sprintf("raeume/eingang/%03d.txt", i)
+		abs := filepath.Join(root, rel)
+		if err := os.WriteFile(abs, []byte(rel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(abs, basis, basis.Add(time.Duration(anzahl-i)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		erwartet = append([]string{rel}, erwartet...) // jüngster Name = ältester Input
+	}
+
+	var mu sync.Mutex
+	var reihenfolge []string
+	fertig := make(chan struct{})
+	w, err := New(root, []*auftrag.Auftrag{watchAuftrag(time.Millisecond)}, lauf.NewLock(), neuerFakeGesehen(),
+		func(a *auftrag.Auftrag, input string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			reihenfolge = append(reihenfolge, input)
+			if len(reihenfolge) == anzahl {
+				close(fertig)
+			}
+			return nil
+		}, func(string, ...any) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); w.Stop() }()
+	vorher := runtime.NumGoroutine()
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Jetzt liegen alle 200 gemeldet in der Menge des Arbeiters. Vorher
+	// wären hier 200 Goroutinen gestartet, von denen 199 in der Sperre
+	// drehten; jetzt sind es der Lauscher und ein Arbeiter.
+	if neu := runtime.NumGoroutine() - vorher; neu > 20 {
+		t.Errorf("%d neue Goroutinen für %d Dateien — der Arbeiter greift nicht", neu, anzahl)
+	}
+
+	select {
+	case <-fertig:
+	case <-time.After(30 * time.Second):
+		mu.Lock()
+		n := len(reihenfolge)
+		mu.Unlock()
+		t.Fatalf("nur %d von %d verarbeitet", n, anzahl)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for i := range erwartet {
+		if reihenfolge[i] != erwartet[i] {
+			t.Fatalf("Position %d: %s, erwartet %s (ältester zuerst)", i, reihenfolge[i], erwartet[i])
+		}
+	}
+}
+
+// Wartet ein Input auf einen Lauf aus einem anderen Trigger, wird das
+// einmal gemeldet. Vorher stand die Zeile bei jedem Versuch im Log —
+// bei vollem Eingang schneller, als sie jemand lesen konnte.
+func TestWartenWirdEinmalGemeldet(t *testing.T) {
+	root := t.TempDir()
+	a := watchAuftrag(20 * time.Millisecond)
+	sperre := lauf.NewLock()
+	if !sperre.Acquire(a.Name) {
+		t.Fatal("Sperre nicht zu bekommen")
+	}
+
+	var mu sync.Mutex
+	var wartezeilen int
+	aufrufe := make(chan aufruf, 4)
+	w, err := New(root, []*auftrag.Auftrag{a}, sperre, neuerFakeGesehen(),
+		func(a *auftrag.Auftrag, input string) error {
+			aufrufe <- aufruf{a.Name, input}
+			return nil
+		},
+		func(format string, args ...any) {
+			if strings.Contains(fmt.Sprintf(format, args...), "wartet") {
+				mu.Lock()
+				wartezeilen++
+				mu.Unlock()
+			}
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); w.Stop() }()
+	if err := w.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "raeume/eingang/doc.txt"), []byte("material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Lange genug für ein Dutzend Versuche im alten Takt.
+	erwarteKeinenAufruf(t, aufrufe, 400*time.Millisecond)
+	mu.Lock()
+	n := wartezeilen
+	mu.Unlock()
+	if n != 1 {
+		t.Errorf("%d Warte-Meldungen, erwartet genau 1", n)
+	}
+
+	// Und sobald der andere Trigger fertig ist, läuft der Input.
+	sperre.Release(a.Name)
+	erwarteAufruf(t, aufrufe, "raeume/eingang/doc.txt")
 }
 
 func TestFehlgeschlagenerLaufLandetNichtInGesehen(t *testing.T) {
