@@ -149,6 +149,37 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	return 0
 }
 
+// bauBudget baut den Bau-weiten Deckel aus hasenbau.yaml
+// (Hasenbau-cvf). Ist keiner gesetzt — oder ist die Config unlesbar —
+// kommt ein Budget ohne Grenze heraus: ein Deckel, den niemand gesetzt
+// hat, darf keinen Lauf aufhalten.
+//
+// Ein Config-Fehler wird gemeldet und nicht verschluckt. Ihn hier zum
+// Abbruch zu machen wäre falsch: `hasenbau lauf` soll auch dann noch
+// gehen, wenn in der yaml etwas klemmt.
+func bauBudget(root string, st *store.Store, logf func(string, ...any)) *runner.Budget {
+	conf, err := bau.LoadConfig(root)
+	if err != nil {
+		logf("bau-deckel: %v — es gilt keiner", err)
+		return &runner.Budget{}
+	}
+	return budgetAus(conf, st, logf)
+}
+
+// budgetAus baut den Deckel aus einer schon geladenen Config — für
+// Aufrufer, die den Ladefehler selbst behandeln wollen (der Status muss
+// ihn zeigen, nicht schlucken).
+func budgetAus(conf *bau.Config, st *store.Store, logf func(string, ...any)) *runner.Budget {
+	if !conf.Throttle.An() {
+		return &runner.Budget{}
+	}
+	return &runner.Budget{
+		Rate:   auftrag.Throttle{Max: conf.Throttle.Max, Per: conf.Throttle.Per},
+		Laeufe: st.LaeufeSinceAll,
+		Logf:   logf,
+	}
+}
+
 // dbPath ist die Konvention aus PLAN.md §4: state/hasenbau.db im Bau.
 func dbPath(bau string) string {
 	return filepath.Join(bau, "state", "hasenbau.db")
@@ -360,7 +391,10 @@ func cmdDaemon(root string, errw io.Writer) int {
 
 	funnel := opencode.NewFunnel(sup.BaseURL, logger.Printf)
 	funnel.Start(ctx)
-	r := &runner.Runner{Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf}
+	r := &runner.Runner{
+		Root: root, BaseURL: sup.BaseURL, Store: st, Funnel: funnel, Logf: logger.Printf,
+		Budget: bauBudget(root, st, logger.Printf),
+	}
 	lock := lauf.NewLock()
 
 	sched, err := scheduler.New(auftraege, lock, func(a *auftrag.Auftrag) {
@@ -693,6 +727,7 @@ func cmdStatus(root string, out, errw io.Writer) int {
 	// Was gedrosselt ist und wann es weitergeht (Hasenbau-do0.4). Vor den
 	// Befunden, weil „es staut sich planmäßig" die dringendere Auskunft
 	// ist als „hier wäre ein Gang-Kandidat".
+	writeBauDeckel(root, st, out)
 	if defFehler == nil {
 		writeDrosseln(drosselStand(root, st, auftraege), out)
 	}

@@ -98,6 +98,10 @@ func (k *laufContext) StartServer() error {
 	k.Runner = &runner.Runner{
 		Root: k.Root, BaseURL: sup.BaseURL, Store: k.Store,
 		Funnel: funnel, Logf: k.logger.Printf,
+		// Mitgegeben, obwohl dieser Weg immer 'manual' fährt und damit
+		// durchgelassen wird: die Ausnahme gehört an eine Stelle (den
+		// Trigger), nicht an zwei (Trigger und Verdrahtung).
+		Budget: bauBudget(k.Root, k.Store, k.logger.Printf),
 	}
 	return nil
 }

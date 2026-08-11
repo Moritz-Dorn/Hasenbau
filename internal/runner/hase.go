@@ -67,6 +67,10 @@ type Runner struct {
 	Store   LaufStore
 	Funnel  *opencode.Funnel
 
+	// Budget ist der Bau-weite Deckel über alle Aufträge; nil oder
+	// ungesetzt heißt ungedrosselt (Hasenbau-cvf).
+	Budget *Budget
+
 	// GangTimeout greift für Gänge ohne eigenes timeout; 0 = unbegrenzt.
 	GangTimeout time.Duration
 	// StatusInterval ist der Takt der Statusabfrage während eines
@@ -122,7 +126,13 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 		logf = func(string, ...any) {}
 	}
 
-	id, err := r.Store.StartLauf(a.Name, trigger, input)
+	// Der Bau-weite Deckel sitzt hier und nicht im Watcher, weil hier
+	// jeder Lauf durchkommt — auch der von cron, und dessen Kosten sind
+	// dieselben (Hasenbau-cvf). Die laeufe-Zeile entsteht unter derselben
+	// Sperre wie die Prüfung; 'manual' wird durchgelassen und zählt nur.
+	id, err := r.Budget.Start(ctx, trigger, func() (int64, error) {
+		return r.Store.StartLauf(a.Name, trigger, input)
+	})
 	if err != nil {
 		return 0, err
 	}

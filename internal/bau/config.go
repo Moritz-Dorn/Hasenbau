@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -31,11 +32,34 @@ type Config struct {
 	// Varianten unter hasen/ liegen — welche zum Zug kommt, entscheidet
 	// der hier benannte Auftrag über sein hase:-Feld.
 	Baumeister string
+
+	// Throttle ist der Bau-weite Deckel über ALLE Aufträge
+	// (Hasenbau-cvf). Der Deckel je Auftrag (§6) schützt einen Auftrag
+	// vor sich selbst; dieser schützt das Budget: zehn Aufträge mit je
+	// fünf Läufen je Stunde sind fünfzig. Der Nullwert heißt „kein
+	// Bau-weiter Deckel".
+	Throttle Throttle
 }
+
+// Throttle ist die Bau-weite Rate: höchstens Max Läufe je Per, rollend.
+// Bewusst nur Zahl und Fenster und nicht das ganze throttle: aus §6 —
+// ein Bau-weites Tageszeitfenster wäre eine andere Aussage („der ganze
+// Bau ruht tagsüber") und ist nicht gefragt.
+type Throttle struct {
+	Max int
+	Per time.Duration
+}
+
+// An sagt, ob ein Bau-weiter Deckel gesetzt ist.
+func (t Throttle) An() bool { return t.Max > 0 }
 
 type configFields struct {
 	LogLevel   *string `yaml:"log_level"`
 	Baumeister *string `yaml:"baumeister"`
+	Throttle   *struct {
+		Max int     `yaml:"max"`
+		Per *string `yaml:"per"`
+	} `yaml:"throttle"`
 }
 
 var logLevel = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
@@ -63,7 +87,7 @@ func LoadConfig(root string) (*Config, error) {
 	dec.KnownFields(true)
 	var d configFields
 	if err := dec.Decode(&d); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister)", ConfigFile, err)
+		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister, throttle)", ConfigFile, err)
 	}
 
 	if d.LogLevel != nil {
@@ -78,6 +102,31 @@ func LoadConfig(root string) (*Config, error) {
 		}
 		c.Baumeister = *d.Baumeister
 	}
+	// Dieselbe Regel wie beim Deckel je Auftrag (§6): beide Hälften oder
+	// keine. Eine Zahl ohne Fenster ist keine Rate, ein Fenster ohne
+	// Zahl deckelt nichts — und beides sieht aus wie eine Drossel.
+	if d.Throttle != nil {
+		t := d.Throttle
+		switch {
+		case t.Max < 0:
+			return nil, fmt.Errorf("bau: %s: throttle.max muss > 0 sein (throttle: weglassen für ungedrosselt)", ConfigFile)
+		case t.Max > 0 && t.Per == nil:
+			return nil, fmt.Errorf("bau: %s: throttle.max ohne per — höchstens %d Läufe je … was?", ConfigFile, t.Max)
+		case t.Max == 0 && t.Per != nil:
+			return nil, fmt.Errorf("bau: %s: throttle.per ohne max — das Fenster deckelt nichts", ConfigFile)
+		case t.Max == 0 && t.Per == nil:
+			return nil, fmt.Errorf("bau: %s: throttle ist leer — Feld weglassen für ungedrosselt", ConfigFile)
+		}
+		per, err := time.ParseDuration(*t.Per)
+		if err != nil {
+			return nil, fmt.Errorf("bau: %s: throttle.per %q ist keine Dauer wie \"1h\": %v", ConfigFile, *t.Per, err)
+		}
+		if per <= 0 {
+			return nil, fmt.Errorf("bau: %s: throttle.per %q ist kein Fenster", ConfigFile, *t.Per)
+		}
+		c.Throttle = Throttle{Max: t.Max, Per: per}
+	}
+
 	// Ob es den Auftrag gibt, prüft nicht der Parser, sondern der
 	// Befehl — der kann besser sagen, was zu tun ist.
 	return c, nil

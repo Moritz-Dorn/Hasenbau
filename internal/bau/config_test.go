@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func schreibeConfig(t *testing.T, inhalt string) string {
@@ -52,13 +53,40 @@ func TestLadeConfigBaumeister(t *testing.T) {
 	}
 }
 
+// Hasenbau-cvf: der Bau-weite Deckel. Dieselbe Regel wie beim Deckel je
+// Auftrag — beide Hälften oder keine.
+func TestLadeConfigThrottle(t *testing.T) {
+	c, err := LoadConfig(schreibeConfig(t, "throttle:\n  max: 20\n  per: 1h\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Throttle.An() || c.Throttle.Max != 20 || c.Throttle.Per != time.Hour {
+		t.Errorf("Throttle = %+v", c.Throttle)
+	}
+
+	// Ohne den Block: kein Deckel, und das ist kein Fehler.
+	ohne, err := LoadConfig(schreibeConfig(t, "log_level: info\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ohne.Throttle.An() {
+		t.Errorf("Deckel ohne throttle: %+v", ohne.Throttle)
+	}
+}
+
 func TestLadeConfigFehler(t *testing.T) {
 	faelle := []struct {
 		name    string
 		inhalt  string
 		erwarte string
 	}{
-		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister"},
+		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister, throttle"},
+		{"throttle.max ohne per", "throttle:\n  max: 20\n", "max ohne per"},
+		{"throttle.per ohne max", "throttle:\n  per: 1h\n", "per ohne max"},
+		{"throttle leer", "throttle: {}\n", "throttle ist leer"},
+		{"throttle.max negativ", "throttle:\n  max: -1\n  per: 1h\n", "muss > 0 sein"},
+		{"throttle.per keine Dauer", "throttle:\n  max: 5\n  per: bald\n", "keine Dauer"},
+		{"throttle.per null", "throttle:\n  max: 5\n  per: 0s\n", "kein Fenster"},
 		{"log_level ungültig", "log_level: laut\n", "erlaubt: debug, info, warn, error"},
 		{"baumeister mit Pfad", "baumeister: ../fremd\n", "kein gültiger Auftrags-Name"},
 		{"kaputtes YAML", "log_level: [\n", ConfigFile},

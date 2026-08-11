@@ -159,6 +159,9 @@ func checkHasenbauYAML(root string) Check {
 		return Check{Name: ConfigFile, Detail: err.Error(), Hint: "YAML reparieren"}
 	}
 	teile := []string{"log_level: " + orDash(conf.LogLevel)}
+	if conf.Throttle.An() {
+		teile = append(teile, fmt.Sprintf("bau-deckel: %d je %s", conf.Throttle.Max, conf.Throttle.Per))
+	}
 	if conf.Baumeister == "" {
 		return Check{Name: ConfigFile, OK: true, Detail: strings.Join(teile, ", ") + ", kein baumeister",
 			Hint: "ohne `baumeister:` läuft `hasenbau baumeister` nicht"}

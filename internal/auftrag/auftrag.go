@@ -121,7 +121,9 @@ func FormatDuration(d time.Duration) string {
 // String beschreibt den Deckel für Menschen.
 func (t Throttle) String() string {
 	var teile []string
-	if t.Max > 0 {
+	if t.Max == 1 {
+		teile = append(teile, "1 Lauf je "+FormatDuration(t.Per))
+	} else if t.Max > 1 {
 		teile = append(teile, fmt.Sprintf("%d Läufe je %s", t.Max, FormatDuration(t.Per)))
 	}
 	if t.Between != nil {

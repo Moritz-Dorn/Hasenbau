@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/findings"
 	"github.com/Moritz-Dorn/Hasenbau/internal/opencode"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -239,6 +240,38 @@ func drosselStand(root string, st *store.Store, auftraege []*auftrag.Auftrag) []
 		out = append(out, d)
 	}
 	return out
+}
+
+// writeBauDeckel meldet den Bau-weiten Deckel (Hasenbau-cvf). Er steht
+// über den einzelnen Aufträgen, weil er über ihnen gilt: er kann
+// bindend sein, während jeder Auftrag für sich noch Platz hätte.
+func writeBauDeckel(root string, st *store.Store, out io.Writer) {
+	conf, err := bau.LoadConfig(root)
+	if err != nil {
+		// Nicht schlucken: eine unlesbare Config heißt, dass gar kein
+		// Deckel gilt. Wer einen eingetragen hat, hielte sich sonst für
+		// geschützt und wäre es nicht — dieselbe Sorte Stille wie beim
+		// toten Rückkanal-Pfad (§8).
+		fmt.Fprintf(out, "\nBau-Deckel  unbekannt — %s ist nicht lesbar, es gilt keiner\n"+
+			"            (`hasenbau describe bau` nennt die Stelle)\n", bau.ConfigFile)
+		return
+	}
+	b := budgetAus(conf, st, func(string, ...any) {})
+	if !b.An() {
+		return
+	}
+	belegt, warten, err := b.Frei()
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(out, "\nBau-Deckel  %s über alle Aufträge\n", b.Rate)
+	if warten == 0 {
+		fmt.Fprintf(out, "            %d im Fenster, %d frei\n", belegt, b.Rate.Max-belegt)
+		return
+	}
+	fmt.Fprintf(out, "            voll (%d im Fenster) — nächster Lauf frühestens %s (in %s)\n",
+		belegt, time.Now().Add(warten).Local().Format("15:04"),
+		auftrag.FormatDuration(warten.Round(time.Minute)))
 }
 
 // writeDrosseln meldet die gedrosselten Aufträge im Status.

@@ -267,6 +267,31 @@ func (s *Store) LaeufeSince(auftrag string, since time.Time) ([]time.Time, error
 	return out, rows.Err()
 }
 
+// LaeufeSinceAll ist LaeufeSince ohne Auftrags-Filter: die Startzeiten
+// ALLER Läufe des Baus seit `since`, älteste zuerst. Grundlage des
+// Bau-weiten Deckels (Hasenbau-cvf) — der schützt nicht einen Auftrag
+// vor sich selbst, sondern das Budget vor allen zusammen.
+func (s *Store) LaeufeSinceAll(since time.Time) ([]time.Time, error) {
+	rows, err := s.db.Query(`
+		SELECT started FROM laeufe
+		WHERE started > ?
+		ORDER BY started ASC`, since.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("store: Läufe seit %s lesen: %w", since, err)
+	}
+	defer rows.Close()
+
+	var out []time.Time
+	for rows.Next() {
+		var t time.Time
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("store: Startzeit scannen: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // RecentSummaries liefert die jüngsten nicht-leeren Summaries eines
 // Auftrags in chronologischer Reihenfolge (älteste zuerst) — so wandern
 // sie direkt in den Prompt (§6, Kontext-Schicht).
