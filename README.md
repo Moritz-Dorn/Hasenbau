@@ -120,6 +120,16 @@ soll — Ortszeit, über Mitternacht erlaubt. Es begrenzt nur den *Start*:
 ein Lauf, der um 05:55 beginnt, läuft zu Ende. Und es verschiebt nur,
 statt zu deckeln; wer beides will, setzt beides.
 
+Gedrosselte Aufträge stehen in `hasenbau status` mit ihrem Rückstau und
+dem frühesten nächsten Lauf — ein Deckel, den man nicht sieht, ist von
+einem hängenden Daemon nicht zu unterscheiden:
+
+```
+Gedrosselt (1)
+  pdf-einlagern  5 Läufe je 1h, nur 22:00-06:00
+                 195 Dateien im Eingang, nächster Lauf frühestens 22:00 (in 8h44m)
+```
+
 Ein Auftrag mit `monitored: true` im Frontmatter wird routinemäßig
 beurteilt: seine Befunde stehen dann in `hasenbau status`, ohne dass
 jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet

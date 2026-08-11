@@ -503,6 +503,26 @@ nicht durch ihn. Wer selbst davorsteht, wartet nicht auf das nächste
 Fenster — seine `laeufe`-Zeile entsteht trotzdem, die Nacht lässt sich
 so nicht heimlich verdoppeln.
 
+**Sichtbar ist der Deckel in `status` und `describe auftrag`** ✅
+*(2026-08-11, Hasenbau-do0.4)*. Ein Deckel, den man nicht sieht, ist von
+einem hängenden Daemon nicht zu unterscheiden: wer zweihundert PDFs
+ablegt und abends nachsieht, muss erkennen können, dass sich etwas staut
+— und zwar planmäßig. `status` nennt je gedrosseltem Auftrag den
+Rückstau und den frühesten nächsten Lauf, `describe auftrag` rechnet die
+Folge aus („5 je Stunde, nur 22:00-06:00" ⇒ „höchstens 40 Läufe je
+Nacht"), weil das einzeln klar ist und zusammen niemand gern im Kopf
+rechnet.
+
+Die Entscheidung selbst steht als reine Funktion in `auftrag.Throttle`
+und wird von beiden benutzt — dem Watcher, der losläuft, und dem Status,
+der vorhersagt. Zwei Rechnungen für dieselbe Frage liefen auseinander,
+und dann zeigte das Dashboard etwas anderes an, als der Daemon tut.
+
+Der Rückstau ist dabei die Zahl der Glob-Treffer, nicht „die noch nicht
+gesehenen": das zu wissen hieße, jede Datei zu hashen, und `status` ist
+der billige Befehl (§12). Bei einem Auftrag mit `after: move` — dem
+Normalfall — ist beides ohnehin dasselbe.
+
 Der Deckel gilt **pro Auftrag**. Ein Bau-weiter über alle Aufträge wäre
 das, was ein Budget wirklich schützt — zehn Aufträge mit je 5/h sind
 50/h —, ist aber bewusst zurückgestellt (Epic Hasenbau-do0).
