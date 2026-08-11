@@ -9,8 +9,7 @@ Vorverarbeitung — lokal, ein Binary, kein Cloud-Dienst.
 `pdf-einlagern` läuft Ende-zu-Ende, `hasenbau dig` zieht Traces, der
 MCP-Rückkanal steht, und der Baumeister verdichtet einen Lauf zu einem
 Gang-Entwurf (siehe [`beispiele/`](beispiele/)). `hasenbau findings`
-rechnet inzwischen über viele Läufe, damit die Verdichtung nicht aus
-einem einzelnen Trace raten muss. `PLAN.md` ist der Spec.
+rechnet inzwischen über viele Läufe hinweg. `PLAN.md` ist der Spec.
 
 ## Die Idee
 
@@ -24,7 +23,7 @@ einem einzelnen Trace raten muss. `PLAN.md` ist der Spec.
    macht, ist ein Interpreter, der jedes Mal neu kompiliert. Der Hasenbau
    loggt die Traces; `hasenbau dig` + der Baumeister-Hase machen daraus
    deterministische Gänge. Aktiviert wird ein generierter Gang **nie
-   automatisch** — der Nutzer liest ihn und trägt ihn selbst ein.
+   automatisch**.
 
 ## Architektur
 
@@ -69,10 +68,10 @@ go build -o ~/bin/hasenbau ./cmd/hasenbau
 hasenbau init ~/meinbau
 ```
 
-Das legt das Layout an, macht den Bau zu einem Git-Repo mit Root-Commit —
-ohne den bekommt er bei opencode keine eigene Projekt-ID, und die
-Raum-Permissions der Hasen greifen nicht — und trägt den Rückkanal in die
-Bau-Config ein.
+Das legt das Layout an, macht den Bau zu einem Git-Repo mit Root-Commit
+und trägt den Rückkanal in die Bau-Config ein. Den Root-Commit braucht
+opencode: ohne ihn bekommt der Bau keine eigene Projekt-ID, und die
+Raum-Permissions der Hasen greifen nicht.
 
 Jeder weitere Befehl braucht den Bau: entweder `-bau ~/meinbau` **vor**
 dem Unterbefehl oder einmal `cd ~/meinbau`, denn der Vorgabewert ist das
@@ -153,7 +152,7 @@ hasenbau describe lauf <id>    # Notizen aus dem Rückkanal, Fehler, Tool-Calls
 Ging der Lauf schief, steht der Grund in `describe lauf` und das
 `$WORK`-Verzeichnis bleibt absichtlich liegen — mit dem Log jedes Gangs
 darin. `describe bau` zählt solche Reste ab da als offenen Punkt: sie
-sind Nachlass zum Ansehen, kein Fehler.
+sind Nachlass zum Ansehen.
 
 Erst wenn das stimmt, lohnt der Daemon — der macht dasselbe, nur ohne
 dass jemand danebensteht.
@@ -171,11 +170,11 @@ hasenbau daemon
 Beendet wird er mit Ctrl-C oder `SIGTERM`; beides ist derselbe Weg, er
 meldet `sauber beendet` und geht mit 0. Ein Lauf, der dabei mitten in der
 Arbeit ist, wird als `aborted` geschlossen — sein `$WORK`-Verzeichnis
-bleibt absichtlich liegen, `describe bau` erinnert später daran.
+bleibt liegen, `describe bau` erinnert später daran.
 
 **Definitionen liest der Daemon beim Start.** Wer an `auftraege/`,
 `hasen/` oder `hasenbau.yaml` etwas ändert, startet ihn neu; Material in
-den Räumen ist davon natürlich nicht betroffen, das ist ja der Trigger.
+den Räumen ist davon nicht betroffen, das ist ja der Trigger.
 
 **Ein `hasenbau lauf` daneben ist erlaubt** und der normale Weg, einen
 einzelnen Auftrag zu prüfen, während der Daemon läuft: er startet seinen
@@ -184,7 +183,7 @@ sich beide im WAL-Modus. Der Auftrags-Deckel (`throttle:`) gilt für ihn
 nicht — wer selbst davorsteht, wartet nicht auf das nächste Fenster —,
 gezählt wird sein Lauf trotzdem.
 
-Wird der Prozess **hart** abgeschossen (`kill -9`, Stromausfall), bleiben
+Wird der Prozess hart abgeschossen (`kill -9`, Stromausfall), bleiben
 Läufe als `running` in der Datenbank stehen. Der nächste Start von
 `daemon` oder `lauf` räumt sie ab: geprüft wird, ob der Wirt-Prozess noch
 lebt, tote Zeilen werden als `aborted` mit Grund geschlossen und stehen
@@ -214,9 +213,6 @@ systemctl --user stop hasenbau            # stoppen (SIGTERM, sauberes Ende)
 journalctl --user -u hasenbau -f          # zusehen
 hasenbau status                           # was liegt hier, was ist passiert
 ```
-
-Nach einem Rebuild des Binaries an einen anderen Pfad zieht der nächste
-Start den Rückkanal-Eintrag automatisch nach und sagt es im Log.
 
 ## Benutzen
 
@@ -255,7 +251,8 @@ und `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
 `hasenbau dig`. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er von `hasenbau init`, und
 jeder Daemon- oder Lauf-Start korrigiert den Eintrag auf das gerade
-laufende Binary.
+laufende Binary und sagt es im Log — auch nach einem Rebuild an einen
+anderen Pfad.
 
 `hasenbau baumeister <lauf-id|auftrag>` setzt den Baumeister auf einen
 Lauf an: er liest dessen Trace und schreibt daraus einen Gang-Entwurf
@@ -331,16 +328,14 @@ Auslösen — `lauf`, `baumeister`, `daemon` — bleiben davon unberührt.
 
 Zwei Fragen, zwei Befehle: **`describe bau`** prüft (Layout, Git-Commit,
 Bau-Config, Rückkanal-Binary, generierte Agenten, liegengebliebene
-$WORK-Reste), **`status`** zeigt nur. Die zwei Prüfungen, die am
-meisten wert sind, sind die unauffälligsten: ein Bau ohne Git-Commit
-bekommt bei opencode keine eigene Projekt-ID, und ohne die greifen die
-Raum-Permissions nicht; ein Rückkanal-Eintrag auf ein verschwundenes
-Binary nimmt den Hasen still ihre Werkzeuge weg. Beides merkt man sonst
-erst an einem Lauf, der komisch aussieht.
+$WORK-Reste), **`status`** zeigt nur. Am meisten wert sind dabei die zwei
+unauffälligsten Prüfungen: der Root-Commit von oben und der
+Rückkanal-Eintrag — zeigt der auf ein verschwundenes Binary, nimmt er den
+Hasen still ihre Werkzeuge weg.
 
-Dass ein Bau seine custom Provider selbst mitbringt, ist keine Schlamperei
-im Setup, sondern die Isolation (PLAN.md §3): `auth.json` teilt die
-Schlüssel, die Definitionen bleiben im Bau. Deshalb der handgepflegte
+Dass ein Bau seine custom Provider selbst mitbringt, folgt aus der
+Isolation (PLAN.md §3): `auth.json` teilt die Schlüssel, die
+Definitionen bleiben im Bau. Deshalb der handgepflegte
 `provider:`-Block aus Schritt 2 oben, und deshalb schreibt `hasenbau
 provider fetch` die Modell-Liste nie automatisch, sondern zeigt erst den
 Diff.
