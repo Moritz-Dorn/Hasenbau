@@ -31,6 +31,21 @@ HASENBAU_SMOKE=1 HASENBAU_SMOKE_MODEL=scc/kit.glm-5.2-753b \
 Test-Bau für manuelle Experimente: `~/SRC/meinHasenbau` (außerhalb des
 Repos, siehe Leckage-Abschnitt).
 
+## Testdisziplin
+
+Ein Test zu einem Fix oder einer Invariante muss gegen die Fassung
+**ohne** den Fix rot sein. Ist er es nicht, sichert er nichts —
+gegenprüfen: Datei sichern, `git checkout` der alten Fassung, Test
+laufen lassen, zurückkopieren. Gemessen an einem echten Fall: der erste
+Test zum Bau-weiten Deckel (Hasenbau-cvf) war auch ohne die Sperre grün,
+weil das Fenster zwischen Prüfung und Eintrag zu schmal war.
+
+Ein Test, der isoliert grün und in der vollen Suite rot ist, ist ein
+Verdacht gegen den **Code**, nicht gegen den Test. Last macht Annahmen
+über Reihenfolge und Nebenläufigkeit sichtbar; zweimal belegt
+(Hasenbau-eav, Hasenbau-do0.1). Erst die Ursache suchen, dann über
+Testtoleranz nachdenken.
+
 ## Git-Workflow
 
 Wer einen Bead schließt, committet auch die zugehörigen Änderungen —
@@ -40,6 +55,10 @@ im selben Arbeitsgang, nicht „später":
   Beads-Export dürfen getrennte Commits sein). Bead-ID in die
   Commit-Message, wenn der Commit einen Bead abschließt.
 - Vorher Quality-Gates: `go vet ./...` und `go test ./...`.
+- Doku heißt drei Orte, nicht einen: PLAN.md (das Warum), README.md (was
+  ein Nutzer sieht) und das Gerüst in `cmd/hasenbau/new.go` (neue
+  Frontmatter-Felder auskommentiert eintragen). Berührt die Änderung ein
+  Feld, einen Befehl oder eine Ausgabe, sind alle drei fällig.
 - **Push weiterhin nur auf ausdrückliche Aufforderung.**
 - Eigenheit: Der Beads-pre-commit-Hook exportiert `.beads/issues.jsonl`
   *während* des Commits — bleibt die Datei danach modified, gehört sie
