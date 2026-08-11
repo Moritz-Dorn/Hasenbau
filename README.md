@@ -110,6 +110,8 @@ Wer 200 PDFs auf einmal ablegt, will sie selten alle sofort verarbeitet
 haben. `throttle: {max: 5, per: 1h}` deckelt einen Auftrag auf fünf
 Läufe je rollender Stunde; der Rest wartet in `sources/`, denn die
 Warteschlange ist das Dateisystem und übersteht damit jeden Neustart.
+Abgearbeitet wird der älteste Input zuerst — je Auftrag von genau einem
+Arbeiter, nacheinander.
 Gezählt wird aus der Lauf-Historie statt aus einem Zähler im Speicher —
 sonst bekäme ausgerechnet ein Crash-Loop nach jedem Neustart frisches
 Budget. Gescheiterte Läufe zählen mit: gekostet haben sie trotzdem.
