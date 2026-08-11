@@ -72,7 +72,15 @@ var files = map[string]string{
 
 // Init legt das Layout unter root an. Vorhandenes bleibt unangetastet;
 // zurückgegeben werden die tatsächlich neu angelegten Pfade (relativ).
-func Init(root string) ([]string, error) {
+//
+// exe ist der Pfad des laufenden Binaries — er wandert in den
+// Rückkanal-Eintrag der Bau-Config (§8). Ihn hier schon zu setzen ist
+// kein Vorgriff auf den Daemon-Start: eine Bau-Config ohne `mcp.hasenbau`
+// ist unvollständig, `describe bau` meldet sie als offenen Punkt, und ein
+// frischer Bau soll nicht mit einem Befund auf die Welt kommen. Der
+// Eintrag entsteht vor dem Root-Commit, damit er darin steht statt den
+// Bau ab dem ersten Lauf schmutzig zu machen.
+func Init(root, exe string) ([]string, error) {
 	if fi, err := os.Stat(root); err == nil && !fi.IsDir() {
 		return nil, fmt.Errorf("bau: %s existiert und ist kein Verzeichnis", root)
 	}
@@ -104,6 +112,11 @@ func Init(root string) ([]string, error) {
 			return created, fmt.Errorf("bau: %s schließen: %w", rel, err)
 		}
 		created = append(created, rel)
+	}
+
+	// Nach den Dateien (die Config muss liegen) und vor dem Commit.
+	if _, err := EnsureMCP(root, exe); err != nil {
+		return created, err
 	}
 
 	initialisiert, err := gitSicherstellen(root)

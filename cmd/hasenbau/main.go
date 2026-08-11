@@ -132,7 +132,21 @@ func run(args []string, out, errw io.Writer) int {
 }
 
 func cmdInit(pfad string, out, errw io.Writer) int {
-	created, err := bau.Init(pfad)
+	// Absolut, wie das -bau-Flag auch: der Pfad landet im
+	// Rückkanal-Eintrag, und den startet opencode mit einem CWD, das
+	// nicht das des Aufrufers ist — `init testbau` würde sonst zu
+	// `-bau testbau` relativ zum Bau selbst.
+	pfad, err := filepath.Abs(pfad)
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau: Bau-Pfad: %v\n", err)
+		return 1
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau: eigenen Pfad bestimmen: %v\n", err)
+		return 1
+	}
+	created, err := bau.Init(pfad, exe)
 	for _, c := range created {
 		fmt.Fprintf(out, "angelegt: %s\n", c)
 	}
@@ -143,6 +157,7 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	if len(created) == 0 {
 		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
 	} else {
+		fmt.Fprintf(out, "Rückkanal eingetragen: %s (wird bei jedem Start auf das laufende Binary korrigiert).\n", exe)
 		fmt.Fprintln(out, "Hinweis: custom Provider brauchen ihr Gerüst (npm, options.baseURL) im provider:-Block von .opencode-home/opencode/opencode.json — auth.json teilt nur Credentials (PLAN.md §3).")
 		fmt.Fprintln(out, "Die Modell-Liste holt danach `hasenbau provider fetch <provider-id>`.")
 	}
