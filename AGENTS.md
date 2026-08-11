@@ -93,6 +93,14 @@ Meldungstexte der CLI und Testfunktionsnamen sind deutsch. Die
 Zustandswerte eines Laufs (`running`, `ok`, `failed`, `aborted`) sind
 Daten, keine Prosa — sie stehen englisch in der DB und in der Ausgabe.
 
+**Auch Beads sind Prosa.** Ein deutscher Feldname in einem Bead-Titel
+ist eine Beschreibung, kein Spec — für den Formatschlüssel gilt die
+Regel oben. Präzedenz: PLAN.md §8 schrieb `manuell:` und `datei:`,
+implementiert wurden `manual:` und `file:`; der Bead Hasenbau-4cx.3 hieß
+„ueberwacht: im Auftragsformat", gebaut wurde `monitored:`. Beim ersten
+neuen Frontmatter-Feld eines Beads also kurz rückfragen, statt den
+deutschen Namen zu übernehmen.
+
 Sprachlich strikt trennen: **Hasenbau** ist dieses Projekt/Programm,
 ein **Bau** ist eine mit `hasenbau init` erzeugte Instanz (eigenes
 Git-Repo, ohne AGENTS.md/CLAUDE.md). „Der Hasenbau" meint nie einen Bau.
