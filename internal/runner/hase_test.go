@@ -419,8 +419,49 @@ func TestAuftragsZeitlimitSchlaegtVorgabe(t *testing.T) {
 		Logf:           t.Logf,
 	}
 	_, err := r.Execute(ctx, a, "manual", "")
-	if err == nil || !strings.Contains(err.Error(), "300ms") {
+	// Auf die Erklärung prüfen, nicht nur auf die Zahl: die alte Fassung
+	// lieferte je nach Zufall „prompt: context deadline exceeded" und
+	// damit weder das eine noch das andere (Hasenbau-eav).
+	if err == nil || !strings.Contains(err.Error(), "300ms") || !strings.Contains(err.Error(), "Zeitlimit") {
 		t.Fatalf("erwartet: Abbruch nach dem Limit des Auftrags, bekam %v", err)
+	}
+}
+
+// Hasenbau-eav: Dieselbe Lage kommt über zwei Zweige herein — über
+// ctx.Done() und über den am selben Kontext abgebrochenen Prompt-Call.
+// Welcher zuerst dran ist, entscheidet select zufällig, deshalb muss die
+// Entscheidung an einer Stelle stehen. Hier direkt geprüft: ohne Uhr,
+// ohne Server, ohne Zufall.
+func TestZeitlimitFehlerUnterscheidetTimeoutVonAbbruch(t *testing.T) {
+	begonnen := time.Now().Add(-2 * time.Second)
+
+	// Eigenes Zeitlimit zugeschlagen, von außen kam nichts.
+	abgelaufen, stop := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
+	defer stop()
+	err := zeitlimitFehler(abgelaufen, context.Background(), begonnen, 30*time.Minute, "ses_1")
+	if err == nil {
+		t.Fatal("kein Fehler bei abgelaufenem Zeitlimit")
+	}
+	for _, muss := range []string{"Zeitlimit", "30m", "ses_1", "2s"} {
+		if !strings.Contains(err.Error(), muss) {
+			t.Errorf("Meldung ohne %q: %v", muss, err)
+		}
+	}
+	// Gekürzte Schreibweise, nicht „30m0s".
+	if strings.Contains(err.Error(), "30m0s") {
+		t.Errorf("ungekürzte Dauer: %v", err)
+	}
+
+	// Strg-C: der äußere Kontext ist zu, das ist kein Zeitlimit-Fall.
+	obenZu, obenStop := context.WithCancel(context.Background())
+	obenStop()
+	if err := zeitlimitFehler(abgelaufen, obenZu, begonnen, time.Minute, "ses_1"); err != nil {
+		t.Errorf("Abbruch von außen als Zeitlimit gemeldet: %v", err)
+	}
+
+	// Nichts abgelaufen: kein Fehler.
+	if err := zeitlimitFehler(context.Background(), context.Background(), begonnen, time.Minute, "ses_1"); err != nil {
+		t.Errorf("Fehler ohne Anlass: %v", err)
 	}
 }
 

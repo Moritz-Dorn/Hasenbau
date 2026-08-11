@@ -213,6 +213,24 @@ func (h haseResult) alsErgebnis() store.LaufResult {
 // mehr als busy. Der dritte ist der einzige, der sich nachfragen lässt
 // statt abgewartet werden zu müssen, und deshalb der einzige, der ein
 // verlorenes Ereignis überlebt (Hasenbau-0f4).
+// zeitlimitFehler liefert die erklärende Meldung, wenn das eigene
+// Zeitlimit zugeschlagen hat, sonst nil. `oben` ist der Kontext ohne
+// Limit und unterscheidet damit Timeout von Strg-C.
+//
+// Eine Funktion und keine zwei Stellen, weil dieselbe Lage über zwei
+// Zweige hereinkommt: über ctx.Done() und über den abgebrochenen
+// Prompt-Call. „context deadline exceeded" sagt niemandem, was zu tun
+// ist. Gemessen: ein Baumeister auf einem großen Trace braucht zwischen
+// 3 und über 30 Minuten — dasselbe Material, dasselbe Modell
+// (Hasenbau-0f4, Hasenbau-eav).
+func zeitlimitFehler(ctx, oben context.Context, begonnen time.Time, timeout time.Duration, sessionID string) error {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) || oben.Err() != nil {
+		return nil
+	}
+	return fmt.Errorf("hase: nach %s abgebrochen — das Zeitlimit für den LLM-Schritt ist %s (Session %s lief noch)",
+		time.Since(begonnen).Round(time.Second), auftrag.FormatDuration(timeout), sessionID)
+}
+
 func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt string, logf func(string, ...any)) (haseResult, error) {
 	// Der Auftrag gewinnt gegen die Vorgabe: er weiß, was seine Arbeit
 	// kostet. Für einen Einsortier-Lauf sind 30 Minuten großzügig, ein
@@ -298,6 +316,16 @@ warten:
 				grund = "den Prompt-Call"
 				break warten // synchroner Call kam sauber zurück
 			}
+			// Zuerst: war es das eigene Zeitlimit? Der Prompt-Call hängt
+			// am selben ctx. Schlägt das Limit zu, bevor das erste
+			// Stream-Event da ist, meldet dieser Zweig sonst „prompt:
+			// context deadline exceeded" — dieselbe Lage, die zwei Zeilen
+			// weiter unten erklärt wird, nur unbrauchbar formuliert.
+			// Welcher der beiden Zweige zuerst dran ist, entscheidet
+			// select zufällig; unter Last kippte es (Hasenbau-eav).
+			if abbruch := zeitlimitFehler(ctx, oben, begonnen, timeout, sess.ID); abbruch != nil {
+				return erg, abbruch
+			}
 			if !gesehen {
 				// Server hat den Prompt abgelehnt, bevor irgendetwas
 				// lief (Config-/Agent-Fehler) — nicht auf idle warten.
@@ -333,13 +361,8 @@ warten:
 				break warten
 			}
 		case <-ctx.Done():
-			// „context deadline exceeded" sagt niemandem, was zu tun
-			// ist. Gemessen: ein Baumeister auf einem großen Trace
-			// braucht zwischen 3 und über 30 Minuten — dasselbe
-			// Material, dasselbe Modell (Hasenbau-0f4).
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) && oben.Err() == nil {
-				return erg, fmt.Errorf("hase: nach %s abgebrochen — das Zeitlimit für den LLM-Schritt ist %s (Session %s lief noch)",
-					time.Since(begonnen).Round(time.Second), timeout, sess.ID)
+			if abbruch := zeitlimitFehler(ctx, oben, begonnen, timeout, sess.ID); abbruch != nil {
+				return erg, abbruch
 			}
 			return erg, fmt.Errorf("hase: %w", ctx.Err())
 		}
