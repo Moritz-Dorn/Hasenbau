@@ -408,6 +408,7 @@ monitored: true                    # Befunde routinemäßig melden (§8)
 throttle:                          # höchstens so viele Läufe je Fenster
   max: 5
   per: 1h
+  between: "22:00-06:00"           # und nur nachts starten (Ortszeit)
 
 raeume:
   input: raeume/laderampe/sources/
@@ -468,6 +469,33 @@ Drei Entscheidungen dahinter:
   Auftrags braucht dieselbe Sperre. Ist kein Platz frei, wird die Sperre
   wieder abgegeben: ein schlafender Arbeiter darf einen cron-Lauf nicht
   eine Stunde lang blockieren.
+
+**`between:` begrenzt die Tageszeit, zu der ein Lauf starten darf** ✅
+*(2026-08-11, Hasenbau-do0.3)*. `"22:00-06:00"`, in **Ortszeit** —
+„nachts" meint die Nacht des Menschen, der den Bau betreibt, nicht die
+von UTC. Damit hängt das Verhalten an der Zeitzone der Maschine; das ist
+gewollt und steht deshalb hier.
+
+Vier Regeln, die im Code stehen und nicht im Prompt:
+
+- **Nur der Start.** Ein Lauf, der um 05:55 beginnt und eine halbe
+  Stunde braucht, läuft zu Ende. Ein Fenster, das mitten ins Schreiben
+  schneidet, produziert halbe Ergebnisse.
+- **Über Mitternacht ist der Normalfall**, nicht der Sonderfall. Ein
+  Parser, der nur `06:00-22:00` kann, wäre für den gemeinten Zweck
+  nutzlos.
+- **Halboffen [von, bis).** Um 06:00 startet nichts mehr; sonst hinge an
+  der Sekunde, ob noch einer losgeht. `"22:00-22:00"` ist ein
+  Ladefehler — leeres Fenster oder ganzer Tag ist nicht zu entscheiden.
+- **Gewartet wird in Häppchen von höchstens einer Minute**, danach wird
+  neu gerechnet. Ein Tagesfenster hängt an der Wanduhr, und die springt:
+  NTP, Sommerzeit, ein zugeklappter Laptop. Ein einziger Timer über acht
+  Stunden wachte dann eine Stunde daneben auf.
+
+`between` ohne `max`/`per` ist erlaubt („nur nachts, so viele wie
+nötig"), aber es **verschiebt nur und deckelt nicht**: 200 Dateien um 14
+Uhr abgelegt heißen dann 200 Läufe zwischen 22 und 6. Die beiden Knöpfe
+gehören meist zusammen.
 
 **`hasenbau lauf` umgeht den Deckel, zählt aber mit.** Von Bauart, nicht
 aus Versehen: die Drossel sitzt im Watcher, und der manuelle Weg geht

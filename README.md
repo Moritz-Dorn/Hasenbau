@@ -115,6 +115,11 @@ sonst bekäme ausgerechnet ein Crash-Loop nach jedem Neustart frisches
 Budget. Gescheiterte Läufe zählen mit: gekostet haben sie trotzdem.
 `hasenbau lauf` umgeht den Deckel, zählt aber mit.
 
+`between: "22:00-06:00"` kommt dazu, wenn die Arbeit nur nachts laufen
+soll — Ortszeit, über Mitternacht erlaubt. Es begrenzt nur den *Start*:
+ein Lauf, der um 05:55 beginnt, läuft zu Ende. Und es verschiebt nur,
+statt zu deckeln; wer beides will, setzt beides.
+
 Ein Auftrag mit `monitored: true` im Frontmatter wird routinemäßig
 beurteilt: seine Befunde stehen dann in `hasenbau status`, ohne dass
 jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet
