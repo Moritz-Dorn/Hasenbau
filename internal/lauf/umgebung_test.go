@@ -13,7 +13,7 @@ func watchAuftrag() *auftrag.Auftrag {
 	return &auftrag.Auftrag{
 		Name:    "pdf-einlagern",
 		Hase:    "archivar",
-		Trigger: auftrag.Trigger{Watch: "raeume/laderampe/sources/*.pdf"},
+		Trigger: auftrag.Trigger{Watch: "*.pdf"},
 		Raeume: map[string]string{
 			"input": "raeume/laderampe/sources/",
 			"work":  "raeume/laderampe/work/",
@@ -59,7 +59,7 @@ func TestNeueValidiert(t *testing.T) {
 	if _, err := Neue(root, watchAuftrag(), "lauf-001", ""); err == nil || !strings.Contains(err.Error(), "auslösende Datei fehlt") {
 		t.Errorf("watch ohne input: %v", err)
 	}
-	if _, err := Neue(root, cronAuftrag, "lauf-001", "x.pdf"); err == nil || !strings.Contains(err.Error(), "cron-Trigger mit $INPUT") {
+	if _, err := Neue(root, cronAuftrag, "lauf-001", "x.pdf"); err == nil || !strings.Contains(err.Error(), "cron-Trigger mit Auslöser") {
 		t.Errorf("cron mit input: %v", err)
 	}
 	if _, err := Neue(root, watchAuftrag(), "../boese", "x.pdf"); err == nil {
@@ -70,7 +70,7 @@ func TestNeueValidiert(t *testing.T) {
 	}
 }
 
-// TestManuellBindetInputUndHasenbau: bei manuell ist $INPUT das
+// TestManuellBindetInputUndHasenbau: bei manual ist $TRIGGER_ARG das
 // übergebene Argument (optional, kein Pfad), und $HASENBAU zeigt auf
 // das laufende Binary — ohne das findet ein Gang den Hasenbau nicht,
 // wenn der Daemon mit absolutem Pfad gestartet wurde.
@@ -82,7 +82,7 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 		Raeume:  map[string]string{"work": "raeume/baumeister/work/", "out": "gaenge/entwurf/"},
 	}
 
-	// Ohne Argument: erlaubt, $INPUT bleibt ungebunden.
+	// Ohne Argument: erlaubt, $TRIGGER_ARG bleibt ungebunden.
 	ohne, err := Neue(root, a, "lauf-001", "")
 	if err != nil {
 		t.Fatal(err)
@@ -90,15 +90,15 @@ func TestManuellBindetInputUndHasenbau(t *testing.T) {
 	if ohne.TriggerKind != auftrag.TriggerManual {
 		t.Errorf("TriggerKind = %q", ohne.TriggerKind)
 	}
-	if _, err := ohne.Substitute("graben $INPUT"); err == nil {
-		t.Error("$INPUT ohne Argument muss ein Fehler sein")
+	if _, err := ohne.Substitute("graben $TRIGGER_ARG"); err == nil {
+		t.Error("$TRIGGER_ARG ohne Argument muss ein Fehler sein")
 	}
 
 	u, err := Neue(root, a, "lauf-002", "8")
 	if err != nil {
 		t.Fatal(err)
 	}
-	zeile, err := u.Substitute(`"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"`)
+	zeile, err := u.Substitute(`"$HASENBAU" graben "$TRIGGER_ARG" > "$WORK/trace.md"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestErsetze(t *testing.T) {
 	}
 
 	// Die Gang-Zeile aus dem §6-Beispiel.
-	zeile, err := u.Substitute(`gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"`)
+	zeile, err := u.Substitute(`gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestErsetzeFehler(t *testing.T) {
 
 	// Kein stilles Leerersetzen: der Fehlerfall liefert leeren String
 	// UND einen Fehler, nie den halb substituierten Text.
-	s, err := u.Substitute("$INPUT und $HOME")
+	s, err := u.Substitute("$TRIGGER_FILE und $HOME")
 	if err == nil || s != "" {
 		t.Errorf("teilweise Substitution durchgereicht: %q, %v", s, err)
 	}
@@ -174,8 +174,8 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := u.Substitute("lies $INPUT"); err == nil || !strings.Contains(err.Error(), "$INPUT ist bei watch-Triggern gebunden") {
-		t.Errorf("$INPUT bei cron: %v", err)
+	if _, err := u.Substitute("lies $TRIGGER_FILE"); err == nil || !strings.Contains(err.Error(), "nur bei watch-Triggern gebunden") {
+		t.Errorf("$TRIGGER_FILE bei cron: %v", err)
 	}
 	if _, err := u.Substitute("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "Rolle work") {
 		t.Errorf("$WORK ohne work-Raum: %v", err)
@@ -187,9 +187,10 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 func TestNeueLehntShellZeichenImInputAb(t *testing.T) {
 	a, err := auftrag.Parse("pdf-einlagern", []byte(`---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  watch: "*.pdf"
 hase: archivar
 raeume:
+  input: raeume/laderampe/sources/
   work: raeume/werkstatt/
 ---
 Sortiere ein.

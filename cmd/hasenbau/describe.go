@@ -251,9 +251,9 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 	ab := newSection(out)
 	ab.field("Auftrag", "%s", a.Name)
 	ab.field("Datei", "auftraege/%s.md", a.Name)
-	ab.field("Trigger", "%s", triggerShort(a.Trigger))
+	ab.field("Trigger", "%s", triggerShort(a))
 	if a.Trigger.Watch != "" {
-		if n, err := filepath.Glob(filepath.Join(root, a.Trigger.Watch)); err == nil {
+		if n, err := filepath.Glob(filepath.Join(root, a.WatchGlob())); err == nil {
 			ab.field("", "%d Datei(en) liegen gerade im Glob", len(n))
 		}
 		if a.Trigger.Debounce > 0 {

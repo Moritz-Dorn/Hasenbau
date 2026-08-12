@@ -19,9 +19,10 @@ import (
 // auftragMD ist der §6-Beispiel-Auftrag, minimal gekürzt.
 const auftragMD = `---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  watch: "*.pdf"
 hase: archivar
 raeume:
+  input: raeume/laderampe/sources/
   work: raeume/laderampe/work/
   out:  raeume/lager/
 ---

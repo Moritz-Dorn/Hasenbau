@@ -60,7 +60,11 @@ const (
 
 // Trigger ist genau eines von dreien: Datei-Watch, Cron oder manuell.
 type Trigger struct {
-	Watch    string        // Glob, Bau-relativ
+	// Watch ist das Muster ALLEIN, relativ zum input-Raum des Auftrags —
+	// nicht der ganze Pfad. Der Eingang steht genau einmal im Auftrag,
+	// nämlich unter raeume: input:, und WatchGlob setzt beides zusammen
+	// (Hasenbau-d6d).
+	Watch    string
 	Cron     string        // Standard-Cron (5 Felder)
 	Manual   bool          // läuft nur auf Zuruf (hasenbau lauf / hasenbau baumeister)
 	Debounce time.Duration // nur bei Watch
@@ -69,7 +73,7 @@ type Trigger struct {
 // Art nennt die Trigger-Art des Auftrags. Nicht zu verwechseln mit dem
 // Trigger einer laeufe-Zeile (§5): ein watch-Auftrag, den `hasenbau
 // lauf` startet, läuft als DB-Trigger 'manuell' — seine Art bleibt
-// 'watch', und daran hängt die Pfad-Semantik von $INPUT.
+// 'watch', und daran hängt, welche Auslöser-Variable gebunden ist.
 func (t Trigger) Kind() string {
 	switch {
 	case t.Cron != "":
@@ -79,6 +83,25 @@ func (t Trigger) Kind() string {
 	default:
 		return TriggerWatch
 	}
+}
+
+// RolleInput ist die Raum-Rolle, aus der ein watch-Auftrag seinen
+// Eingang bezieht. Sie ist bei watch Pflicht (Parse besteht darauf) und
+// bei den anderen Trigger-Arten frei — dort ist sie der Suchraum, den
+// Gänge über $RAUM_input ansprechen.
+const RolleInput = "input"
+
+// WatchGlob ist der Pfad, den der Watcher tatsächlich beobachtet:
+// input-Raum plus Muster. Leer, wenn der Auftrag kein watch-Trigger ist.
+//
+// Nur hier werden die beiden Hälften zusammengesetzt — Watcher, `get`
+// und `findings` fragen diese Methode, statt selbst zu joinen. Sonst
+// stünde die Regel an vier Stellen und liefe auseinander.
+func (a *Auftrag) WatchGlob() string {
+	if a.Trigger.Watch == "" {
+		return ""
+	}
+	return filepath.Join(a.Raeume[RolleInput], a.Trigger.Watch)
 }
 
 // Throttle ist der Deckel eines Auftrags: höchstens Max Läufe je Per
@@ -406,7 +429,17 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("debounce gilt nur für watch-Trigger")
 		}
 	default:
-		if err := BauRelative(a.Trigger.Watch); err != nil {
+		if err := pruefeWatchMuster(a.Trigger.Watch); err != nil {
+			return nil, fehler("trigger.watch: %v", err)
+		}
+		// Der Eingang ist ein Raum, kein Pfad im Glob (Hasenbau-d6d).
+		// Ohne ihn wüsste der Watcher nicht, wo er suchen soll — und ein
+		// stiller Rückfall auf den Bau-Root hieße, den ganzen Bau zu
+		// beobachten.
+		if a.Raeume[RolleInput] == "" {
+			return nil, fehler("watch-Trigger ohne Raum %q — der Eingang steht unter raeume: input:, watch: trägt nur das Muster", RolleInput)
+		}
+		if err := BauRelative(a.WatchGlob()); err != nil {
 			return nil, fehler("trigger.watch: %v", err)
 		}
 	}
@@ -514,20 +547,15 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		a.After = append(a.After, schritt)
 	}
 
-	// $INPUT eines manuell-Auftrags ist ein freies Argument von der
-	// Kommandozeile, kein Pfad — wer es als Datei liest oder verschiebt,
-	// arbeitet auf einer Datei, die es nie gab. Lieber hier ablehnen als
-	// mitten im Lauf danebengreifen.
-	if a.Trigger.Manual {
-		for i, k := range a.Context {
-			if containsInput(k.File) {
-				return nil, fehler("kontext %d: $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1)
-			}
-		}
-		for i, n := range a.After {
-			if containsInput(n.From) || containsInput(n.To) {
-				return nil, fehler("nachher %d (%s): $INPUT ist bei manuell-Triggern kein Pfad, sondern das übergebene Argument", i+1, n.Action)
-			}
+	// Die Auslöser-Variable muss zur Trigger-Art passen. Früher war das
+	// eine Sonderregel für manuell-Aufträge („$INPUT ist hier kein
+	// Pfad"); seit der Auslöser zwei Namen hat, ist es eine Symmetrie:
+	// gebunden ist genau der Name, den die Trigger-Art hergibt, und wer
+	// den anderen schreibt, bekommt es beim Laden gesagt statt mitten im
+	// Lauf (Hasenbau-d6d).
+	for _, stelle := range a.ausloeserStellen() {
+		if err := pruefeAusloeserVariablen(a.Trigger.Kind(), stelle.text); err != nil {
+			return nil, fehler("%s: %v", stelle.wo, err)
 		}
 	}
 
@@ -537,11 +565,83 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	return a, nil
 }
 
-// inputPattern trifft $INPUT, aber nicht $INPUTS o.ä. — dieselbe
-// Wortgrenze, die lauf.Ersetze zieht.
-var inputPattern = regexp.MustCompile(`\$INPUT([^A-Za-z0-9_]|$)`)
+// Namen der Auslöser-Variablen (§6). Gebunden ist immer höchstens eine,
+// und welche, sagt die Trigger-Art.
+const (
+	VarTriggerFile = "TRIGGER_FILE" // watch: die auslösende Datei, ein Pfad
+	VarTriggerArg  = "TRIGGER_ARG"  // manual: das Argument von `hasenbau lauf`, freier Text
+	VarInput       = "INPUT"        // abgeschafft, wird nur noch erkannt, um es zu erklären
+)
 
-func containsInput(s string) bool { return inputPattern.MatchString(s) }
+// AusloeserVariable nennt die Variable, die bei dieser Trigger-Art
+// gebunden ist — leer bei cron, wo es keinen Auslöser gibt.
+func AusloeserVariable(kind string) string {
+	switch kind {
+	case TriggerWatch:
+		return VarTriggerFile
+	case TriggerManual:
+		return VarTriggerArg
+	default:
+		return ""
+	}
+}
+
+// variablePattern trifft $NAME mit Wortgrenze — dieselbe, die
+// lauf.Substitute zieht, damit hier nichts durchrutscht, was dort
+// ersetzt würde.
+var variablePattern = regexp.MustCompile(`\$([A-Z][A-Za-z0-9_]*)`)
+
+// ausloeserStelle ist ein Feld, dessen Text substituiert wird, samt
+// seiner Bezeichnung für die Fehlermeldung.
+type ausloeserStelle struct {
+	wo   string
+	text string
+}
+
+// ausloeserStellen sammelt alles, was lauf.Substitute später anfasst.
+// Die Gänge gehören dazu: dort fiele der Fehler sonst erst auf, wenn der
+// Lauf schon begonnen hat.
+func (a *Auftrag) ausloeserStellen() []ausloeserStelle {
+	var stellen []ausloeserStelle
+	for i, g := range a.Gaenge {
+		stellen = append(stellen, ausloeserStelle{fmt.Sprintf("gang %d (%s)", i+1, g.Name), g.Run})
+	}
+	for i, k := range a.Context {
+		stellen = append(stellen, ausloeserStelle{fmt.Sprintf("kontext %d", i+1), k.File})
+	}
+	for i, n := range a.After {
+		wo := fmt.Sprintf("nachher %d (%s)", i+1, n.Action)
+		stellen = append(stellen, ausloeserStelle{wo, n.From}, ausloeserStelle{wo, n.To})
+	}
+	return stellen
+}
+
+// pruefeAusloeserVariablen lehnt ab, was diese Trigger-Art nicht binden
+// kann. $INPUT bekommt eine eigene Meldung: es gab die Variable einmal,
+// und „unbekannte Variable" wäre für einen Auftrag aus der Zeit davor
+// eine Sackgasse statt eines Wegweisers (Hasenbau-d6d).
+func pruefeAusloeserVariablen(kind, text string) error {
+	gebunden := AusloeserVariable(kind)
+	for _, treffer := range variablePattern.FindAllStringSubmatch(text, -1) {
+		name := treffer[1]
+		switch name {
+		case VarInput:
+			if gebunden == "" {
+				return fmt.Errorf("$INPUT gibt es nicht mehr, und ein %s-Auftrag hat keinen Auslöser — der Bezug muss aus einem Raum kommen ($RAUM_<rolle>)", kind)
+			}
+			return fmt.Errorf("$INPUT heißt jetzt $%s (%s-Trigger)", gebunden, kind)
+		case VarTriggerFile, VarTriggerArg:
+			if name == gebunden {
+				continue
+			}
+			if gebunden == "" {
+				return fmt.Errorf("$%s ist bei einem %s-Auftrag nicht gebunden — cron hat keinen Auslöser", name, kind)
+			}
+			return fmt.Errorf("$%s ist bei einem %s-Auftrag nicht gebunden, hier gilt $%s", name, kind, gebunden)
+		}
+	}
+	return nil
+}
 
 // Load liest alle Aufträge unter <root>/auftraege/*.md und prüft, dass
 // jeder referenzierte Hase ein Template unter <root>/hasen/ hat.
@@ -572,7 +672,7 @@ func Load(root string) ([]*Auftrag, error) {
 	return auftraege, nil
 }
 
-// parseAfter zerlegt einen Schritt wie {move: "$INPUT -> raeume/archiv/"}.
+// parseAfter zerlegt einen Schritt wie {move: "$TRIGGER_FILE -> raeume/archiv/"}.
 // Pfade dürfen Variablen enthalten; substituiert wird erst im Runner.
 func parseAfter(schritt map[string]string) (After, error) {
 	if len(schritt) != 1 {
@@ -597,6 +697,41 @@ func parseAfter(schritt map[string]string) (After, error) {
 		}
 	}
 	return After{}, fmt.Errorf("leerer Schritt")
+}
+
+// globMeta sind die Zeichen, die filepath.Match als Muster liest.
+const globMeta = `*?[`
+
+// pruefeWatchMuster nimmt das Muster ohne den Raum davor. Zwei Formen
+// werden abgelehnt, beide mit Absicht ausführlich:
+//
+// Ein Muster, das wie der alte Bau-relative Pfad aussieht, ist die
+// häufigste Fassung aus der Zeit vor Hasenbau-d6d. Es würde sonst
+// klaglos an den input-Raum gehängt und ergäbe raeume/eingang/raeume/…,
+// also einen Auftrag, der nie feuert.
+//
+// Ein Meta-Zeichen vor einem Schrägstrich hieße, in Unterverzeichnisse
+// zu greifen, deren Namen erst zur Laufzeit feststehen. Das ist
+// Hasenbau-5xv und noch nicht gebaut; bis dahin ist ein Ladefehler
+// ehrlicher als ein Glob, der beim Start einmal trifft und danach nie
+// wieder (Hasenbau-h64).
+func pruefeWatchMuster(muster string) error {
+	if filepath.IsAbs(muster) {
+		return fmt.Errorf("muster %q muss relativ zum input-Raum sein, nicht absolut", muster)
+	}
+	if strings.HasPrefix(muster, "raeume/") {
+		return fmt.Errorf("muster %q sieht aus wie ein Bau-relativer Pfad — watch: trägt nur noch das Muster, der Eingang steht unter raeume: input:", muster)
+	}
+	segmente := strings.Split(filepath.ToSlash(muster), "/")
+	for i, teil := range segmente {
+		if teil == ".." {
+			return fmt.Errorf("muster %q darf den input-Raum nicht verlassen (..)", muster)
+		}
+		if i < len(segmente)-1 && strings.ContainsAny(teil, globMeta) {
+			return fmt.Errorf("muster %q hat ein Platzhalter-Zeichen im Verzeichnis-Anteil (%q) — das gibt es noch nicht", muster, teil)
+		}
+	}
+	return nil
 }
 
 // BauRelative erzwingt die Isolations-Invariante aus §3: Pfade in

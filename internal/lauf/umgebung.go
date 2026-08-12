@@ -18,13 +18,20 @@ import (
 // und die Permission-Patterns der Hasen ankern ebenfalls dort.
 type Environment struct {
 	Bau    string            // absoluter Bau-Root ($BAU)
-	Input  string            // Auslöser ($INPUT): auslösende Datei bei watch, freies Argument bei manuell
 	Work   string            // Scratch dieses Laufs ($WORK), leer ohne work-Raum
 	Raeume map[string]string // Rolle → Pfad ($RAUM_<rolle>)
 
+	// Der Auslöser trägt zwei Namen, weil er zwei Dinge sein kann und
+	// der Unterschied trägt: TriggerFile ist ein Bau-relativer Pfad und
+	// nur bei watch gesetzt — daran hängt die Quarantäne (§7).
+	// TriggerArg ist freier Text von der Kommandozeile und nur bei
+	// manual gesetzt; der Baumeister bekommt darüber eine Lauf-ID, keine
+	// Datei. Bei cron ist keines von beiden gesetzt (Hasenbau-d6d).
+	TriggerFile string
+	TriggerArg  string
+
 	// TriggerKind ist die Art des Auftrags (auftrag.TriggerWatch|Cron|
-	// Manuell), nicht der Trigger der laeufe-Zeile. Nur bei watch ist
-	// Input ein Pfad — daran hängt die Quarantäne (§7).
+	// Manual), nicht der Trigger der laeufe-Zeile.
 	TriggerKind string
 
 	// Hasenbau ist der absolute Pfad des laufenden Binaries
@@ -37,10 +44,11 @@ var laufIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // Neue legt fehlende Räume an (Räume sind Konvention, kein Vertrag —
 // §4), erzeugt das $WORK-Verzeichnis dieses Laufs und bindet die
-// Variablen. input ist bei watch der Bau-relative Pfad der auslösenden
-// Datei (Pflicht), bei cron verboten und bei manuell das übergebene
-// Argument (optional, kein Pfad).
-func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, error) {
+// Variablen. ausloeser ist bei watch der Bau-relative Pfad der
+// auslösenden Datei (Pflicht, wird zu $TRIGGER_FILE), bei manual das
+// übergebene Argument (optional, freier Text, wird zu $TRIGGER_ARG) und
+// bei cron verboten.
+func Neue(root string, a *auftrag.Auftrag, laufID, ausloeser string) (*Environment, error) {
 	// Ohne Lauf-Präfix: der einzige Aufrufer ist der Runner, und der
 	// setzt es selbst davor. Sonst stünde es zweimal in derselben Zeile
 	// (Hasenbau-vwr).
@@ -55,12 +63,12 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, 
 		return nil, fehler("ungültige Lauf-ID %q", laufID)
 	}
 	switch {
-	case a.Trigger.Watch != "" && input == "":
-		return nil, fehler("watch-Trigger ohne $INPUT — die auslösende Datei fehlt")
-	case a.Trigger.Cron != "" && input != "":
-		return nil, fehler("cron-Trigger mit $INPUT %q — woher kommt die Datei?", input)
+	case a.Trigger.Watch != "" && ausloeser == "":
+		return nil, fehler("watch-Trigger ohne Auslöser — die auslösende Datei fehlt ($TRIGGER_FILE)")
+	case a.Trigger.Cron != "" && ausloeser != "":
+		return nil, fehler("cron-Trigger mit Auslöser %q — woher kommt der?", ausloeser)
 	}
-	if err := checkInput(input); err != nil {
+	if err := checkAusloeser(ausloeser); err != nil {
 		return nil, fehler("%v", err)
 	}
 
@@ -71,10 +79,18 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, 
 
 	u := &Environment{
 		Bau:         root,
-		Input:       input,
 		Raeume:      a.Raeume,
 		TriggerKind: a.Trigger.Kind(),
 		Hasenbau:    exe,
+	}
+	// Welches Feld gefüllt wird, entscheidet die Trigger-Art — nicht der
+	// Wert. Sonst hinge an einem Argument, das zufällig wie ein Pfad
+	// aussieht, ob die Quarantäne zugreift.
+	switch u.TriggerKind {
+	case auftrag.TriggerWatch:
+		u.TriggerFile = ausloeser
+	case auftrag.TriggerManual:
+		u.TriggerArg = ausloeser
 	}
 	for rolle, pfad := range a.Raeume {
 		if err := os.MkdirAll(filepath.Join(root, pfad), 0o755); err != nil {
@@ -90,13 +106,13 @@ func Neue(root string, a *auftrag.Auftrag, laufID, input string) (*Environment, 
 	return u, nil
 }
 
-// shellUnsafe sind die Zeichen, mit denen ein Input aus dem "$INPUT"
-// einer Gang-Zeile ausbrechen kann: Anführungszeichen beenden die
-// Quotierung, Backtick und $ starten eine Substitution, der Backslash
-// hebelt das Escaping aus.
+// shellUnsafe sind die Zeichen, mit denen ein Auslöser aus dem
+// "$TRIGGER_FILE" einer Gang-Zeile ausbrechen kann: Anführungszeichen
+// beenden die Quotierung, Backtick und $ starten eine Substitution, der
+// Backslash hebelt das Escaping aus.
 const shellUnsafe = "\"'`$\\"
 
-// checkInput hält $INPUT von der Shell fern.
+// checkAusloeser hält den Auslöser von der Shell fern.
 //
 // Die Variablen werden vor `sh -c` TEXTUELL ersetzt (§6) — das ist
 // Absicht, nur so ist `$HOME` in einer Gang-Zeile ein harter Fehler
@@ -108,25 +124,26 @@ const shellUnsafe = "\"'`$\\"
 //
 // Deshalb hier die Grenze und nicht im Gang: der Gang ist Text aus
 // einem Auftrag, den ein Mensch geschrieben hat — wer ihn schreibt,
-// darf darin alles. Der Input ist das Einzige, was von außen kommt.
+// darf darin alles. Der Auslöser ist das Einzige, was von außen kommt.
 // Leerzeichen, Klammern und Bindestriche bleiben erlaubt: die stehen
-// in echten Dateinamen und sind in "$INPUT" harmlos.
-func checkInput(input string) error {
-	if i := strings.IndexAny(input, shellUnsafe); i >= 0 {
-		return fmt.Errorf("$INPUT %q enthält %q — solche Zeichen brechen aus der Gang-Zeile aus (%s sind verboten); die Datei umbenennen",
-			input, string(input[i]), shellUnsafe)
+// in echten Dateinamen und sind in "$TRIGGER_FILE" harmlos.
+func checkAusloeser(ausloeser string) error {
+	if i := strings.IndexAny(ausloeser, shellUnsafe); i >= 0 {
+		return fmt.Errorf("auslöser %q enthält %q — solche Zeichen brechen aus der Gang-Zeile aus (%s sind verboten); die Datei umbenennen",
+			ausloeser, string(ausloeser[i]), shellUnsafe)
 	}
-	for _, r := range input {
+	for _, r := range ausloeser {
 		if r < 0x20 || r == 0x7f {
-			return fmt.Errorf("$INPUT %q enthält ein Steuerzeichen (%U) — die Datei umbenennen", input, r)
+			return fmt.Errorf("auslöser %q enthält ein Steuerzeichen (%U) — die Datei umbenennen", ausloeser, r)
 		}
 	}
 	return nil
 }
 
 // variablePattern: $NAME, beginnend mit Großbuchstabe — deckt $BAU,
-// $INPUT, $WORK und $RAUM_<rolle> ab. Shell-Variablen wie $HOME sind
-// absichtlich keine Ausnahme: unbekannt ⇒ Fehler.
+// $TRIGGER_FILE, $TRIGGER_ARG, $WORK und $RAUM_<rolle> ab.
+// Shell-Variablen wie $HOME sind absichtlich keine Ausnahme:
+// unbekannt ⇒ Fehler.
 var variablePattern = regexp.MustCompile(`\$([A-Z][A-Za-z0-9_]*)`)
 
 // Substitute substituiert die Lauf-Variablen in s. Unbekannte oder in
@@ -139,12 +156,24 @@ func (u *Environment) Substitute(s string) (string, error) {
 		switch {
 		case name == "BAU":
 			return u.Bau
-		case name == "INPUT":
-			if u.Input == "" {
-				fehler = append(fehler, "$INPUT ist bei watch-Triggern gebunden und bei manuell-Läufen mit Argument")
+		case name == auftrag.VarTriggerFile:
+			if u.TriggerFile == "" {
+				fehler = append(fehler, "$TRIGGER_FILE ist nur bei watch-Triggern gebunden")
 				return treffer
 			}
-			return u.Input
+			return u.TriggerFile
+		case name == auftrag.VarTriggerArg:
+			if u.TriggerArg == "" {
+				fehler = append(fehler, "$TRIGGER_ARG ist nur bei manual-Läufen mit Argument gebunden")
+				return treffer
+			}
+			return u.TriggerArg
+		case name == auftrag.VarInput:
+			// Der Parser fängt das beim Laden ab; hier landet nur, was
+			// nie durch ihn ging. Trotzdem der Wegweiser statt
+			// „unbekannte Variable".
+			fehler = append(fehler, "$INPUT gibt es nicht mehr — $TRIGGER_FILE (watch) oder $TRIGGER_ARG (manual)")
+			return treffer
 		case name == "HASENBAU":
 			if u.Hasenbau == "" {
 				fehler = append(fehler, "$HASENBAU: eigener Programmpfad nicht bestimmbar")
@@ -166,7 +195,7 @@ func (u *Environment) Substitute(s string) (string, error) {
 			}
 			return pfad
 		default:
-			fehler = append(fehler, fmt.Sprintf("unbekannte Variable $%s (erlaubt: $BAU, $INPUT, $WORK, $RAUM_<rolle>, $HASENBAU)", name))
+			fehler = append(fehler, fmt.Sprintf("unbekannte Variable $%s (erlaubt: $BAU, $TRIGGER_FILE, $TRIGGER_ARG, $WORK, $RAUM_<rolle>, $HASENBAU)", name))
 			return treffer
 		}
 	})

@@ -277,7 +277,7 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 			letzter = s.LastLauf.Local().Format("2006-01-02 15:04")
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\n",
-			a.Name, triggerShort(a.Trigger), a.Hase,
+			a.Name, triggerShort(a), a.Hase,
 			len(a.Gaenge), len(a.Raeume), letzter, s.ErrorStreak)
 	}
 	w.Flush()
@@ -285,14 +285,17 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 }
 
 // triggerShort fasst den Trigger für eine Tabellenzelle zusammen.
-func triggerShort(t auftrag.Trigger) string {
-	switch t.Kind() {
+// Bei watch steht dort der effektive Glob, nicht das Muster allein:
+// wer die Übersicht liest, will wissen, WO beobachtet wird, und der
+// Raum steht nicht in derselben Zeile (Hasenbau-d6d).
+func triggerShort(a *auftrag.Auftrag) string {
+	switch a.Trigger.Kind() {
 	case auftrag.TriggerCron:
-		return "cron " + t.Cron
+		return "cron " + a.Trigger.Cron
 	case auftrag.TriggerManual:
 		return "manual"
 	default:
-		return "watch " + t.Watch
+		return "watch " + a.WatchGlob()
 	}
 }
 

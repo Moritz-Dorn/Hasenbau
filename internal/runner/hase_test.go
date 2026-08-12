@@ -472,12 +472,13 @@ func TestGefaehrlicherInputStartetKeinenGang(t *testing.T) {
 	root := t.TempDir()
 	a, err := auftrag.Parse("test-auftrag", []byte(`---
 trigger:
-  watch: raeume/laderampe/*.pdf
+  watch: "*.pdf"
 gaenge:
   - name: marker
     run: echo da > "$BAU/beweis.txt"
 hase: testhase
 raeume:
+  input: raeume/laderampe/
   work: raeume/werkstatt/
 ---
 Sortiere ein.

@@ -164,7 +164,7 @@ func reportLauf(w io.Writer, st *store.Store, laufID int64) {
 
 // material beschreibt, woran der Baumeister arbeitet.
 type material struct {
-	Input string // $INPUT des Laufs — eine Lauf-ID oder ein Befund-Selektor
+	Input string // Auslöser des Laufs ($TRIGGER_ARG) — eine Lauf-ID oder ein Befund-Selektor
 	Kopf  string // was oben in der Ausgabe steht
 }
 
@@ -216,7 +216,7 @@ func laufListe(ids []int64) string {
 
 // targetLauf löst das Argument auf: reine Ziffern sind eine Lauf-ID,
 // alles andere ein Auftragsname (dann der jüngste Lauf mit Session).
-// Zurück kommt immer ein echter Lauf — damit ist das $INPUT des
+// Zurück kommt immer ein echter Lauf — damit ist der Auslöser des
 // Baumeister-Laufs eine Zahl und nie ein Pfad oder Shell-Syntax.
 func targetLauf(st *store.Store, ziel string) (*store.Lauf, error) {
 	var l *store.Lauf

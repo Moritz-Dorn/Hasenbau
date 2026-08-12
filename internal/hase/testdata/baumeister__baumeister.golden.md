@@ -66,7 +66,8 @@ Trace steht, ist passiert; was jetzt im Lager liegt, sagt darüber nichts.
 Ein Trace ist konkret, ein Gang muss generisch sein.
 
 - **Parameter** ist alles, was am Material dieses Laufs hängt: die
-  auslösende Datei ist `$INPUT`, das Scratch dieses Laufs ist `$WORK`,
+  auslösende Datei ist `$TRIGGER_FILE`, das Scratch dieses Laufs ist
+  `$WORK`,
   ein Raum ist `$RAUM_<rolle>` (der Auftrag benennt die Rollen, etwa
   `$RAUM_out`). Steht im Trace `sources/rechnung-2026-03.pdf`, gehört
   ins Skript der Parameter — nicht die Rechnung.
@@ -92,10 +93,13 @@ Dein Skript läuft später so:
 - gestartet über `sh -c "<run-Zeile>"`, Arbeitsverzeichnis ist der Bau.
   Alle Pfade sind Bau-relativ.
 - Die Variablen werden **vor** der Shell textuell ersetzt. Es gibt genau
-  `$BAU`, `$INPUT`, `$WORK`, `$RAUM_<rolle>` und `$HASENBAU`. Jeder
-  andere `$GROSS`-Name ist ein harter Fehler: `$HOME`, `$PATH`, `$1`,
-  `$?` gibt es nicht. Setz jede Variable in doppelte Anführungszeichen —
-  `"$INPUT"` kann Leerzeichen enthalten.
+  `$BAU`, `$WORK`, `$RAUM_<rolle>`, `$HASENBAU` und den Auslöser: bei
+  einem watch-Auftrag `$TRIGGER_FILE` (die Datei), bei einem
+  manual-Auftrag `$TRIGGER_ARG` (freier Text von der Kommandozeile).
+  Gebunden ist immer nur der zur Trigger-Art passende; ein cron-Auftrag
+  hat keinen. Jeder andere `$GROSS`-Name ist ein harter Fehler: `$HOME`,
+  `$PATH`, `$1`, `$?` gibt es nicht. Setz jede Variable in doppelte
+  Anführungszeichen — `"$TRIGGER_FILE"` kann Leerzeichen enthalten.
 - Exit-Code ≠ 0 bricht den ganzen Lauf ab: der Hase läuft dann nicht,
   und der Input wandert nach `quarantaene/`. Ein Exit ≠ 0 ist also eine
   Aussage — „mit diesem Material geht es nicht weiter". Lieber laut

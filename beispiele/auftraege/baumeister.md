@@ -7,11 +7,13 @@ trigger:
   manual: true
 
 gaenge:
-  # $INPUT ist hier eine Lauf-ID oder ein Befund (<auftrag>#<n>), nie
-  # ein Pfad. Die run-Zeile muss in einfache Anführungszeichen, weil sie
-  # mit einem doppelten beginnt.
+  # $TRIGGER_ARG ist hier eine Lauf-ID oder ein Befund (<auftrag>#<n>),
+  # nie ein Pfad — deshalb trägt er bei manual-Aufträgen auch einen
+  # anderen Namen als die auslösende Datei eines watch-Auftrags. Die
+  # run-Zeile muss in einfache Anführungszeichen, weil sie mit einem
+  # doppelten beginnt.
   - name: material-ziehen
-    run: '"$HASENBAU" dig "$INPUT" > "$WORK/material.md"'
+    run: '"$HASENBAU" dig "$TRIGGER_ARG" > "$WORK/material.md"'
     timeout: 60s
 
 hase: baumeister

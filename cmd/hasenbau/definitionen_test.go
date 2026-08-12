@@ -29,11 +29,11 @@ func baueDefinitionsBau(t *testing.T) string {
 	schreibe("hasen/ungenutzt.md", "---\nmodel: scc/kit.y\n---\nNiemand ruft mich.\n")
 	schreibe("auftraege/pdf-einlagern.md", `---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  watch: "*.pdf"
   debounce: 5s
 gaenge:
   - name: pdf-zu-markdown
-    run: python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
+    run: python3 gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
     timeout: 120s
 hase: archivar
 monitored: true
@@ -45,7 +45,7 @@ context:
   - file: $WORK/extrakt.md
   - last_summaries: 3
 after:
-  - move: $INPUT -> raeume/archiv/
+  - move: $TRIGGER_FILE -> raeume/archiv/
 ---
 Fasse zusammen.
 `)
@@ -106,7 +106,7 @@ func TestDescribeAuftrag(t *testing.T) {
 		"Agent pdf-einlagern__archivar",
 		"pdf-zu-markdown", "2m0s", "gaenge/pdf_to_md.py  vorhanden",
 		"→ Schreibrecht des Hasen",
-		"letzten 3 Summaries", "move $INPUT -> raeume/archiv/",
+		"letzten 3 Summaries", "move $TRIGGER_FILE -> raeume/archiv/",
 		"Prompt-Kern", "Noch nie gelaufen",
 	} {
 		if !strings.Contains(got, muss) {
@@ -208,11 +208,11 @@ func TestGangDateien(t *testing.T) {
 		run  string
 		want string
 	}{
-		{`python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/x.md"`, "gaenge/pdf_to_md.py"},
-		{`gaenge/x.sh "$INPUT"`, "gaenge/x.sh"},
+		{`python3 gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/x.md"`, "gaenge/pdf_to_md.py"},
+		{`gaenge/x.sh "$TRIGGER_FILE"`, "gaenge/x.sh"},
 		{`"gaenge/mit leer.py"`, "gaenge/mit"}, // Grenze der einfachen Regel, bewusst
-		{`"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"`, ""},
-		{`tr a-z A-Z < "$INPUT"`, ""},
+		{`"$HASENBAU" dig "$TRIGGER_ARG" > "$WORK/trace.md"`, ""},
+		{`tr a-z A-Z < "$TRIGGER_FILE"`, ""},
 	}
 	for _, f := range faelle {
 		got := strings.Join(gangFiles(f.run), ",")

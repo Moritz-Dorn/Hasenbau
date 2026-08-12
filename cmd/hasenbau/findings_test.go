@@ -172,12 +172,13 @@ func TestStatusZeigtDenRueckstauGedrosselterAuftraege(t *testing.T) {
 	schreibe("hasen/archivar.md", "---\nmodel: scc/kit.x\n---\nSortiere ein.\n")
 	schreibe("auftraege/pdf-einlagern.md", `---
 trigger:
-  watch: raeume/eingang/*.pdf
+  watch: "*.pdf"
 hase: archivar
 throttle:
   max: 2
   per: 1h
 raeume:
+  input: raeume/eingang/
   out: raeume/lager/
 ---
 Lege ab.

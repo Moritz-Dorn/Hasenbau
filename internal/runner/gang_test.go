@@ -46,8 +46,8 @@ func testUmgebung(t *testing.T, a *auftrag.Auftrag) *lauf.Environment {
 
 func TestGaengeSequenziellMitLogs(t *testing.T) {
 	a := testAuftrag(
-		auftrag.Gang{Name: "eins", Run: `echo "sehe $INPUT"`},
-		auftrag.Gang{Name: "zwei", Run: `cat $INPUT > $WORK/kopie.txt`},
+		auftrag.Gang{Name: "eins", Run: `echo "sehe $TRIGGER_FILE"`},
+		auftrag.Gang{Name: "zwei", Run: `cat $TRIGGER_FILE > $WORK/kopie.txt`},
 	)
 	u := testUmgebung(t, a)
 
@@ -104,7 +104,7 @@ func TestGangFehlerBrichtAbUndQuarantaene(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(u.Bau, gf.Quarantaene)); err != nil {
 		t.Errorf("Input nicht in Quarantäne: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err == nil {
+	if _, err := os.Stat(filepath.Join(u.Bau, u.TriggerFile)); err == nil {
 		t.Error("Input liegt noch am Ursprung, obwohl verschoben gemeldet")
 	}
 }
@@ -123,12 +123,12 @@ func TestGangFehlerOhneQuarantaeneRaum(t *testing.T) {
 		t.Errorf("Quarantaene = %q ohne quarantaene-Raum", gf.Quarantaene)
 	}
 	// §7: Der Input bleibt dann am Ursprung — niemals weg.
-	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err != nil {
+	if _, err := os.Stat(filepath.Join(u.Bau, u.TriggerFile)); err != nil {
 		t.Errorf("Input verschwunden: %v", err)
 	}
 }
 
-// TestManuellKeineQuarantaene: bei manuell ist $INPUT ein Argument,
+// TestManuellKeineQuarantaene: bei manual ist der Auslöser ein Argument,
 // kein Pfad. Selbst wenn zufällig eine gleichnamige Datei im Bau liegt,
 // darf ein Gang-Fehler sie nicht wegtragen.
 func TestManuellKeineQuarantaene(t *testing.T) {

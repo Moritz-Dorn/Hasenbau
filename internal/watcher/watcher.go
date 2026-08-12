@@ -191,7 +191,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 
 	verzeichnisse := map[string][]*auftrag.Auftrag{}
 	for _, a := range w.auftraege {
-		dir := filepath.Dir(a.Trigger.Watch)
+		dir := filepath.Dir(a.WatchGlob())
 		if err := os.MkdirAll(filepath.Join(w.root, dir), 0o755); err != nil {
 			return fmt.Errorf("watcher: %s anlegen: %w", dir, err)
 		}
@@ -215,9 +215,9 @@ func (w *Watcher) Start(ctx context.Context) error {
 	// Rückstaus hinge daran, wie schnell die Schleife hier ist. Der
 	// Wecker ist gepuffert, das Signal geht dabei nicht verloren.
 	for _, a := range w.auftraege {
-		treffer, err := filepath.Glob(filepath.Join(w.root, a.Trigger.Watch))
+		treffer, err := filepath.Glob(filepath.Join(w.root, a.WatchGlob()))
 		if err != nil {
-			return fmt.Errorf("watcher: glob %s: %w", a.Trigger.Watch, err)
+			return fmt.Errorf("watcher: glob %s: %w", a.WatchGlob(), err)
 		}
 		for _, abs := range treffer {
 			rel, err := filepath.Rel(w.root, abs)
@@ -295,7 +295,7 @@ func (w *Watcher) lausche(ctx context.Context, verzeichnisse map[string][]*auftr
 				continue
 			}
 			for _, a := range verzeichnisse[filepath.Dir(rel)] {
-				if passt, _ := filepath.Match(a.Trigger.Watch, rel); passt {
+				if passt, _ := filepath.Match(a.WatchGlob(), rel); passt {
 					w.arbeiter[a.Name].melde(rel)
 				}
 			}

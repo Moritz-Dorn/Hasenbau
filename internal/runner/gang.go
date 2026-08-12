@@ -122,23 +122,25 @@ func fuehreAus(ctx context.Context, bau, zeile, logRel string, timeout time.Dura
 // mit Zeitstempel-Suffix aufgelöst. Scheitert der Move, bleibt der
 // Input am Ursprung — das ist per §7 der zweite legale Zustand.
 //
-// Nur bei watch: dort ist $INPUT eine Datei. Bei manuell ist es ein
-// freies Argument, und ein Move würde bestenfalls scheitern,
-// schlimmstenfalls eine gleichnamige Datei im Bau-Root wegtragen.
+// Nur bei watch: dort ist der Auslöser eine Datei ($TRIGGER_FILE). Bei
+// manual ist er ein freies Argument, und ein Move würde bestenfalls
+// scheitern, schlimmstenfalls eine gleichnamige Datei im Bau-Root
+// wegtragen. Seit die beiden verschiedene Namen tragen, ist das keine
+// Konvention mehr, sondern steht in getrennten Feldern.
 func moveToQuarantine(u *lauf.Environment, a *auftrag.Auftrag) string {
 	if u.TriggerKind != auftrag.TriggerWatch {
 		return ""
 	}
 	raum, ok := a.Raeume["quarantine"]
-	if !ok || u.Input == "" {
+	if !ok || u.TriggerFile == "" {
 		return ""
 	}
-	ziel := filepath.Join(raum, filepath.Base(u.Input))
+	ziel := filepath.Join(raum, filepath.Base(u.TriggerFile))
 	if _, err := os.Stat(filepath.Join(u.Bau, ziel)); err == nil {
-		name := filepath.Base(u.Input)
+		name := filepath.Base(u.TriggerFile)
 		ziel = filepath.Join(raum, time.Now().UTC().Format("20060102-150405")+"-"+name)
 	}
-	if err := os.Rename(filepath.Join(u.Bau, u.Input), filepath.Join(u.Bau, ziel)); err != nil {
+	if err := os.Rename(filepath.Join(u.Bau, u.TriggerFile), filepath.Join(u.Bau, ziel)); err != nil {
 		return ""
 	}
 	return ziel

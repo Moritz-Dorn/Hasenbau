@@ -12,7 +12,7 @@ import (
 func TestNachherMoveInVerzeichnis(t *testing.T) {
 	a := testAuftrag()
 	a.Raeume["done"] = "raeume/archiv/"
-	a.After = []auftrag.After{{Action: "move", From: "$INPUT", To: "raeume/archiv/"}}
+	a.After = []auftrag.After{{Action: "move", From: "$TRIGGER_FILE", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 
 	if err := RunAfter(u, a); err != nil {
@@ -21,14 +21,14 @@ func TestNachherMoveInVerzeichnis(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(u.Bau, "raeume/archiv/doc.txt")); err != nil {
 		t.Errorf("Input nicht im Archiv: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err == nil {
+	if _, err := os.Stat(filepath.Join(u.Bau, u.TriggerFile)); err == nil {
 		t.Error("Input liegt noch am Ursprung")
 	}
 }
 
 func TestNachherMoveKollisionUeberschreibtNie(t *testing.T) {
 	a := testAuftrag()
-	a.After = []auftrag.After{{Action: "move", From: "$INPUT", To: "raeume/archiv/"}}
+	a.After = []auftrag.After{{Action: "move", From: "$TRIGGER_FILE", To: "raeume/archiv/"}}
 	u := testUmgebung(t, a)
 
 	if err := os.MkdirAll(filepath.Join(u.Bau, "raeume/archiv"), 0o755); err != nil {
@@ -54,8 +54,8 @@ func TestNachherMoveKollisionUeberschreibtNie(t *testing.T) {
 func TestNachherCopyUndDelete(t *testing.T) {
 	a := testAuftrag()
 	a.After = []auftrag.After{
-		{Action: "copy", From: "$INPUT", To: "raeume/work/sicherung.txt"},
-		{Action: "delete", From: "$INPUT"},
+		{Action: "copy", From: "$TRIGGER_FILE", To: "raeume/work/sicherung.txt"},
+		{Action: "delete", From: "$TRIGGER_FILE"},
 	}
 	u := testUmgebung(t, a)
 
@@ -66,16 +66,16 @@ func TestNachherCopyUndDelete(t *testing.T) {
 	if err != nil || string(kopie) != "material" {
 		t.Errorf("Kopie = %q, %v", kopie, err)
 	}
-	if _, err := os.Stat(filepath.Join(u.Bau, u.Input)); err == nil {
+	if _, err := os.Stat(filepath.Join(u.Bau, u.TriggerFile)); err == nil {
 		t.Error("delete hat den Input nicht entfernt")
 	}
 }
 
 func TestNachherBleibtImBau(t *testing.T) {
 	faelle := []auftrag.After{
-		{Action: "move", From: "$INPUT", To: "../draussen/"},
+		{Action: "move", From: "$TRIGGER_FILE", To: "../draussen/"},
 		{Action: "delete", From: "/etc/passwd"},
-		{Action: "copy", From: "$INPUT", To: "$BAU/raeume/archiv/"}, // $BAU ist absolut ⇒ tabu
+		{Action: "copy", From: "$TRIGGER_FILE", To: "$BAU/raeume/archiv/"}, // $BAU ist absolut ⇒ tabu
 	}
 	for _, n := range faelle {
 		a := testAuftrag()

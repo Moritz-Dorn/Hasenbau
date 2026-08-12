@@ -30,7 +30,7 @@ import (
 //
 // Warum ein String und keine zwei Argumente: Das Material des
 // Baumeisters holt ein **Gang**, und ein Gang bekommt genau eine
-// Variable mit — `$INPUT` (§6). Die Nummer ist der Griff, den der
+// Variable mit — den Auslöser (§6). Die Nummer ist der Griff, den der
 // Mensch ohnehin schon in der Hand hat.
 // maxTraces begrenzt, wie viele Traces unter einen Befund kommen.
 const maxTraces = 3
@@ -227,7 +227,7 @@ func drosselStand(root string, st *store.Store, auftraege []*auftrag.Auftrag) []
 		}
 		d := drossel{Auftrag: a.Name, Throttle: a.Throttle}
 		if a.Trigger.Watch != "" {
-			if treffer, err := filepath.Glob(filepath.Join(root, a.Trigger.Watch)); err == nil {
+			if treffer, err := filepath.Glob(filepath.Join(root, a.WatchGlob())); err == nil {
 				d.Eingang = len(treffer)
 			}
 		}

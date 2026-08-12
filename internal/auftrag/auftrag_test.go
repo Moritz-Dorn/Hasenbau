@@ -11,12 +11,12 @@ import (
 // beispiel ist der Referenz-Auftrag aus PLAN.md §6, wörtlich.
 const beispiel = `---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  watch: "*.pdf"
   debounce: 5s
 
 gaenge:
   - name: pdf-zu-markdown
-    run: gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
+    run: gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
     timeout: 120s
 
 hase: archivar
@@ -33,7 +33,7 @@ context:
   - last_summaries: 3
 
 after:
-  - move: $INPUT -> raeume/archiv/
+  - move: $TRIGGER_FILE -> raeume/archiv/
 ---
 
 Der extrahierte Text liegt in ` + "`$WORK/extrakt.md`" + `.
@@ -50,7 +50,7 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	if a.Name != "pdf-einlagern" {
 		t.Errorf("Name = %q", a.Name)
 	}
-	if a.Trigger.Watch != "raeume/laderampe/sources/*.pdf" || a.Trigger.Cron != "" {
+	if a.Trigger.Watch != "*.pdf" || a.Trigger.Cron != "" {
 		t.Errorf("Trigger = %+v", a.Trigger)
 	}
 	if a.Trigger.Debounce != 5*time.Second {
@@ -72,7 +72,7 @@ func TestParseBeispielAusPlan(t *testing.T) {
 	if len(a.Context) != 2 || a.Context[0].File != "$WORK/extrakt.md" || a.Context[1].LastSummaries != 3 {
 		t.Errorf("Kontext = %+v", a.Context)
 	}
-	if len(a.After) != 1 || a.After[0] != (After{Action: "move", From: "$INPUT", To: "raeume/archiv/"}) {
+	if len(a.After) != 1 || a.After[0] != (After{Action: "move", From: "$TRIGGER_FILE", To: "raeume/archiv/"}) {
 		t.Errorf("Nachher = %+v", a.After)
 	}
 	if !strings.HasPrefix(a.Body, "Der extrahierte Text") || strings.HasPrefix(a.Body, "\n") {
@@ -111,7 +111,7 @@ Guten Morgen.
 // sieht aus wie eine Drossel und ist keine.
 func TestParseThrottle(t *testing.T) {
 	kopf := func(block string) []byte {
-		return []byte("---\ntrigger:\n  watch: raeume/eingang/*.pdf\nhase: archivar\n" + block + "---\nTu was.\n")
+		return []byte("---\ntrigger:\n  watch: \"*.pdf\"\nhase: archivar\nraeume:\n  input: raeume/eingang/\n" + block + "---\nTu was.\n")
 	}
 
 	a, err := Parse("einlagern", kopf("throttle:\n  max: 5\n  per: 1h\n"))
@@ -223,7 +223,7 @@ func TestWindowUeberstehtDieZeitumstellung(t *testing.T) {
 
 func TestParseThrottleBetween(t *testing.T) {
 	kopf := func(block string) []byte {
-		return []byte("---\ntrigger:\n  watch: raeume/eingang/*.pdf\nhase: archivar\n" + block + "---\nTu was.\n")
+		return []byte("---\ntrigger:\n  watch: \"*.pdf\"\nhase: archivar\nraeume:\n  input: raeume/eingang/\n" + block + "---\nTu was.\n")
 	}
 
 	a, err := Parse("einlagern", kopf("throttle:\n  between: \"22:00-06:00\"\n"))
@@ -360,7 +360,7 @@ trigger:
 
 gaenge:
   - name: trace-ziehen
-    run: '"$HASENBAU" graben "$INPUT" > "$WORK/trace.md"'
+    run: '"$HASENBAU" graben "$TRIGGER_ARG" > "$WORK/trace.md"'
 
 hase: baumeister
 
@@ -390,7 +390,7 @@ func TestTriggerArt(t *testing.T) {
 		t   Trigger
 		art string
 	}{
-		{Trigger{Watch: "raeume/x/*.pdf"}, TriggerWatch},
+		{Trigger{Watch: "*.pdf"}, TriggerWatch},
 		{Trigger{Cron: "0 7 * * *"}, TriggerCron},
 		{Trigger{Manual: true}, TriggerManual},
 	}
@@ -418,33 +418,38 @@ func TestParseFehler(t *testing.T) {
 	}{
 		{"kein Frontmatter", "kein frontmatter", "muss mit \"---\" beginnen"},
 		{"Frontmatter offen", "---\nhase: x\nkein Ende", "nicht geschlossen"},
-		{"Trigger fehlt", ersetze(t, "trigger:\n  watch: raeume/laderampe/sources/*.pdf\n  debounce: 5s", "trigger:"), "trigger fehlt"},
+		{"Trigger fehlt", ersetze(t, "trigger:\n  watch: \"*.pdf\"\n  debounce: 5s", "trigger:"), "trigger fehlt"},
 		{"watch und cron", ersetze(t, "  debounce: 5s", "  cron: \"0 7 * * *\""), "schließen sich aus"},
-		{"ungültiger Cron", ersetze(t, "watch: raeume/laderampe/sources/*.pdf\n  debounce: 5s", "cron: \"99 99 * * *\""), "ungültiger cron-Ausdruck"},
-		{"debounce bei cron", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "cron: \"0 7 * * *\""), "debounce gilt nur für watch"},
+		{"ungültiger Cron", ersetze(t, "watch: \"*.pdf\"\n  debounce: 5s", "cron: \"99 99 * * *\""), "ungültiger cron-Ausdruck"},
+		{"debounce bei cron", ersetze(t, "watch: \"*.pdf\"", "cron: \"0 7 * * *\""), "debounce gilt nur für watch"},
 		{"hase fehlt", ersetze(t, "hase: archivar\n", ""), "hase fehlt"},
 		{"unbekanntes Feld", ersetze(t, "hase: archivar", "hase: archivar\nfarbe: braun"), "farbe"},
 		{"body fehlt", beispiel[:strings.LastIndex(beispiel, "---")+4], "body fehlt"},
 		{"cwd abgelehnt", ersetze(t, "hase: archivar", "hase: archivar\ncwd: raeume/laderampe/"), "cwd wird nicht unterstützt"},
 		{"raum verlässt Bau", ersetze(t, "out:   raeume/lager/", "out:   ../draussen/"), "darf den Bau nicht verlassen"},
-		{"watch absolut", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "watch: /tmp/*.pdf"), "nicht absolut"},
-		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$INPUT\" --out \"$WORK/extrakt.md\"\n", ""), "run fehlt"},
+		{"watch absolut", ersetze(t, "watch: \"*.pdf\"", "watch: /tmp/*.pdf"), "muss relativ zum input-Raum sein"},
+		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$TRIGGER_FILE\" --out \"$WORK/extrakt.md\"\n", ""), "run fehlt"},
 		{"ungültige Dauer", ersetze(t, "timeout: 120s", "timeout: zwei Minuten"), "ungültige Dauer"},
 		{"kontext leer", ersetze(t, "- file: $WORK/extrakt.md", "- {}"), "braucht file oder last_summaries"},
 		{"kontext doppelt", ersetze(t, "- file: $WORK/extrakt.md", "- {file: x, last_summaries: 2}"), "schließen sich aus"},
 		{"summaries null", ersetze(t, "last_summaries: 3", "last_summaries: 0"), "muss > 0 sein"},
-		{"nachher ohne Pfeil", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- move: $INPUT raeume/archiv/"), "VON -> NACH"},
-		{"nachher unbekannt", ersetze(t, "- move: $INPUT -> raeume/archiv/", "- verbrenne: $INPUT"), "unbekannte Aktion"},
+		{"nachher ohne Pfeil", ersetze(t, "- move: $TRIGGER_FILE -> raeume/archiv/", "- move: $TRIGGER_FILE raeume/archiv/"), "VON -> NACH"},
+		{"nachher unbekannt", ersetze(t, "- move: $TRIGGER_FILE -> raeume/archiv/", "- verbrenne: $TRIGGER_FILE"), "unbekannte Aktion"},
 		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "hase: ungültiger Name"},
 		{"hase_timeout null", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 0s"), "0 ist kein Zeitlimit"},
 		{"hase_timeout negativ", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: -5m"), "negative Dauer"},
 		{"hase_timeout kaputt", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: eine Stunde"), "ungültige Dauer"},
 		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manual: true"), "schließen sich aus"},
-		{"debounce bei manuell", ersetze(t, "watch: raeume/laderampe/sources/*.pdf", "manual: true"), "debounce gilt nur für watch"},
-		// $INPUT eines manuell-Auftrags ist ein Argument, kein Pfad.
-		{"manuell mit $INPUT in nachher", ersetze(t,
-			"trigger:\n  watch: raeume/laderampe/sources/*.pdf\n  debounce: 5s",
-			"trigger:\n  manual: true"), "$INPUT ist bei manuell-Triggern kein Pfad"},
+		{"debounce bei manuell", ersetze(t, "watch: \"*.pdf\"", "manual: true"), "debounce gilt nur für watch"},
+		// Der Auslöser muss zur Trigger-Art passen: bei manual gibt es
+		// $TRIGGER_FILE nicht, dort heißt er $TRIGGER_ARG (Hasenbau-d6d).
+		{"manual mit $TRIGGER_FILE", ersetze(t,
+			"trigger:\n  watch: \"*.pdf\"\n  debounce: 5s",
+			"trigger:\n  manual: true"), "$TRIGGER_FILE ist bei einem manual-Auftrag nicht gebunden"},
+		{"watch ohne input-Raum", ersetze(t, "  input: raeume/laderampe/sources/\n", ""), "watch-Trigger ohne Raum"},
+		{"watch mit Bau-Pfad", ersetze(t, "watch: \"*.pdf\"", "watch: raeume/laderampe/sources/*.pdf"), "sieht aus wie ein Bau-relativer Pfad"},
+		{"watch mit Platzhalter im Verzeichnis", ersetze(t, "watch: \"*.pdf\"", "watch: \"*/*.pdf\""), "Platzhalter-Zeichen im Verzeichnis-Anteil"},
+		{"$INPUT gibt es nicht mehr", ersetze(t, "$TRIGGER_FILE -> raeume/archiv/", "$INPUT -> raeume/archiv/"), "$INPUT heißt jetzt $TRIGGER_FILE"},
 	}
 
 	for _, f := range faelle {
@@ -463,27 +468,91 @@ func TestParseFehler(t *testing.T) {
 	}
 }
 
-// TestManuellLehntInputAlsPfadAb nagelt die zweite Leitplanke fest:
-// `kontext: - datei:` liest eine Datei, das Argument eines
-// manuell-Laufs ist keine. Bei watch bleibt derselbe Ausdruck erlaubt.
-func TestManuellLehntInputAlsPfadAb(t *testing.T) {
-	src := func(trigger string) []byte {
+// TestAusloeserVariableGehoertZurTriggerArt nagelt die Symmetrie fest:
+// gebunden ist genau der Name, den die Trigger-Art hergibt. Früher war
+// das eine Sonderregel für manuell-Aufträge („$INPUT ist hier kein
+// Pfad"), jetzt folgt es daraus, dass die Datei-Variable bei manual gar
+// nicht existiert (Hasenbau-d6d).
+func TestAusloeserVariableGehoertZurTriggerArt(t *testing.T) {
+	src := func(trigger, variable string) []byte {
 		return []byte(`---
 trigger:
 ` + trigger + `
 hase: baumeister
+raeume:
+  input: raeume/eingang/
 context:
-  - file: $INPUT
+  - file: ` + variable + `
 ---
 Lies das.
 `)
 	}
-	_, err := Parse("baumeister", src("  manual: true"))
-	if err == nil || !strings.Contains(err.Error(), "$INPUT ist bei manuell-Triggern kein Pfad") {
-		t.Errorf("kontext datei $INPUT bei manuell: %v", err)
+
+	faelle := []struct {
+		name     string
+		trigger  string
+		variable string
+		erwarte  string // leer = muss laden
+	}{
+		{"watch bindet TRIGGER_FILE", "  watch: \"*.pdf\"", "$TRIGGER_FILE", ""},
+		{"manual bindet TRIGGER_ARG", "  manual: true", "$TRIGGER_ARG", ""},
+		{"watch kennt TRIGGER_ARG nicht", "  watch: \"*.pdf\"", "$TRIGGER_ARG",
+			"$TRIGGER_ARG ist bei einem watch-Auftrag nicht gebunden, hier gilt $TRIGGER_FILE"},
+		{"manual kennt TRIGGER_FILE nicht", "  manual: true", "$TRIGGER_FILE",
+			"$TRIGGER_FILE ist bei einem manual-Auftrag nicht gebunden, hier gilt $TRIGGER_ARG"},
+		{"cron bindet keines", "  cron: \"0 7 * * *\"", "$TRIGGER_FILE",
+			"cron hat keinen Auslöser"},
+		{"$INPUT bekommt den Wegweiser", "  watch: \"*.pdf\"", "$INPUT",
+			"$INPUT heißt jetzt $TRIGGER_FILE"},
 	}
-	if _, err := Parse("archiv", src("  watch: raeume/eingang/*.pdf")); err != nil {
-		t.Errorf("kontext datei $INPUT bei watch muss erlaubt bleiben: %v", err)
+	for _, f := range faelle {
+		t.Run(f.name, func(t *testing.T) {
+			_, err := Parse("auftrag", src(f.trigger, f.variable))
+			if f.erwarte == "" {
+				if err != nil {
+					t.Fatalf("muss laden, bekam: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Fehler erwartet, bekam nil")
+			}
+			if !strings.Contains(err.Error(), f.erwarte) {
+				t.Errorf("Fehler %q enthält nicht %q", err, f.erwarte)
+			}
+		})
+	}
+}
+
+// TestWatchGlobSetztRaumUndMusterZusammen: der Eingang steht genau
+// einmal im Auftrag, nämlich als Raum — beobachtet wird die Summe.
+func TestWatchGlobSetztRaumUndMusterZusammen(t *testing.T) {
+	a, err := Parse("pdf-einlagern", []byte(beispiel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.WatchGlob(); got != "raeume/laderampe/sources/*.pdf" {
+		t.Errorf("WatchGlob() = %q", got)
+	}
+
+	// Ein Unterverzeichnis im Muster bleibt erlaubt, solange sein Name
+	// feststeht — nur Platzhalter darin sind es nicht (Hasenbau-5xv).
+	mit := strings.Replace(beispiel, `watch: "*.pdf"`, `watch: "scans/*.pdf"`, 1)
+	b, err := Parse("pdf-einlagern", []byte(mit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := b.WatchGlob(); got != "raeume/laderampe/sources/scans/*.pdf" {
+		t.Errorf("WatchGlob() mit Unterverzeichnis = %q", got)
+	}
+
+	// Kein watch-Trigger ⇒ kein Glob, auch wenn ein input-Raum da ist.
+	c, err := Parse("morgenpost", []byte("---\ntrigger:\n  cron: \"0 7 * * *\"\nhase: melder\nraeume:\n  input: raeume/eingang/\n---\nMoin.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.WatchGlob(); got != "" {
+		t.Errorf("WatchGlob() bei cron = %q, erwartet leer", got)
 	}
 }
 

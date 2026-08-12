@@ -75,7 +75,11 @@ func watchAuftrag(debounce time.Duration) *auftrag.Auftrag {
 	return &auftrag.Auftrag{
 		Name:    "pdf-einlagern",
 		Hase:    "archivar",
-		Trigger: auftrag.Trigger{Watch: "raeume/eingang/*.txt", Debounce: debounce},
+		// Muster und Raum getrennt, wie seit Hasenbau-d6d: beobachtet
+		// wird die Summe. Stünde hier der volle Pfad im Muster, liefe der
+		// Test am Weg vorbei, den der Watcher tatsächlich geht.
+		Trigger: auftrag.Trigger{Watch: "*.txt", Debounce: debounce},
+		Raeume:  map[string]string{"input": "raeume/eingang/"},
 	}
 }
 

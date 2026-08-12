@@ -1,11 +1,13 @@
 ---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  # Das Muster allein — der Eingang steht unten als raeume: input:,
+  # beobachtet wird die Summe aus beidem.
+  watch: "*.pdf"
   debounce: 5s
 
 gaenge:
   - name: pdf-zu-markdown
-    run: python3 gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
+    run: python3 gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
     timeout: 120s
 
 hase: archivar
@@ -26,7 +28,7 @@ context:
   - last_summaries: 3
 
 after:
-  - move: $INPUT -> raeume/archiv/
+  - move: $TRIGGER_FILE -> raeume/archiv/
 ---
 
 Der extrahierte Text eines PDFs liegt im Kontext unten (aus
