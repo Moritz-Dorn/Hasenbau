@@ -31,6 +31,25 @@ HASENBAU_SMOKE=1 HASENBAU_SMOKE_MODEL=scc/kit.glm-5.2-753b \
 Test-Bau für manuelle Experimente: `~/SRC/meinHasenbau` (außerhalb des
 Repos, siehe Leckage-Abschnitt).
 
+## Echte Läufe: Modell und Geduld
+
+Ein Lauf im Test-Bau ruft ein echtes Modell. Zwei Regeln, beide schon
+einmal übergangen worden (2026-08-12):
+
+- **Nur `kit.*`-Modelle für Spikes, Smoke-Tests und eigene
+  Experimente.** Sie laufen lokal und kostenlos. `google.*` und
+  `azure.*` sind extern und gehen gegen ein Nutzerbudget, das seit
+  2026-07 erschöpft ist. Das ist Entwicklungs-Konvention, keine
+  Design-Regel: der Hasenbau selbst bleibt modellagnostisch.
+- **Keinen `timeout`-Wrapper um einen Lauf.** Ein Baumeister-Lauf
+  dauert gemessen 10–17 Minuten; ein Wrapper killt ihn und der Lauf
+  steht als `aborted` in der DB. Im Hintergrund laufen lassen und den
+  Zustand über `hasenbau get laeufe` abfragen.
+
+Mehr dazu in den `bd`-Memories `ki-toolbox-modelle-lokal-vs-extern`,
+`modell-default-hasen-vs-baumeister` und
+`baumeister-lauf-dauer-und-verhalten`.
+
 ## Testdisziplin
 
 Ein Test zu einem Fix oder einer Invariante muss gegen die Fassung
@@ -98,9 +117,14 @@ Daten, keine Prosa — sie stehen englisch in der DB und in der Ausgabe.
 ist eine Beschreibung, kein Spec — für den Formatschlüssel gilt die
 Regel oben. Präzedenz: PLAN.md §8 schrieb `manuell:` und `datei:`,
 implementiert wurden `manual:` und `file:`; der Bead Hasenbau-4cx.3 hieß
-„ueberwacht: im Auftragsformat", gebaut wurde `monitored:`. Beim ersten
-neuen Frontmatter-Feld eines Beads also kurz rückfragen, statt den
-deutschen Namen zu übernehmen.
+„ueberwacht: im Auftragsformat", gebaut wurde `monitored:`.
+
+**Bei jedem neuen Formatschlüssel kurz rückfragen** — nicht nur, wenn
+er aus einem Bead-Titel stammt, sondern auch bei selbst erfundenen.
+Präzedenz 2026-08-12: eingebaut wurde `wuensche:` in `hasenbau.yaml`,
+richtig war `requests:`; dieselbe Frage stellte sich beim MCP-Werkzeug,
+das statt `werkzeug_wunsch` nun `tool_request` heißt. Ein Schlüssel ist
+nach dem ersten Commit teurer zu drehen als vor der Rückfrage.
 
 Sprachlich strikt trennen: **Hasenbau** ist dieses Projekt/Programm,
 ein **Bau** ist eine mit `hasenbau init` erzeugte Instanz (eigenes
