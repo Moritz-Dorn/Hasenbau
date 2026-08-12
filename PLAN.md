@@ -391,14 +391,14 @@ damit es nur eine Formatkategorie im Projekt gibt.
 ```yaml
 ---
 trigger:
-  watch: raeume/laderampe/sources/*.pdf
+  watch: "*.pdf"                   # nur das Muster, relativ zu raeume: input:
   debounce: 5s
   # alternativ:  cron: "0 7 * * *"
   # alternativ:  manual: true      # läuft nur auf Zuruf
 
 gaenge:                            # deterministisch, läuft VOR dem Hasen
   - name: pdf-zu-markdown
-    run: gaenge/pdf_to_md.py "$INPUT" --out "$WORK/extrakt.md"
+    run: gaenge/pdf_to_md.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
     timeout: 120s
 
 hase: archivar                     # → Template hasen/archivar.md
@@ -411,7 +411,7 @@ throttle:                          # höchstens so viele Läufe je Fenster
   between: "22:00-06:00"           # und nur nachts starten (Ortszeit)
 
 raeume:
-  input: raeume/laderampe/sources/
+  input: raeume/laderampe/sources/ # bei watch Pflicht: hier wird beobachtet
   work:  raeume/laderampe/work/
   out:   raeume/lager/
   done:  raeume/archiv/
@@ -422,7 +422,7 @@ context:                           # Push: was kommt in den Prompt
   - last_summaries: 3
 
 after:
-  - move: $INPUT -> raeume/archiv/
+  - move: $TRIGGER_FILE -> raeume/archiv/
 ---
 
 Der extrahierte Text liegt in `$WORK/extrakt.md`.
@@ -648,7 +648,8 @@ Wer die Hausordnung wirklich *jedem* Hasen mitgeben will, hat weiterhin
 | Variable | Bedeutung |
 |---|---|
 | `$BAU` | Root des Baus |
-| `$INPUT` | Der Auslöser: bei `watch` die auslösende Datei, bei `manuell` das übergebene Argument |
+| `$TRIGGER_FILE` | Die auslösende Datei — nur bei `watch` gebunden |
+| `$TRIGGER_ARG` | Das Argument von `hasenbau lauf` — nur bei `manual` gebunden, freier Text |
 | `$WORK` | Scratch-Verzeichnis dieses Laufs, wird pro Lauf angelegt |
 | `$RAUM_<name>` | Pfad des unter `raeume:` benannten Raums |
 | `$HASENBAU` | Pfad des laufenden Binaries — für Gänge, die den Hasenbau selbst rufen |
@@ -658,28 +659,45 @@ Auftrag auf Material oder die Uhr wartet: der Baumeister wird auf einen
 *Lauf* angesetzt (§8). Scheduler und Watcher wählen positiv aus und
 ignorieren ihn von selbst.
 
-**`$INPUT` ist nur bei `watch` ein Pfad.** Bei `manuell` ist es das
-Argument von der Kommandozeile — freier Text. Deshalb lehnt der Parser
-`$INPUT` in `kontext: - datei:` und in `nachher:` für manuell-Aufträge
-ab, und die Quarantäne (§7) greift nur bei `watch`: sonst würde ein
-Gang-Fehler eine gleichnamige Datei im Bau wegtragen, die mit dem Lauf
-nichts zu tun hat. Zu unterscheiden ist das von `laeufe.trigger` (§5) —
-ein watch-Auftrag, den `hasenbau lauf` startet, wird dort als `manuell`
-verbucht, bleibt aber ein watch-Auftrag.
+**Der Auslöser trägt zwei Namen, weil er zwei Dinge sein kann**
+(Hasenbau-d6d). `$TRIGGER_FILE` ist ein Pfad und nur bei `watch`
+gebunden; `$TRIGGER_ARG` ist freier Text von der Kommandozeile und nur
+bei `manual` gebunden — der Baumeister bekommt darüber eine Lauf-ID,
+keine Datei. Bei `cron` ist keines von beiden gebunden.
+
+Das war einmal eine Variable namens `$INPUT` mit einer Sonderregel
+darüber, wann sie ein Pfad sei. Die Regel ist jetzt der Name: wer
+`$TRIGGER_FILE` in einen manual-Auftrag schreibt, bekommt es beim Laden
+gesagt, und die Quarantäne (§7) greift nur bei `watch`, weil nur dort
+ein Dateifeld gefüllt ist — ein Gang-Fehler kann also keine
+gleichnamige Datei im Bau wegtragen, die mit dem Lauf nichts zu tun hat.
+Zu unterscheiden ist das von `laeufe.trigger` (§5) — ein watch-Auftrag,
+den `hasenbau lauf` startet, wird dort als `manuell` verbucht, bleibt
+aber ein watch-Auftrag.
+
+**Der Eingang steht genau einmal im Auftrag, nämlich als Raum.**
+`trigger: watch:` trägt nur das Muster, beobachtet wird
+`raeume: input:` plus Muster. Ein watch-Auftrag ohne input-Raum lädt
+nicht — ein stiller Rückfall auf den Bau-Root hieße, den ganzen Bau zu
+beobachten. Für `cron` und `manual` ist derselbe Raum kein Trigger,
+sondern der Suchraum, den Gänge über `$RAUM_input` ansprechen.
+Platzhalter im Verzeichnis-Anteil des Musters lehnt der Parser ab,
+solange rekursives Beobachten nicht gebaut ist (Hasenbau-5xv).
 
 **Die Variablen werden vor `sh -c` textuell ersetzt — und genau deshalb
-ist `$INPUT` das einzige geprüfte Feld.** Textuell zu ersetzen ist
+ist der Auslöser das einzige geprüfte Feld.** Textuell zu ersetzen ist
 Absicht: nur so ist `$HOME` in einer Gang-Zeile ein harter Fehler statt
 einer stillen Expansion. Der Preis ist, dass der Wert unquotiert im
 Kommando landet. Für `$BAU`, `$WORK` und `$RAUM_<rolle>` ist das
 harmlos — sie stammen aus Dateien, die ein Mensch geschrieben hat, und
-wer einen Auftrag schreibt, darf darin ohnehin alles. `$INPUT` ist das
-Einzige, was von außen kommt: bei `watch` ist es ein Dateiname aus der
-Drop-Zone. Eine Datei namens `x";rm -rf ~;"y.pdf` wäre sonst ein
+wer einen Auftrag schreibt, darf darin ohnehin alles. Der Auslöser ist
+das Einzige, was von außen kommt: bei `watch` ist es ein Dateiname aus
+der Drop-Zone. Eine Datei namens `x";rm -rf ~;"y.pdf` wäre sonst ein
 Kommando. Deshalb lehnt `lauf.Neue` Inputs mit `"`, `'`, `` ` ``, `$`,
 `\` und Steuerzeichen ab, bevor irgendein Gang startet
 (Hasenbau-bnh). Leerzeichen, Klammern, Umlaute und `&` bleiben erlaubt
-— die stehen in echten Dateinamen und sind in `"$INPUT"` harmlos.
+— die stehen in echten Dateinamen und sind in `"$TRIGGER_FILE"`
+harmlos.
 
 ### Ablauf eines Laufs
 
@@ -851,7 +869,7 @@ kompiliert. Bezahlt in Tokens, Latenz und Nichtdeterminismus.
 
 **Die harte Stelle:** Ein Trace ist konkret, ein Gang muss generisch sein.
 Der Trace sagt `read("sources/rechnung-2026-03.pdf")`, der Gang muss
-`read("$INPUT")` sagen. Diese Generalisierung — was ist Parameter, was
+`read("$TRIGGER_FILE")` sagen. Diese Generalisierung — was ist Parameter, was
 Konstante, was war ein Fehlversuch, den der Hase danach korrigiert hat —
 ist selbst eine Modell-Aufgabe und geht regelmäßig daneben.
 
@@ -870,7 +888,7 @@ deterministische Vorverarbeitung ist ein Gang wie jeder andere:
 
 ```yaml
 trigger:  {manuell: true}
-gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" dig "$INPUT" > "$WORK/trace.md"'}]
+gaenge:   [{name: trace-ziehen, run: '"$HASENBAU" dig "$TRIGGER_ARG" > "$WORK/trace.md"'}]
 hase:     baumeister
 raeume:   {work: raeume/baumeister/work/, out: gaenge/entwurf/}
 context:  [{datei: $WORK/trace.md}]
@@ -881,8 +899,8 @@ läuft durch dieselbe Maschinerie wie alles andere, und die
 Vorverarbeitung kann später selbst zu einem Gang verdichtet werden.
 `hasenbau baumeister <lauf-id|auftrag>` ist nur ein dünner Befehl
 darüber — er schlägt in `hasenbau.yaml` nach, welcher Auftrag der
-Baumeister ist, löst das Ziel zu einer Lauf-ID auf (damit `$INPUT` eine
-Zahl ist, kein Pfad und keine Shell-Syntax) und berichtet hinterher, was
+Baumeister ist, löst das Ziel zu einer Lauf-ID auf (damit
+`$TRIGGER_ARG` eine Zahl ist, kein Pfad und keine Shell-Syntax) und berichtet hinterher, was
 im out-Raum neu ist.
 
 Drei Dinge tragen dabei die Garantie aus §10, und zwar im Code statt im
@@ -930,7 +948,7 @@ zählte ein Lauf mit Trace, aber ohne Aufrufzeilen nicht mit.
 <auftrag>` setzt ihn auf einen ausgewählten Befund an. Der Code ändert
 sich dabei kaum — genau dafür ist der Baumeister in Stufe 1 ein ganz
 normaler Auftrag geworden: sein Gang ruft weiter `hasenbau dig
-"$INPUT"`, nur ist `$INPUT` jetzt entweder eine Lauf-ID oder ein
+"$TRIGGER_ARG"`, nur ist der Wert jetzt entweder eine Lauf-ID oder ein
 Befund-Selektor `<auftrag>#<n>`. Ein Gang bekommt genau eine Variable
 mit (§6), also trägt der Selektor beides.
 

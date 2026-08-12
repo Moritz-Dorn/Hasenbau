@@ -138,9 +138,10 @@ hasenbau lauf pdf-einlagern raeume/laderampe/sources/irgendwas.pdf
 
 Das `mkdir` ist nur beim allerersten Mal nötig: welche Räume es gibt,
 sagt der Auftrag, und angelegt werden sie beim Lauf — `raeume/` ist nach
-`init` deshalb leer. Das zweite Argument ist der `$INPUT` des Gangs;
-Gänge laufen mit dem Bau-Root als Arbeitsverzeichnis, der Pfad ist also
-Bau-relativ.
+`init` deshalb leer. Das zweite Argument ist der Auslöser — bei diesem
+watch-Auftrag also die Datei, die sonst der Watcher gefunden hätte
+(`$TRIGGER_FILE`). Gänge laufen mit dem Bau-Root als
+Arbeitsverzeichnis, der Pfad ist deshalb Bau-relativ.
 
 **6. Ansehen, was passiert ist.**
 
