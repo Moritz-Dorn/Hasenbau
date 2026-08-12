@@ -54,8 +54,10 @@ baumeister: baumeister
 # Wohin ` + "`hasenbau_tool_request`" + ` die Wünsche der Hasen legt; die
 # Werkzeug-Wünsche landen darin unter ` + "`tools/`" + `, damit dort später
 # andere Arten danebenliegen können. Ohne diesen Eintrag bekommt kein
-# Hase das Werkzeug zu sehen: ein Briefkasten, den niemand leert, ist
-# schlimmer als keiner.
+# Hase das Werkzeug zu sehen — und der generierte Prompt verweist ihn
+# dann auch nicht darauf. Ein Briefkasten, den niemand leert, ist
+# schlimmer als keiner; ein Wegweiser auf einen, den es nicht gibt,
+# erst recht.
 # requests: raeume/wuensche/
 `
 

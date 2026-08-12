@@ -255,7 +255,10 @@ schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf getan hat
 kommt `hasenbau_tool_request` dazu: damit fordert ein Hase ein
 Werkzeug an, das ihm für seine Aufgabe fehlt, statt sich einen Weg an
 seinen Grenzen vorbei zu suchen. Der Wunsch landet als Datei unter
-`<requests>/tools/` — dem künftigen Eingang des Schmieds. Dahinter steckt ein MCP-Server, den opencode als
+`<requests>/tools/` — dem künftigen Eingang des Schmieds. Ohne den
+Eintrag bleibt das Werkzeug aus, und der Hase wird auch im Prompt nicht
+darauf verwiesen; `hasenbau describe bau` sagt, woran der Bau gerade
+ist. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er von `hasenbau init`, und
 jeder Daemon- oder Lauf-Start korrigiert den Eintrag auf das gerade
 laufende Binary und sagt es im Log — auch nach einem Rebuild an einen

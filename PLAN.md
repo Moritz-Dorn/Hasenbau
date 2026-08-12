@@ -194,6 +194,16 @@ des Schmieds (§1); ein `watch`-Trigger darauf braucht keinen neuen
 Mechanismus. Ohne konfigurierten Raum bietet der Rückkanal das Werkzeug
 nicht an; ein Briefkasten, den niemand leert, ist schlimmer als keiner.
 
+Und dann schweigt auch der Prompt davon. Der Absatz über
+`hasenbau_tool_request` steht nur im generierten Agenten, wenn es das
+Werkzeug gibt (`hase.Optionen.ToolRequests`). Das ist keine Kosmetik:
+der Absatz ist genau die Stelle, die einem Hasen den legalen Weg zeigt,
+wenn ihm etwas fehlt. Zeigt er ins Leere, steht der Hase in derselben
+Lage, aus der dieser Abschnitt entstanden ist — Aufgabe unlösbar, kein
+angebotener Ausweg —, und dort nahm er den Umweg über einen
+Subagenten. Ein Verweis auf ein Werkzeug, das es nicht gibt, ist hier
+schlimmer als gar keiner.
+
 Der Abweisungstext des Wächters nennt genau dieses Werkzeug, und im
 ersten echten Lauf hat der Hase es benutzt statt weiterzusuchen.
 
