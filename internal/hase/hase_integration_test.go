@@ -86,7 +86,7 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl); err != nil {
+	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl, Optionen{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,7 +123,7 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	// Template verschärfen, neu generieren, Caches verwerfen: die neue
 	// Regel muss ohne Server-Restart erscheinen.
 	tpl.Denies = append(tpl.Denies, Regel{Permission: "edit", Pattern: "raeume/lager/intern/**"})
-	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl); err != nil {
+	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl, Optionen{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := opencode.DisposeInstance(ctx, opencode.New(sup.BaseURL())); err != nil {

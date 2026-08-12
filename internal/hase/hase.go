@@ -225,9 +225,27 @@ var grundDenies = []string{"bash", "webfetch", "websearch", "external_directory"
 // Werkzeug dazu, wird er rot.
 var abgeschalteteTools = []string{"bash", "question", "task", "webfetch"}
 
+// Optionen sind die Umstände des Baus, die in den generierten Agenten
+// einfließen — alles, was weder im Auftrag noch im Template steht. Der
+// Nullwert ist der karge Fall: nichts zusätzlich angeboten.
+type Optionen struct {
+	// ToolRequests sagt, ob der Bau einen `requests:`-Raum hat. Nur
+	// dann bietet der Rückkanal `hasenbau_tool_request` überhaupt an
+	// (cmd/hasenbau: wunschRaum aus cfg.Requests), und nur dann darf
+	// der Prompt den Hasen darauf verweisen.
+	//
+	// Ein Verweis auf ein Werkzeug, das es nicht gibt, ist an dieser
+	// Stelle schlimmer als keiner: der Absatz ist genau die Stelle, die
+	// einem Hasen den LEGALEN Weg zeigen soll, wenn ihm etwas fehlt.
+	// Zeigt er ins Leere, steht der Hase in der Lage aus Hasenbau-wiu —
+	// Aufgabe unlösbar, kein angebotener Ausweg — und dort nahm er den
+	// Umweg über einen Subagenten (Hasenbau-2lq).
+	ToolRequests bool
+}
+
 // Generiere baut den opencode-Agenten für einen Auftrag. Die Ausgabe
 // ist deterministisch: gleicher Input ⇒ gleiche Bytes.
-func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
+func Generiere(a *auftrag.Auftrag, t *Template, o Optionen) ([]byte, error) {
 	if a.Hase != t.Name {
 		return nil, fmt.Errorf("auftrag %s verlangt Hase %q, Template heißt %q", a.Name, a.Hase, t.Name)
 	}
@@ -320,6 +338,9 @@ func Generiere(a *auftrag.Auftrag, t *Template) ([]byte, error) {
 	// Injektionspunkt: was das Framework jedem Hasen mitgibt,
 	// unabhängig vom Template. Bisher nur der Rückkanal.
 	b.WriteString(rueckkanalPrompt)
+	if o.ToolRequests {
+		b.WriteString(toolRequestPrompt)
+	}
 	return []byte(b.String()), nil
 }
 
@@ -358,7 +379,11 @@ nicht als Höflichkeit. Sie ersetzt keine Ausgabe in deinen Raum.
 Was dir unterwegs auffällt und später jemanden interessieren könnte,
 aber nicht in die eine Zeile passt, gehört in ` + "`hasenbau_notiz`" + `.
 Auch das ist ein Aufruf, keine Überschrift in deiner Antwort.
+`
 
+// toolRequestPrompt kommt nur dazu, wenn der Bau einen `requests:`-Raum
+// hat — sonst gibt es das Werkzeug nicht (Optionen.ToolRequests).
+const toolRequestPrompt = `
 Fehlt dir ein **Werkzeug**, um deine Aufgabe zu lösen — etwa weil sie
 ohne Ausführung nicht geht —, dann fordere eines an:
 ` + "`hasenbau_tool_request`" + ` mit Zweck, Eingabe und Ausgabe. Es wird
@@ -369,8 +394,8 @@ ist ein Loch und kein Werkzeug.
 
 // SchreibeAgent generiert und schreibt den Agenten in den Bau.
 // Zurück kommt der Bau-relative Pfad der Datei.
-func SchreibeAgent(root string, a *auftrag.Auftrag, t *Template) (string, error) {
-	inhalt, err := Generiere(a, t)
+func SchreibeAgent(root string, a *auftrag.Auftrag, t *Template, o Optionen) (string, error) {
+	inhalt, err := Generiere(a, t, o)
 	if err != nil {
 		return "", err
 	}

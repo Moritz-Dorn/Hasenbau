@@ -60,7 +60,7 @@ func TestLadeUndGeneriere(t *testing.T) {
 		t.Errorf("Template = %+v", tpl)
 	}
 
-	inhalt, err := Generiere(beispielAuftrag(t), tpl)
+	inhalt, err := Generiere(beispielAuftrag(t), tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestLadeUndGeneriere(t *testing.T) {
 	}
 
 	// Deterministisch: gleicher Input ⇒ gleiche Bytes.
-	nochmal, err := Generiere(beispielAuftrag(t), tpl)
+	nochmal, err := Generiere(beispielAuftrag(t), tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestGeneriereOhneSchreibRaeume(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &auftrag.Auftrag{Name: "morgenpost", Hase: "melder"}
-	inhalt, err := Generiere(a, tpl)
+	inhalt, err := Generiere(a, tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ Prompt.
 	if err != nil {
 		t.Fatal(err)
 	}
-	inhalt, err := Generiere(beispielAuftrag(t), tpl)
+	inhalt, err := Generiere(beispielAuftrag(t), tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestSchreibeAgent(t *testing.T) {
 	}
 
 	a := beispielAuftrag(t)
-	rel, err := SchreibeAgent(root, a, tpl)
+	rel, err := SchreibeAgent(root, a, tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestGeneriereLehntFalschesTemplateAb(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Generiere(beispielAuftrag(t), tpl); err == nil {
+	if _, err := Generiere(beispielAuftrag(t), tpl, Optionen{}); err == nil {
 		t.Error("Auftrag mit fremdem Hasen muss scheitern")
 	}
 }
@@ -240,7 +240,7 @@ func TestKenntHasenbauBindetMitgeliefertesWissenEin(t *testing.T) {
 
 	a := beispielAuftrag(t)
 	a.Hase = "baumeister"
-	roh, err := Generiere(a, tpl)
+	roh, err := Generiere(a, tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestOhneWissenFelderKeinZusatz(t *testing.T) {
 	if len(tpl.Knowledge) != 0 {
 		t.Errorf("Wissen ohne Feld: %+v", tpl.Knowledge)
 	}
-	roh, err := Generiere(beispielAuftrag(t), tpl)
+	roh, err := Generiere(beispielAuftrag(t), tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestWissenAusEigenenDateien(t *testing.T) {
 		t.Errorf("Herkunft = %v", herkunft)
 	}
 
-	roh, err := Generiere(beispielAuftrag(t), tpl)
+	roh, err := Generiere(beispielAuftrag(t), tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestGenerierterAgentSchaltetTaskAb(t *testing.T) {
 		Raeume:  map[string]string{"input": "raeume/eingang/", "work": "raeume/werkstatt/"},
 		Body:    "Tu was.",
 	}
-	roh, err := Generiere(a, &Template{Name: "archivar", Prompt: "Du bist der Archivar."})
+	roh, err := Generiere(a, &Template{Name: "archivar", Prompt: "Du bist der Archivar."}, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,5 +390,53 @@ func TestGenerierterAgentSchaltetTaskAb(t *testing.T) {
 	// hätte sie still mitgenommen.
 	if strings.Contains(block, "hasenbau") {
 		t.Errorf("tools-Block fasst den Rückkanal an:\n%s", block)
+	}
+}
+
+// TestToolRequestAbsatzHaengtAmRequestsRaum hält die Invariante aus
+// Hasenbau-2lq fest: der Prompt verweist genau dann auf
+// `hasenbau_tool_request`, wenn es das Werkzeug auch gibt.
+//
+// Warum das mehr ist als Kosmetik: der Absatz ist die Stelle, die einem
+// Hasen den legalen Weg zeigt, wenn ihm etwas fehlt. Zeigt er ins
+// Leere, steht der Hase in der Lage aus Hasenbau-wiu — Aufgabe
+// unlösbar, kein angebotener Ausweg —, und dort nahm er den Umweg über
+// einen Subagenten. Angeboten wird das Werkzeug nur bei gesetztem
+// `requests:` (cmd/hasenbau: wunschRaum aus cfg.Requests); gemessen am
+// 2026-08-12 liefert `tools/list` ohne den Schlüssel nur notiz und
+// summary.
+func TestToolRequestAbsatzHaengtAmRequestsRaum(t *testing.T) {
+	a := &auftrag.Auftrag{
+		Name: "einlagern", Hase: "archivar",
+		Trigger: auftrag.Trigger{Watch: "*.pdf"},
+		Raeume:  map[string]string{"input": "raeume/eingang/", "work": "raeume/werkstatt/"},
+		Body:    "Tu was.",
+	}
+	tpl := &Template{Name: "archivar", Prompt: "Du bist der Archivar."}
+
+	ohne, err := Generiere(a, tpl, Optionen{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(ohne), "hasenbau_tool_request") {
+		t.Errorf("ohne requests-Raum verweist der Prompt trotzdem auf hasenbau_tool_request:\n%s", ohne)
+	}
+
+	mit, err := Generiere(a, tpl, Optionen{ToolRequests: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mit), "hasenbau_tool_request") {
+		t.Errorf("mit requests-Raum fehlt der Verweis auf hasenbau_tool_request:\n%s", mit)
+	}
+
+	// Der übrige Rückkanal bleibt in beiden Lagen stehen — abgeschaltet
+	// wird nur der eine Absatz, nicht die Abschlusshandlung des Laufs.
+	for _, roh := range [][]byte{ohne, mit} {
+		for _, pflicht := range []string{"hasenbau_summary", "hasenbau_notiz"} {
+			if !strings.Contains(string(roh), pflicht) {
+				t.Errorf("%s fehlt im generierten Agenten", pflicht)
+			}
+		}
 	}
 }

@@ -191,6 +191,15 @@ func checkHasenbauYAML(root string) Check {
 	if conf.Throttle.An() {
 		teile = append(teile, fmt.Sprintf("bau-deckel: %d je %s", conf.Throttle.Max, conf.Throttle.Per))
 	}
+	// Der Wunsch-Raum entscheidet, ob die Hasen `hasenbau_tool_request`
+	// überhaupt zu sehen bekommen — und ob der generierte Prompt sie
+	// darauf verweist. Ohne diese Zeile sieht ein Bau mit und ohne ihn
+	// in der Diagnose identisch aus (Hasenbau-2lq).
+	if conf.Requests != "" {
+		teile = append(teile, "requests: "+conf.Requests)
+	} else {
+		teile = append(teile, "kein requests-Raum (Hasen können kein Werkzeug anfordern)")
+	}
 	if conf.Baumeister == "" {
 		return Check{Name: ConfigFile, OK: true, Detail: strings.Join(teile, ", ") + ", kein baumeister",
 			Hint: "ohne `baumeister:` läuft `hasenbau baumeister` nicht"}

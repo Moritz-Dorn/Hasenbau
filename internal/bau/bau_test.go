@@ -153,3 +153,35 @@ func TestInitLehntDateiAlsRootAb(t *testing.T) {
 		t.Error("Init auf einer Datei muss fehlschlagen")
 	}
 }
+
+// TestDiagnoseMeldetRequestsRaum: `describe bau` muss sagen, ob der Bau
+// einen Wunsch-Raum hat. Ohne diese Angabe sieht ein Bau mit und ohne
+// ihn identisch aus — obwohl der Unterschied ist, ob die Hasen
+// `hasenbau_tool_request` überhaupt zu sehen bekommen (Hasenbau-2lq).
+func TestDiagnoseMeldetRequestsRaum(t *testing.T) {
+	suche := func(checks []Check) string {
+		for _, c := range checks {
+			if c.Name == ConfigFile {
+				return c.Detail
+			}
+		}
+		return ""
+	}
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ConfigFile),
+		[]byte("log_level: info\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if detail := suche(Diagnose(root)); !strings.Contains(detail, "kein requests-Raum") {
+		t.Errorf("ohne requests-Raum meldet die Diagnose %q — der Hinweis fehlt", detail)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, ConfigFile),
+		[]byte("log_level: info\nrequests: raeume/wuensche/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if detail := suche(Diagnose(root)); !strings.Contains(detail, "requests: raeume/wuensche/") {
+		t.Errorf("mit requests-Raum meldet die Diagnose %q — der Raum fehlt", detail)
+	}
+}

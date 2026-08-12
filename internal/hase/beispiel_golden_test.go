@@ -51,35 +51,50 @@ func TestBeispieleGenerierenGolden(t *testing.T) {
 		t.Fatalf("nur %d Auftrag/Aufträge gefunden — eine Wurzel ist leer oder falsch verdrahtet", len(alle))
 	}
 
+	// Beide Bau-Lagen: ohne `requests:`-Raum bekommt der Hase den
+	// Absatz über `hasenbau_tool_request` nicht, weil es das Werkzeug
+	// dann nicht gibt (Hasenbau-2lq). Nur eine Lage zu prüfen hiesse,
+	// die andere ungesichert zu lassen — genau der Fehler, der beim
+	// Umzug des Baumeisters schon einmal passiert ist.
+	lagen := []struct {
+		suffix string
+		o      Optionen
+	}{
+		{".golden.md", Optionen{}},
+		{".requests.golden.md", Optionen{ToolRequests: true}},
+	}
+
 	for _, q := range alle {
-		root, a := q.root, q.a
-		t.Run(a.Name, func(t *testing.T) {
-			tpl, err := Lade(root, a.Hase)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := Generiere(a, tpl)
-			if err != nil {
-				t.Fatal(err)
-			}
-			golden := filepath.Join("testdata", a.Name+"__"+a.Hase+".golden.md")
-			if *aktualisiere {
-				if err := os.MkdirAll("testdata", 0o755); err != nil {
+		for _, lage := range lagen {
+			root, a, lage := q.root, q.a, lage
+			t.Run(a.Name+lage.suffix, func(t *testing.T) {
+				tpl, err := Lade(root, a.Hase)
+				if err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(golden, got, 0o644); err != nil {
+				got, err := Generiere(a, tpl, lage.o)
+				if err != nil {
 					t.Fatal(err)
 				}
-				return
-			}
-			want, err := os.ReadFile(golden)
-			if err != nil {
-				t.Fatalf("%v — mit `go test ./internal/hase/ -update` neu schreiben", err)
-			}
-			if string(got) != string(want) {
-				t.Errorf("generierter Agent weicht ab:\n--- got ---\n%s\n--- want ---\n%s", got, want)
-			}
-		})
+				golden := filepath.Join("testdata", a.Name+"__"+a.Hase+lage.suffix)
+				if *aktualisiere {
+					if err := os.MkdirAll("testdata", 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(golden, got, 0o644); err != nil {
+						t.Fatal(err)
+					}
+					return
+				}
+				want, err := os.ReadFile(golden)
+				if err != nil {
+					t.Fatalf("%v — mit `go test ./internal/hase/ -update` neu schreiben", err)
+				}
+				if string(got) != string(want) {
+					t.Errorf("generierter Agent weicht ab:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+				}
+			})
+		}
 	}
 }
 
@@ -105,7 +120,7 @@ func TestBaumeisterDarfNichtsScharfSchalten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	roh, err := Generiere(baumeister, tpl)
+	roh, err := Generiere(baumeister, tpl, Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}

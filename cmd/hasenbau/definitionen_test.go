@@ -189,7 +189,7 @@ func TestSchreibRaeumeStimmtMitGenerierungUeberein(t *testing.T) {
 		Trigger: auftrag.Trigger{Manual: true}, Body: "x",
 	}
 	t.Setenv("HOME", t.TempDir()) // hase.Generiere fasst nichts an, aber sicher ist sicher
-	roh, err := hase.Generiere(a, &hase.Template{Name: "h", Prompt: "x"})
+	roh, err := hase.Generiere(a, &hase.Template{Name: "h", Prompt: "x"}, hase.Optionen{})
 	if err != nil {
 		t.Fatal(err)
 	}

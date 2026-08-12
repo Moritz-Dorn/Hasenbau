@@ -394,16 +394,30 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	if err != nil {
 		return nil, err
 	}
+	o := generierOptionen(root)
 	for _, a := range auftraege {
 		t, err := hase.Lade(root, a.Hase)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := hase.SchreibeAgent(root, a, t); err != nil {
+		if _, err := hase.SchreibeAgent(root, a, t, o); err != nil {
 			return nil, err
 		}
 	}
 	return auftraege, nil
+}
+
+// generierOptionen liest aus der Bau-Config, was der generierte Agent
+// über seinen Bau wissen muss. Ein Config-Fehler ist hier kein Grund
+// abzubrechen: er meldet sich an anderer Stelle laut genug, und der
+// karge Agent ist der sichere Fall — er verweist auf nichts, was es
+// womöglich nicht gibt.
+func generierOptionen(root string) hase.Optionen {
+	cfg, err := bau.LoadConfig(root)
+	if err != nil {
+		return hase.Optionen{}
+	}
+	return hase.Optionen{ToolRequests: cfg.Requests != ""}
 }
 
 // waitForServer blockiert, bis der Supervisor eine BaseURL meldet —
