@@ -119,19 +119,39 @@ Umweg stand ihm der ganze Bau offen, auch `auftraege/` und `hasen/`.
 
 Daraus zwei Lehren, die über den Einzelfall hinausgehen:
 
-**Ein Verbot ist kein Entzug.** `permission: bash: deny` lässt das
-Werkzeug in der Liste des Modells stehen und lehnt erst den Aufruf ab.
-Der Hase sieht also, was er nicht darf — und sucht einen Weg. Was er
-nicht braucht, wird deshalb über `tools:` entfernt statt über
-`permission:` verboten; die Denies bleiben als zweite Linie.
+**Was er nicht braucht, bekommt er nicht zu sehen.** Ein Hase, der ein
+Werkzeug in seiner Liste stehen sieht und es nicht benutzen darf, sucht
+einen Weg drumherum — genau so entstand dieser Abschnitt. Deshalb
+stehen `task`, `question`, `bash`, `webfetch`, `websearch` und
+`external_directory` als `deny` im `permission:`-Block des generierten
+Agenten, und sie tauchen beim Modell gar nicht erst auf.
 
-**Am Schema geprüft heißt nicht wirksam.** Dass `tools:` je Agent
-existiert, steht im SDK-Schema (`AgentConfig.tools`). Ob opencode das
-Feld aus dem Frontmatter eines generierten Agenten auch auswertet, ist
-über keinen Endpoint messbar: `/agent` liefert die Werkzeuge nicht
-zurück, und `/experimental/tool` antwortet je Provider und Modell, nicht
-je Agent — `agent=gibtesnicht` liefert dieselbe Liste (gemessen an
-1.15.13).
+Bis zum 2026-08-12 stand hier das Gegenteil: ein Deny lasse das
+Werkzeug in der Liste stehen, man müsse es über ein zweites Feld
+(`tools: {name: false}`) *entziehen*. Das ist gemessen falsch
+(Hasenbau-8fd). Beide Felder entziehen — belegt an einem einzigen Lauf,
+damit Modell und Session nicht variieren: derselbe Hase zählte
+`probe_zeitstempel` (keine Regel) in seiner Liste auf und `bash` (nur
+`deny`) nicht. Dazu führt die opencode-Doku `tools` ausdrücklich als
+deprecated („prefer the agent's `permission` field"). Der Hasenbau
+schreibt seit 8fd nur noch `permission:` — ein Mechanismus statt
+zweier, die auseinanderlaufen können.
+
+**Am Schema geprüft heißt nicht wirksam.** Dass es das Feld gibt, steht
+im SDK-Schema. Ob opencode es aus dem Frontmatter eines generierten
+Agenten auch auswertet, ist über keinen Endpoint messbar: `/agent`
+liefert die Werkzeuge nicht zurück, und `/experimental/tool` antwortet
+je Provider und Modell, nicht je Agent — `agent=gibtesnicht` liefert
+dieselbe Liste (gemessen an 1.15.13). Wirksamkeit zeigt hier nur ein
+echter Lauf, und nur mit Gegenprobe.
+
+**Und das Schema ist nicht eine Datei.** Der Trugschluss in
+Hasenbau-wiu („`permission` kennt kein `task`") stammt aus den
+v1-Typen des installierten SDK. Die v2-Typen im *selben* Paket und die
+OpenAPI-Spec des laufenden Servers führen `task` sehr wohl — samt
+`read`, `glob`, `grep`, `list`, `todowrite`, `question`, `websearch`,
+`lsp` und `skill`. Maßgeblich ist die Spec unter `<server>/doc`: sie
+gehört zu dem Binary, das tatsächlich antwortet.
 
 ### Der Sandbox-Wächter
 
@@ -175,12 +195,17 @@ aufgefordert, über `task` einen Subagenten zu starten:
 
 | | Hase ruft `task`? | Wächter |
 |---|---|---|
-| mit `tools:`-Block | nein — „habe kein task-Werkzeug" | schweigt |
+| mit Sperre | nein — „habe kein task-Werkzeug" | schweigt |
 | ohne (Gegenprobe) | ja | weist ab |
 
-Damit ist beides belegt: `tools:` wirkt, und der Wächter ist nicht
+Damit ist beides belegt: die Sperre wirkt, und der Wächter ist nicht
 blind. Erst die Gegenprobe macht daraus einen Nachweis — ein Lauf, in
 dem nichts passiert, beweist für sich genommen nichts.
+
+Die Sperre war damals ein `tools:`-Block; seit Hasenbau-8fd steht sie
+als `deny` im `permission:`-Block, und die Messung wurde dort
+wiederholt: derselbe Hase, dieselbe Aufzählung, `bash`, `task`,
+`question` und `webfetch` fehlen, der Rückkanal ist vollständig da.
 
 ### Wenn ein Werkzeug fehlt
 

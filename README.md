@@ -319,6 +319,16 @@ wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet
 auch über die, die es nicht setzen. Wer es später nachträgt, bekommt die
 Historie mitgeliefert.
 
+Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
+Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
+und `question` stehen als `deny` in seinem `permission:`-Block. Das ist
+kein Verbieten, sondern ein Entziehen — die Werkzeuge tauchen in der
+Liste des Modells gar nicht erst auf, und der Hase sucht deshalb keinen
+Weg um sie herum. `task` ist dabei das wichtigste: ein Subagent wäre ein
+eigener Agent und erbte weder die Permissions noch die Raum-Grenzen.
+`hasenbau describe hase <name>` zeigt, was für einen Hasen in einem
+konkreten Auftrag herauskommt.
+
 Ein Hasen-Template kann Hintergrundwissen anfordern: `knows_hasenbau:
 true` bindet eine mitgelieferte Einführung in den Hasenbau ein (Begriffe,
 Ablauf, Trace-Aufbau, Grenzen), `knowledge: [pfade]` eigene Dateien aus
