@@ -39,6 +39,7 @@ englisch in der DB und in der Ausgabe.
 | **Auftrag** | Trigger + Gänge + Hase + Räume. Die Job-Definition. |
 | **Lauf** | Eine Ausführung eines Auftrags. Hat Status, Dauer, Output, Summary. |
 | **Baumeister** | Sonder-Hase mit Schreibrecht auf `gaenge/`. Verdichtet Tool-Traces zu Gängen (Phase 2). |
+| **Schmied** | Sonder-Hase, der aus einem Tool-Request ein Skript (Python/Bash) baut. Das Ergebnis wird ein opencode user-defined tool, das ein Hase *während* seines Laufs ruft — im Unterschied zum Gang, der *davor* läuft (Hasenbau-hcs). |
 
 ---
 
@@ -575,7 +576,7 @@ Absicht — ein Flag, das mitschneidet, ist eines, bei dem man später
 merkt, dass man es hätte setzen sollen; eines, das nur meldet, kann man
 jederzeit nachziehen und bekommt die Historie mitgeliefert.
 
-Der Schlüssel ist englisch wie alle Formatschlüssel außer den sieben
+Der Schlüssel ist englisch wie alle Formatschlüssel außer den acht
 Begriffen aus §1 — in der Prosa und in der Ausgabe heißt die Sache
 weiter „überwacht".
 
@@ -928,7 +929,7 @@ trägt keine Generalisierung, ein kurzes in allen zwanzig schon. Unter
 drei Läufen entsteht gar kein Gang-Kandidat; zwei sind kein Muster,
 sondern ein Zufall zu zweit.
 
-Der Name ist englisch wie alles außer den sieben Begriffen aus §1 —
+Der Name ist englisch wie alles außer den acht Begriffen aus §1 —
 in der Prosa heißt die Sache weiter Befund, so wie `dig` einen Trace
 gräbt.
 
@@ -1329,8 +1330,9 @@ nimmt den Hasen still ihre Werkzeuge weg (Hasenbau-2nq/08u). Beides
 merkt man sonst erst an einem Lauf, der komisch aussieht.
 
 **Die Sprache folgt §1.** Befehle und Ressourcen sind englisch, außer
-den sieben Domänen-Begriffen: `lauf`, `hase`, `gang`, `auftrag`,
-`baumeister`, `bau` bleiben deutsch, weil sie die Sache benennen. Alles
+den acht Domänen-Begriffen: `lauf`, `hase`, `gang`, `auftrag`,
+`baumeister`, `schmied`, `bau` bleiben deutsch, weil sie die Sache
+benennen. Alles
 andere nicht — `graben` wurde zu `dig`, und die Befund-Analyse heißt
 `findings`, obwohl die Prosa weiter von Befunden spricht.
 

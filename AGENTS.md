@@ -76,8 +76,9 @@ im selben Arbeitsgang, nicht „später":
 | **Auftrag** | Trigger + Gänge + Hase + Räume (Job-Definition) |
 | **Lauf** | Eine Ausführung eines Auftrags |
 | **Baumeister** | Sonder-Hase, verdichtet Traces zu Gängen (Phase 2) |
+| **Schmied** | Sonder-Hase, baut aus einem Tool-Request ein Skript; daraus wird ein Tool, das ein Hase *während* des Laufs ruft (Hasenbau-hcs) |
 
-**Diese sieben Begriffe sind die einzigen deutschen Wörter im Code** —
+**Diese acht Begriffe sind die einzigen deutschen Wörter im Code** —
 samt Plural (`laeufe`, `gaenge`, `raeume`, `auftraege`). Alles andere ist
 englisch: Bezeichner, Formatschlüssel, DB-Spalten und -Werte,
 Paketnamen. Kein `Job` statt `Auftrag`, aber auch kein `gestartet` statt
