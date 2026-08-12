@@ -33,6 +33,13 @@ type Config struct {
 	// der hier benannte Auftrag über sein hase:-Feld.
 	Baumeister string
 
+	// Sandbox sagt, was der Wächter tut, wenn ein Hase ein Werkzeug
+	// ruft, das ihn aus seiner Sandbox führen würde (Hasenbau-d2p):
+	// "deny" weist den Aufruf ab, "warn" lässt ihn durch und meldet
+	// ihn nur. Gemeldet wird in beiden Fällen. Vorgabe ist "deny" —
+	// wer lockert, tut es sichtbar.
+	Sandbox string
+
 	// Throttle ist der Bau-weite Deckel über ALLE Aufträge
 	// (Hasenbau-cvf). Der Deckel je Auftrag (§6) schützt einen Auftrag
 	// vor sich selbst; dieser schützt das Budget: zehn Aufträge mit je
@@ -56,6 +63,7 @@ func (t Throttle) An() bool { return t.Max > 0 }
 type configFields struct {
 	LogLevel   *string `yaml:"log_level"`
 	Baumeister *string `yaml:"baumeister"`
+	Sandbox    *string `yaml:"sandbox"`
 	Throttle   *struct {
 		Max int     `yaml:"max"`
 		Per *string `yaml:"per"`
@@ -63,6 +71,14 @@ type configFields struct {
 }
 
 var logLevel = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+
+// Sandbox-Modi (Hasenbau-d2p).
+const (
+	SandboxDeny = "deny" // Aufruf abweisen; der Hase bekommt den Grund zu lesen
+	SandboxWarn = "warn" // Aufruf durchlassen, aber melden
+)
+
+var sandboxModus = map[string]bool{SandboxDeny: true, SandboxWarn: true}
 
 // namePattern gilt für Auftrags- und Hasen-Namen (§6). Hier dupliziert
 // statt importiert: internal/auftrag hängt an dieser Config nicht, und
@@ -73,7 +89,7 @@ var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 // Defaults — sie wird von `hasenbau init` angelegt, und ihr Fehlen ist
 // kein Grund, den Daemon nicht zu starten.
 func LoadConfig(root string) (*Config, error) {
-	c := &Config{LogLevel: "info"}
+	c := &Config{LogLevel: "info", Sandbox: SandboxDeny}
 	pfad := filepath.Join(root, ConfigFile)
 	src, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -87,7 +103,7 @@ func LoadConfig(root string) (*Config, error) {
 	dec.KnownFields(true)
 	var d configFields
 	if err := dec.Decode(&d); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister, throttle)", ConfigFile, err)
+		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister, sandbox, throttle)", ConfigFile, err)
 	}
 
 	if d.LogLevel != nil {
@@ -101,6 +117,12 @@ func LoadConfig(root string) (*Config, error) {
 			return nil, fmt.Errorf("bau: %s: baumeister %q ist kein gültiger Auftrags-Name (erlaubt: Buchstaben, Ziffern, . _ -)", ConfigFile, *d.Baumeister)
 		}
 		c.Baumeister = *d.Baumeister
+	}
+	if d.Sandbox != nil {
+		if !sandboxModus[*d.Sandbox] {
+			return nil, fmt.Errorf("bau: %s: sandbox %q (erlaubt: %s, %s)", ConfigFile, *d.Sandbox, SandboxDeny, SandboxWarn)
+		}
+		c.Sandbox = *d.Sandbox
 	}
 	// Dieselbe Regel wie beim Deckel je Auftrag (§6): beide Hälften oder
 	// keine. Eine Zahl ohne Fenster ist keine Rate, ein Fenster ohne

@@ -57,6 +57,9 @@ Befehle:
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
                         selbst; nicht von Hand aufrufen)
+  sandbox-vorfall       meldet einen Werkzeug-Aufruf, der aus der Sandbox
+                        führt (ruft der Wächter im opencode-Server auf;
+                        nicht von Hand aufrufen)
 
 Globale Flags (vor dem Befehl):
   -bau <pfad>      Root des Baus (Default: .)
@@ -133,6 +136,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdStatus(bau, out, errw)
 	case "mcp":
 		return cmdMCP(bau, errw)
+	case "sandbox-vorfall":
+		return cmdSandboxVorfall(bau, rest[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau: unbekannter Befehl %q\n\n%s", rest[0], usage)
 		return 2

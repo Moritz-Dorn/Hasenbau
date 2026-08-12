@@ -208,3 +208,66 @@ func TestFixOhneBau(t *testing.T) {
 		t.Error("fix hat im leeren Verzeichnis einen Bau angelegt")
 	}
 }
+
+// TestFixStelltWaechterWiederHer: der Sandbox-Wächter ist eine Vorlage
+// wie der Baumeister — und sein Fehlen ist gefährlicher als dessen,
+// weil sein Schweigen als „niemand hat es versucht" gelesen wird.
+func TestFixStelltWaechterWiederHer(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+	waechter := filepath.Join(bauDir, ".opencode-home", "opencode", "plugin", "hasenbau.js")
+	if _, err := os.Stat(waechter); err != nil {
+		t.Fatalf("init hat den Wächter nicht angelegt: %v", err)
+	}
+	if err := os.Remove(waechter); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ohne ihn muss die Diagnose anschlagen — sonst wäre die Lücke
+	// unsichtbar, und genau das ist der Fall, den es zu vermeiden gilt.
+	out.Reset()
+	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
+	if !strings.Contains(out.String(), "Sandbox-Wächter") || !strings.Contains(out.String(), "fehlt") {
+		t.Errorf("Diagnose meldet den fehlenden Wächter nicht:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", bauDir, "fix"}, &out, &errw); code != 0 {
+		t.Fatalf("fix: %d, %s", code, errw.String())
+	}
+	if _, err := os.Stat(waechter); err != nil {
+		t.Errorf("fix hat den Wächter nicht wiederhergestellt: %v", err)
+	}
+}
+
+// TestWaechterOhneEintragWirdGemeldet: die Datei allein nützt nichts —
+// ohne den plugin:-Eintrag lädt opencode sie nie. Ein Wächter, der
+// daliegt und schweigt, sähe aus wie einer, der nichts zu melden hat.
+func TestWaechterOhneEintragWirdGemeldet(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+	cfg := filepath.Join(bauDir, ".opencode-home", "opencode", "opencode.json")
+	roh, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ohne := strings.Replace(string(roh), `"./plugin/hasenbau.js"`, "", 1)
+	if ohne == string(roh) {
+		t.Fatal("Testaufbau: kein plugin-Eintrag in der Config")
+	}
+	if err := os.WriteFile(cfg, []byte(ohne), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
+	if !strings.Contains(out.String(), "steht aber nicht im plugin") {
+		t.Errorf("Diagnose meldet den fehlenden Eintrag nicht:\n%s", out.String())
+	}
+}

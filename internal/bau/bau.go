@@ -43,6 +43,13 @@ log_level: info
 # legt ` + "`hasenbau init`" + ` mit an; ` + "`hasenbau fix`" + ` stellt sie wieder her,
 # wenn sie fehlen.
 baumeister: baumeister
+
+# Was der Sandbox-Wächter tut, wenn ein Hase ein Werkzeug ruft, das ihn
+# aus seiner Sandbox führen würde (task, bash, webfetch, websearch):
+#   deny  Aufruf abweisen — der Hase bekommt den Grund zu lesen (Vorgabe)
+#   warn  Aufruf durchlassen und nur melden
+# Gemeldet wird in beiden Fällen, als Notiz am Lauf.
+# sandbox: warn
 `
 
 // Die Vorlagen der Sonder-Hasen liegen im Binary, nicht in beispiele/:
@@ -55,6 +62,8 @@ var (
 	auftragBaumeister string
 	//go:embed vorlagen/hasen/baumeister.md
 	haseBaumeister string
+	//go:embed vorlagen/plugin/hasenbau.js
+	sandboxWaechter string
 )
 
 // gitIgnore: Der Bau versioniert Definitionen (Aufträge, Hasen, Gänge,
@@ -68,6 +77,7 @@ raeume/
 // Räume benennt der Auftrag, der Daemon legt fehlende an (§4).
 var dirs = []string{
 	".opencode-home/opencode/agents",
+	".opencode-home/opencode/plugin",
 	".opencode-home/opencode/skills",
 	"auftraege",
 	"gaenge",
@@ -84,6 +94,7 @@ var files = map[string]string{
 	OpencodeConfig:            opencodeJSON,
 	"auftraege/baumeister.md": auftragBaumeister,
 	"hasen/baumeister.md":     haseBaumeister,
+	PluginDatei:               sandboxWaechter,
 }
 
 // Init legt das Layout unter root an. Vorhandenes bleibt unangetastet;
@@ -132,6 +143,9 @@ func Init(root, exe string) ([]string, error) {
 
 	// Nach den Dateien (die Config muss liegen) und vor dem Commit.
 	if _, err := EnsureMCP(root, exe); err != nil {
+		return created, err
+	}
+	if _, err := EnsurePlugin(root); err != nil {
 		return created, err
 	}
 

@@ -131,10 +131,44 @@ Feld aus dem Frontmatter eines generierten Agenten auch auswertet, ist
 über keinen Endpoint messbar: `/agent` liefert die Werkzeuge nicht
 zurück, und `/experimental/tool` antwortet je Provider und Modell, nicht
 je Agent — `agent=gibtesnicht` liefert dieselbe Liste (gemessen an
-1.15.13). Solange das offen ist, gilt der Fix als unbewiesen, und der
-robustere Weg bleibt daneben stehen: ein Bau-eigenes Plugin mit
-`tool.execute.before`, das im Server-Prozess sitzt und deshalb nicht
-davon abhängt, was ein Agent über sich selbst behauptet.
+1.15.13).
+
+### Der Sandbox-Wächter
+
+Deshalb steht neben dem Entzug eine zweite Sache, und sie ist zuerst
+ein **Messgerät**, nicht ein Schloss (Hasenbau-d2p): ein Bau-eigenes
+Plugin unter `.opencode-home/opencode/plugin/hasenbau.js`, eingetragen
+im `plugin:`-Block. Es hängt sich in `tool.execute.before` und sieht
+damit jeden Werkzeug-Aufruf jedes Agenten im Server-Prozess — auch den
+eines Subagenten, und unabhängig davon, was ein Agent über sich selbst
+behauptet.
+
+Am Beispiel-Plugin `EnvProtection` verifiziert (2026-08-12, ein echter
+Lauf): Ein Plugin von dort **wird geladen**, der Hook **feuert für jedes
+Werkzeug** (auch für die MCP-Werkzeuge des Rückkanals), ein `throw`
+**bricht den Aufruf ab, ohne den Lauf zu töten**, und der Fehlertext
+**kommt beim Modell an und ist dort verwertbar** — der Hase gab ihn im
+Trace als `FEHLVERSUCH` samt Begründung weiter.
+
+Weil das Feedback ankommt, wird abgewiesen statt nur gemeldet, und der
+Abweisungstext nennt den Weg: melde über den Rückkanal, was dir fehlt.
+Im ersten echten Lauf hat der Hase genau das getan — statt sich, wie im
+Fall davor, den nächsten Umweg zu suchen. `sandbox: warn` in
+`hasenbau.yaml` stellt auf Durchlassen um; gemeldet wird in beiden
+Fällen, als Notiz am Lauf.
+
+**Die Regel steht nicht im Plugin.** Es meldet an `hasenbau
+sandbox-vorfall` und tut, was der Exit-Code sagt (3 = abweisen, Text auf
+stdout ist für den Hasen). So bleibt die Sandbox-Semantik im Hasenbau
+und überlebt einen Wechsel des Backends (§6) — nachzubauen wäre dann
+ein dünner Hook, keine Bedeutung. Aus demselben Grund kennt das Plugin
+den Agenten nicht: welcher Lauf gerade läuft, weiß der Hasenbau selbst.
+
+**Der Wächter gehört in die Diagnose, und das ist keine Kür.** Sein
+Schweigen wird als Nachweis gelesen — „kein Hase hat es versucht". Ein
+Wächter, der nicht geladen ist, schweigt genauso. `describe bau` prüft
+deshalb Datei und `plugin:`-Eintrag; dieselbe Falle hat beim Rückkanal
+schon einmal fünf Tage gekostet (Hasenbau-2nq/08u).
 
 **Befund aus dem Smoke-Test (2026-07-12):** auth.json teilt nur die
 Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der

@@ -69,8 +69,8 @@ hasenbau init ~/meinbau
 ```
 
 Das legt das Layout an, schreibt den Baumeister (Auftrag und Hase)
-hinein, macht den Bau zu einem Git-Repo mit Root-Commit und trägt den
-Rückkanal in die Bau-Config ein. Den Root-Commit braucht
+sowie den Sandbox-Wächter hinein, macht den Bau zu einem Git-Repo mit
+Root-Commit und trägt den Rückkanal in die Bau-Config ein. Den Root-Commit braucht
 opencode: ohne ihn bekommt der Bau keine eigene Projekt-ID, und die
 Raum-Permissions der Hasen greifen nicht.
 

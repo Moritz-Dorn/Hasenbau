@@ -41,6 +41,7 @@ func Diagnose(root string) []Check {
 		checkGit(root),
 		checkOpencodeConfig(root),
 		checkMCP(root),
+		checkWaechter(root),
 		checkHasenbauYAML(root),
 	}
 }
@@ -148,6 +149,34 @@ func checkMCP(root string) Check {
 			Hint: "der nächste Daemon- oder Lauf-Start korrigiert den Pfad auf das laufende Binary"}
 	}
 	return Check{Name: "Rückkanal", OK: true, Detail: binary}
+}
+
+// checkWaechter prüft den Sandbox-Wächter (Hasenbau-d2p). Er MUSS
+// geprüft werden, und zwar aus demselben Grund, aus dem es ihn gibt:
+// sein Schweigen wird als Nachweis gelesen („kein Hase hat es
+// versucht"). Ein Wächter, der gar nicht geladen ist, schweigt ebenso —
+// und dann heißt Stille nichts mehr. Dieselbe Falle wie beim Rückkanal,
+// dessen Eintrag fünf Tage lang auf ein verschwundenes Binary zeigte
+// (Hasenbau-2nq/08u).
+func checkWaechter(root string) Check {
+	const name = "Sandbox-Wächter"
+	if _, err := os.Stat(filepath.Join(root, PluginDatei)); err != nil {
+		return Check{Name: name, Detail: PluginDatei + " fehlt",
+			Hint: "`hasenbau fix` legt ihn wieder an"}
+	}
+	eingetragen, err := PluginEingetragen(root)
+	if err != nil {
+		return Check{Name: name, Detail: "Bau-Config unlesbar"}
+	}
+	if !eingetragen {
+		return Check{Name: name, Detail: "liegt da, steht aber nicht im plugin:-Block",
+			Hint: "so lädt opencode ihn nicht — `hasenbau fix` trägt ihn ein"}
+	}
+	conf, err := LoadConfig(root)
+	if err == nil && conf.Sandbox == SandboxWarn {
+		return Check{Name: name, OK: true, Detail: "aktiv, sandbox: warn (Aufrufe werden gemeldet, nicht abgewiesen)"}
+	}
+	return Check{Name: name, OK: true, Detail: "aktiv, sandbox: deny"}
 }
 
 func checkHasenbauYAML(root string) Check {
