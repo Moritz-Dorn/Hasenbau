@@ -186,8 +186,8 @@ dem nichts passiert, beweist für sich genommen nichts.
 
 Ein Hase, dem man ein Werkzeug nimmt, sucht sich einen Umweg — so ist
 dieser Abschnitt entstanden. Deshalb gibt es einen Weg nach vorn:
-`hasenbau_werkzeug_wunsch` (Zweck, Eingabe, Ausgabe, optional der
-gescheiterte Versuch) legt einen Wunsch in den Raum aus `wuensche:` —
+`hasenbau_tool_request` (Zweck, Eingabe, Ausgabe, optional der
+gescheiterte Versuch) legt einen Wunsch in den Raum aus `requests:` —
 genauer in dessen `tools/`, damit dort später andere Arten von Wünschen
 danebenliegen können — und vermerkt ihn am Lauf. Das ist der Eingang
 des Schmieds (§1); ein `watch`-Trigger darauf braucht keinen neuen

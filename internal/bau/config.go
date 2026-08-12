@@ -34,13 +34,13 @@ type Config struct {
 	// der hier benannte Auftrag über sein hase:-Feld.
 	Baumeister string
 
-	// Wuensche ist der Raum, in den das Werkzeug hasenbau_werkzeug_wunsch
+	// Requests ist der Raum, in den das Werkzeug hasenbau_tool_request
 	// die Wünsche der Hasen legt — der Eingang des Schmieds. Bau-weit
 	// und nicht je Auftrag, weil das Werkzeug allen Hasen gehört. Leer
 	// heißt: kein Wunsch-Raum, dann bekommt kein Hase das Werkzeug zu
 	// sehen. Ein Briefkasten, den niemand leert, ist schlimmer als
 	// keiner (Hasenbau-hcs).
-	Wuensche string
+	Requests string
 
 	// Sandbox sagt, was der Wächter tut, wenn ein Hase ein Werkzeug
 	// ruft, das ihn aus seiner Sandbox führen würde (Hasenbau-d2p):
@@ -73,7 +73,7 @@ type configFields struct {
 	LogLevel   *string `yaml:"log_level"`
 	Baumeister *string `yaml:"baumeister"`
 	Sandbox    *string `yaml:"sandbox"`
-	Wuensche   *string `yaml:"wuensche"`
+	Requests   *string `yaml:"requests"`
 	Throttle   *struct {
 		Max int     `yaml:"max"`
 		Per *string `yaml:"per"`
@@ -113,7 +113,7 @@ func LoadConfig(root string) (*Config, error) {
 	dec.KnownFields(true)
 	var d configFields
 	if err := dec.Decode(&d); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister, sandbox, wuensche, throttle)", ConfigFile, err)
+		return nil, fmt.Errorf("bau: %s: %v (erlaubt: log_level, baumeister, sandbox, requests, throttle)", ConfigFile, err)
 	}
 
 	if d.LogLevel != nil {
@@ -134,12 +134,12 @@ func LoadConfig(root string) (*Config, error) {
 		}
 		c.Sandbox = *d.Sandbox
 	}
-	if d.Wuensche != nil {
-		w := strings.TrimSpace(*d.Wuensche)
+	if d.Requests != nil {
+		w := strings.TrimSpace(*d.Requests)
 		if filepath.IsAbs(w) || strings.Contains(w, "..") {
-			return nil, fmt.Errorf("bau: %s: wuensche %q muss ein Bau-relativer Raum sein", ConfigFile, w)
+			return nil, fmt.Errorf("bau: %s: requests %q muss ein Bau-relativer Raum sein", ConfigFile, w)
 		}
-		c.Wuensche = w
+		c.Requests = w
 	}
 	// Dieselbe Regel wie beim Deckel je Auftrag (§6): beide Hälften oder
 	// keine. Eine Zahl ohne Fenster ist keine Rate, ein Fenster ohne

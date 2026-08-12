@@ -52,7 +52,7 @@ const (
 		`Beobachtungen unterwegs.`
 )
 
-// Server baut den MCP-Server mit notiz, summary und werkzeug_wunsch.
+// Server baut den MCP-Server mit notiz, summary und tool_request.
 //
 // bauRoot und wunschRaum brauchen nur letzteres: ein Wunsch wird als
 // Datei abgelegt, nicht als DB-Zeile. Das ist Absicht — der Raum ist
@@ -94,13 +94,13 @@ func Server(st Store, version, bauRoot, wunschRaum string) *server.MCPServer {
 	}))
 
 	if wunschRaum != "" {
-		s.AddTool(werkzeugWunschTool(), wunschHandler(st, bauRoot, wunschRaum))
+		s.AddTool(toolRequestTool(), wunschHandler(st, bauRoot, wunschRaum))
 	}
 
 	return s
 }
 
-// werkzeugWunschTool ist der Weg des Hasen zu einem Werkzeug, das er
+// toolRequestTool ist der Weg des Hasen zu einem Werkzeug, das er
 // nicht hat. Vier Felder statt eines Freitexts, und ein zweites
 // Werkzeug, das erst das Format erklärt, gibt es bewusst nicht: das
 // Schema steht dem Modell ohnehin vor jedem Aufruf, und ein Roundtrip
@@ -115,8 +115,8 @@ func Server(st Store, version, bauRoot, wunschRaum string) *server.MCPServer {
 //
 // Wer die Sache baut, steht hier nicht: der Hase muss den Schmied nicht
 // kennen, nur wissen, dass er anfragen darf.
-func werkzeugWunschTool() mcp.Tool {
-	return mcp.NewTool("werkzeug_wunsch",
+func toolRequestTool() mcp.Tool {
+	return mcp.NewTool("tool_request",
 		mcp.WithDescription("Fordert ein Werkzeug für DEINE AUFGABE an — eines, das "+
 			"genau eine Sache tut. Beschreib die Aufgabe, nicht das Mittel: "+
 			"\"Dateien nach Typ einsortieren\" ist ein Wunsch, \"eine Shell\" ist "+

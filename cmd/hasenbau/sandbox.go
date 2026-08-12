@@ -35,7 +35,7 @@ import (
 // Suche nach dem nächsten Schlupfloch, und genau so ist dieser Bead
 // entstanden.
 const abweisungsText = `Dieses Werkzeug führt aus der Sandbox heraus, die der Hasenbau dir gegeben hat, und ist deshalb gesperrt.
-Wenn du es für deine Aufgabe brauchst: fordere eines an mit hasenbau_werkzeug_wunsch (Zweck, Eingabe, Ausgabe). Es wird geprüft und gebaut — niemand baut sich hier selbst eines.
+Wenn du es für deine Aufgabe brauchst: fordere eines an mit hasenbau_tool_request (Zweck, Eingabe, Ausgabe). Es wird geprüft und gebaut — niemand baut sich hier selbst eines.
 Was du jetzt tun kannst: die Aufgabe mit deinen Datei-Werkzeugen lösen, oder melden, dass sie so nicht lösbar ist.`
 
 func cmdSandboxVorfall(root string, args []string, out, errw io.Writer) int {

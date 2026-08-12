@@ -55,7 +55,7 @@ func verbinde(t *testing.T, st Store) (*client.Client, context.Context) {
 }
 
 // verbindeMitRaum ist dasselbe mit Wunsch-Raum — ohne ihn bietet der
-// Server werkzeug_wunsch gar nicht an.
+// Server tool_request gar nicht an.
 func verbindeMitRaum(t *testing.T, st Store, bauRoot, wunschRaum string) (*client.Client, context.Context) {
 	t.Helper()
 	c, err := client.NewInProcessClient(Server(st, "test", bauRoot, wunschRaum))
@@ -213,14 +213,14 @@ func (e errString) Error() string { return string(e) }
 // darauf braucht keinen neuen Mechanismus. Die Notiz macht im Trace
 // sichtbar, dass der Hase gefragt hat; ohne sie sähe der Baumeister nur
 // einen Lauf, der nichts zustande brachte.
-func TestWerkzeugWunschLegtDateiUndNotizAn(t *testing.T) {
+func TestToolRequestLegtDateiUndNotizAn(t *testing.T) {
 	bauRoot := t.TempDir()
 	st := &fakeStore{aktiv: &store.Lauf{ID: 7, Auftrag: "einlagern"}}
 	c, ctx := verbindeMitRaum(t, st, bauRoot, "raeume/wuensche/")
 
 	res, err := c.CallTool(ctx, mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
-			Name: "werkzeug_wunsch",
+			Name: "tool_request",
 			Arguments: map[string]any{
 				"zweck":   "120 Vorlagen nach Typ verteilen",
 				"eingabe": "ein Verzeichnis mit Vorlagen",
@@ -264,7 +264,7 @@ func TestWerkzeugWunschLegtDateiUndNotizAn(t *testing.T) {
 // TestWerkzeugWunschOhneRaumGibtEsNicht: ein Briefkasten, den niemand
 // leert, ist schlimmer als keiner. Ohne Wunsch-Raum darf der Hase das
 // Werkzeug nicht einmal sehen.
-func TestWerkzeugWunschOhneRaumGibtEsNicht(t *testing.T) {
+func TestToolRequestOhneRaumGibtEsNicht(t *testing.T) {
 	st := &fakeStore{aktiv: &store.Lauf{ID: 1, Auftrag: "x"}}
 	c, ctx := verbinde(t, st)
 
@@ -273,8 +273,8 @@ func TestWerkzeugWunschOhneRaumGibtEsNicht(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, w := range liste.Tools {
-		if w.Name == "werkzeug_wunsch" {
-			t.Error("werkzeug_wunsch wird ohne Wunsch-Raum angeboten")
+		if w.Name == "tool_request" {
+			t.Error("tool_request wird ohne Wunsch-Raum angeboten")
 		}
 	}
 }

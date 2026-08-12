@@ -251,11 +251,11 @@ Jeder Hase bekommt Werkzeuge, mit denen er selbst in die Bau-Datenbank
 schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf getan hat
 (der nächste Lauf desselben Auftrags bekommt sie als Kontext), und
 `hasenbau_notiz` für Beobachtungen unterwegs — sie stehen später in
-`hasenbau dig`. Ist in `hasenbau.yaml` ein `wuensche:`-Raum gesetzt,
-kommt `hasenbau_werkzeug_wunsch` dazu: damit fordert ein Hase ein
+`hasenbau dig`. Ist in `hasenbau.yaml` ein `requests:`-Raum gesetzt,
+kommt `hasenbau_tool_request` dazu: damit fordert ein Hase ein
 Werkzeug an, das ihm für seine Aufgabe fehlt, statt sich einen Weg an
 seinen Grenzen vorbei zu suchen. Der Wunsch landet als Datei unter
-`<wuensche>/tools/` — dem künftigen Eingang des Schmieds. Dahinter steckt ein MCP-Server, den opencode als
+`<requests>/tools/` — dem künftigen Eingang des Schmieds. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er von `hasenbau init`, und
 jeder Daemon- oder Lauf-Start korrigiert den Eintrag auf das gerade
 laufende Binary und sagt es im Log — auch nach einem Rebuild an einen

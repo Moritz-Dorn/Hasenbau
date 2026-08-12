@@ -280,7 +280,7 @@ func cmdMCP(root string, errw io.Writer) int {
 	// aufhalten — notiz und summary sind wichtiger als der Wunsch.
 	wunschRaum := ""
 	if cfg, err := bau.LoadConfig(root); err == nil {
-		wunschRaum = cfg.Wuensche
+		wunschRaum = cfg.Requests
 	} else {
 		fmt.Fprintln(errw, err)
 	}

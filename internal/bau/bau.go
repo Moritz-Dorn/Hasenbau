@@ -51,12 +51,12 @@ baumeister: baumeister
 # Gemeldet wird in beiden Fällen, als Notiz am Lauf.
 # sandbox: warn
 
-# Wohin ` + "`hasenbau_werkzeug_wunsch`" + ` die Wünsche der Hasen legt; die
+# Wohin ` + "`hasenbau_tool_request`" + ` die Wünsche der Hasen legt; die
 # Werkzeug-Wünsche landen darin unter ` + "`tools/`" + `, damit dort später
 # andere Arten danebenliegen können. Ohne diesen Eintrag bekommt kein
 # Hase das Werkzeug zu sehen: ein Briefkasten, den niemand leert, ist
 # schlimmer als keiner.
-# wuensche: raeume/wuensche/
+# requests: raeume/wuensche/
 `
 
 // Die Vorlagen der Sonder-Hasen liegen im Binary, nicht in beispiele/:
