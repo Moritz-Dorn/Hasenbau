@@ -3,6 +3,7 @@
 package bau
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -38,10 +39,23 @@ const hasenbauYAML = `# Hasenbau — Daemon-Config (PLAN.md §4).
 # Die Felder wachsen mit den Phasen; Unbekanntes wird abgelehnt.
 log_level: info
 
-# Welcher Auftrag ` + "`hasenbau baumeister`" + ` startet. Vorlage zum
-# Kopieren: beispiele/auftraege/baumeister.md + beispiele/hasen/baumeister.md
-# baumeister: baumeister
+# Welcher Auftrag ` + "`hasenbau baumeister`" + ` startet. Auftrag und Hase
+# legt ` + "`hasenbau init`" + ` mit an; ` + "`hasenbau fix`" + ` stellt sie wieder her,
+# wenn sie fehlen.
+baumeister: baumeister
 `
+
+// Die Vorlagen der Sonder-Hasen liegen im Binary, nicht in beispiele/:
+// ein frischer Bau soll den Baumeister haben, ohne dass jemand Dateien
+// kopiert, und `hasenbau fix` kann sie nur zurückschreiben, wenn er sie
+// bei sich trägt. Wer sie nicht will, stellt den Trigger auf manual
+// oder leert den Auftrag — löschen hilft nicht, fix legt sie wieder an.
+var (
+	//go:embed vorlagen/auftraege/baumeister.md
+	auftragBaumeister string
+	//go:embed vorlagen/hasen/baumeister.md
+	haseBaumeister string
+)
 
 // gitIgnore: Der Bau versioniert Definitionen (Aufträge, Hasen, Gänge,
 // Config), nicht Laufzeit-Material und nicht generierte Agenten.
@@ -65,9 +79,11 @@ var dirs = []string{
 // files sind die Dateien eines frischen Baus. Bestehende Dateien werden
 // nie überschrieben — Init ist idempotent und nicht-destruktiv.
 var files = map[string]string{
-	"hasenbau.yaml": hasenbauYAML,
-	".gitignore":    gitIgnore,
-	OpencodeConfig:  opencodeJSON,
+	"hasenbau.yaml":           hasenbauYAML,
+	".gitignore":              gitIgnore,
+	OpencodeConfig:            opencodeJSON,
+	"auftraege/baumeister.md": auftragBaumeister,
+	"hasen/baumeister.md":     haseBaumeister,
 }
 
 // Init legt das Layout unter root an. Vorhandenes bleibt unangetastet;

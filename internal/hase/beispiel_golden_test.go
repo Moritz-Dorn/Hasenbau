@@ -12,23 +12,47 @@ import (
 
 var aktualisiere = flag.Bool("update", false, "Golden-Dateien neu schreiben")
 
-// TestBeispieleGenerierenGolden hält den Agenten fest, der aus den
-// ausgelieferten Beispiel-Dateien entsteht. Kein Selbstzweck: die
-// Permissions dieses Agenten sind die einzige harte Garantie, dass der
-// Baumeister nichts scharf schalten kann (PLAN.md §8/§10). Wer
-// beispiele/auftraege/baumeister.md ändert, sieht hier sofort, was er
-// dem Hasen damit erlaubt.
-func TestBeispieleGenerierenGolden(t *testing.T) {
-	root := filepath.Join("..", "..", "beispiele")
+// quellen sind die beiden Wurzeln mit ausgelieferten Definitionen:
+// beispiele/ ist Demo-Material zum Kopieren, internal/bau/vorlagen/ ist
+// das, was `hasenbau init` in jeden Bau schreibt. Beide gehören in die
+// Golden-Prüfung — als der Baumeister umzog und nur eine Wurzel geprüft
+// wurde, blieb der Test grün und sicherte ihn nicht mehr.
+func quellen() []string {
+	return []string{
+		filepath.Join("..", "..", "beispiele"),
+		filepath.Join("..", "bau", "vorlagen"),
+	}
+}
 
-	// Load parst alle Beispiel-Aufträge und prüft, dass ihre Hasen
-	// existieren — die Beispiele bleiben damit ladbar, nicht nur lesbar.
-	auftraege, err := auftrag.Load(root)
-	if err != nil {
-		t.Fatal(err)
+// TestBeispieleGenerierenGolden hält den Agenten fest, der aus den
+// ausgelieferten Dateien entsteht. Kein Selbstzweck: die Permissions
+// dieses Agenten sind die einzige harte Garantie, dass der Baumeister
+// nichts scharf schalten kann (PLAN.md §8/§10). Wer
+// internal/bau/vorlagen/auftraege/baumeister.md ändert, sieht hier
+// sofort, was er dem Hasen damit erlaubt.
+func TestBeispieleGenerierenGolden(t *testing.T) {
+	type quelle struct {
+		root string
+		a    *auftrag.Auftrag
+	}
+	var alle []quelle
+	for _, root := range quellen() {
+		// Load parst alle Aufträge und prüft, dass ihre Hasen existieren
+		// — die Definitionen bleiben damit ladbar, nicht nur lesbar.
+		auftraege, err := auftrag.Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range auftraege {
+			alle = append(alle, quelle{root, a})
+		}
+	}
+	if len(alle) < 2 {
+		t.Fatalf("nur %d Auftrag/Aufträge gefunden — eine Wurzel ist leer oder falsch verdrahtet", len(alle))
 	}
 
-	for _, a := range auftraege {
+	for _, q := range alle {
+		root, a := q.root, q.a
 		t.Run(a.Name, func(t *testing.T) {
 			tpl, err := Lade(root, a.Hase)
 			if err != nil {
@@ -63,7 +87,7 @@ func TestBeispieleGenerierenGolden(t *testing.T) {
 // nicht nur über den Golden-Vergleich: ein Golden-Diff könnte man
 // gedankenlos mit -update wegwischen, diese Zusicherungen nicht.
 func TestBaumeisterDarfNichtsScharfSchalten(t *testing.T) {
-	root := filepath.Join("..", "..", "beispiele")
+	root := filepath.Join("..", "bau", "vorlagen")
 	auftraege, err := auftrag.Load(root)
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +99,7 @@ func TestBaumeisterDarfNichtsScharfSchalten(t *testing.T) {
 		}
 	}
 	if baumeister == nil {
-		t.Fatal("beispiele/auftraege/baumeister.md fehlt")
+		t.Fatal("internal/bau/vorlagen/auftraege/baumeister.md fehlt")
 	}
 	tpl, err := Lade(root, baumeister.Hase)
 	if err != nil {

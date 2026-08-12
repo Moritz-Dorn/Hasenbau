@@ -120,3 +120,91 @@ func TestDescribeBauMitArgument(t *testing.T) {
 		t.Errorf("exit %d, erwartet 2", code)
 	}
 }
+
+// TestFixStelltGeloeschteVorlagenWiederHer: der Sinn des Befehls in
+// einem Satz — wer den Baumeister löscht, bekommt ihn samt Auftrag
+// zurück. Gelöscht wird hier beides, damit der Test nicht schon grün
+// ist, wenn nur eine Hälfte wiederkommt.
+func TestFixStelltGeloeschteVorlagenWiederHer(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+
+	auftrag := filepath.Join(bauDir, "auftraege", "baumeister.md")
+	hase := filepath.Join(bauDir, "hasen", "baumeister.md")
+	for _, f := range []string{auftrag, hase} {
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("init hat %s nicht angelegt: %v", filepath.Base(f), err)
+		}
+		if err := os.Remove(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", bauDir, "fix"}, &out, &errw); code != 0 {
+		t.Fatalf("fix: %d, %s", code, errw.String())
+	}
+	for _, f := range []string{auftrag, hase} {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("fix hat %s nicht wiederhergestellt: %v", filepath.Base(f), err)
+		}
+	}
+	if !strings.Contains(out.String(), "auftraege/baumeister.md") {
+		t.Errorf("fix meldet nicht, was es ergänzt hat:\n%s", out.String())
+	}
+}
+
+// TestFixAendertBestehendesNicht: fix ist eine Ergänzung, keine
+// Rücksetzung. Ein Bau, in dem jemand den Baumeister angepasst hat,
+// darf ihn nicht verlieren.
+func TestFixAendertBestehendesNicht(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+	auftrag := filepath.Join(bauDir, "auftraege", "baumeister.md")
+	eigen, err := os.ReadFile(auftrag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	geaendert := strings.Replace(string(eigen), "hase_timeout: 60m", "hase_timeout: 90m", 1)
+	if geaendert == string(eigen) {
+		t.Fatal("Testaufbau: hase_timeout nicht in der Vorlage")
+	}
+	if err := os.WriteFile(auftrag, []byte(geaendert), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := run([]string{"-bau", bauDir, "fix"}, &out, &errw); code != 0 {
+		t.Fatalf("fix: %d, %s", code, errw.String())
+	}
+	nachher, err := os.ReadFile(auftrag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(nachher) != geaendert {
+		t.Error("fix hat die angepasste Datei überschrieben")
+	}
+}
+
+// TestFixOhneBau: in einem leeren Verzeichnis gibt es nichts zu
+// reparieren — dort gehört der Nutzer zu `init` geschickt, nicht mit
+// einem halben Bau beglückt.
+func TestFixOhneBau(t *testing.T) {
+	leer := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", leer, "fix"}, &out, &errw); code == 0 {
+		t.Error("fix in leerem Verzeichnis muss scheitern")
+	}
+	if !strings.Contains(errw.String(), "init") {
+		t.Errorf("Fehler nennt init nicht: %s", errw.String())
+	}
+	if _, err := os.Stat(filepath.Join(leer, "hasenbau.yaml")); err == nil {
+		t.Error("fix hat im leeren Verzeichnis einen Bau angelegt")
+	}
+}

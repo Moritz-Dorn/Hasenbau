@@ -221,6 +221,22 @@ nicht (§11.5). `hasenbau init` legt das an. Versioniert werden nur
 Definitionen: `raeume/`, `state/` und die generierten Agenten stehen in
 der `.gitignore`.
 
+`init` schreibt außerdem die **Sonder-Hasen** in den Bau — heute den
+Baumeister, mit dem Schmied (§1) kommt der zweite dazu. Ihre Vorlagen
+liegen im Binary (`internal/bau/vorlagen/`), nicht in `beispiele/`: ein
+frischer Bau soll den Baumeister haben, ohne dass jemand Dateien
+kopiert, und ein Befehl kann nur zurückschreiben, was er bei sich
+trägt. Dieser Befehl ist **`hasenbau fix`** — derselbe Vorgang wie
+`init`, der seit jeher idempotent und nicht-destruktiv ist, nur mit
+umgekehrter Erwartung: `init` legt an, `fix` stellt her. Was `fix`
+schreibt, ist genau das, was `describe bau` als fehlend meldet; beide
+gehen über dieselbe Tabelle.
+
+Eine Folge davon ist gewollt: Wer einen Sonder-Hasen loswerden will,
+stellt seinen Trigger um oder leert den Auftrag. Die Datei zu löschen
+hilft nicht — `fix` legt sie wieder an. Bestehende Dateien rührt es
+dabei nie an, auch geänderte nicht.
+
 Räume dürfen ihrerseits **eigene Git-Repos** sein (Änderungen
 nachvollziehen, In-place-Transformationen) — fürs Bau-Repo unsichtbar
 und für die Permissions egal, solange Sessions am Server-CWD (= Bau-Root)

@@ -22,27 +22,30 @@ Hasen-Template an die eigene Provider-Config des Baus anpassen.
 
 ## Der Baumeister
 
-Der Baumeister ist kein Sonderfall im Code, sondern genau so ein
-Auftrag — nur dass sein Material Läufe sind statt PDFs. Sein Gang zieht
-den Trace (`hasenbau dig`), sein Hase verdichtet ihn zu einem
-Gang-Entwurf in `gaenge/entwurf/`.
+Der Baumeister liegt **nicht mehr hier**, sondern im Binary:
+`hasenbau init` schreibt Auftrag und Hase in jeden Bau, und
+`hasenbau fix` stellt sie wieder her, wenn sie fehlen. Die Quelle ist
+`internal/bau/vorlagen/`. Kopieren muss also niemand mehr:
 
 ```bash
-cp -f beispiele/auftraege/baumeister.md <bau>/auftraege/
-cp -f beispiele/hasen/baumeister.md     <bau>/hasen/
-# in <bau>/hasenbau.yaml eintragen:
-#   baumeister: baumeister
-
 hasenbau -bau <bau> baumeister 8               # Trace von Lauf 8
 hasenbau -bau <bau> baumeister pdf-einlagern   # letzter Lauf des Auftrags
 ```
 
+Er ist kein Sonderfall im Code, sondern genau so ein Auftrag — nur dass
+sein Material Läufe sind statt PDFs. Sein Gang zieht den Trace
+(`hasenbau dig`), sein Hase verdichtet ihn zu einem Gang-Entwurf in
+`gaenge/entwurf/`. Wer ihn nicht will, stellt seinen Trigger um oder
+leert den Auftrag — die Datei zu löschen hilft nicht, `fix` legt sie
+wieder an.
+
 Sein Schreibrecht entsteht **ausschließlich** aus `raeume: out:` —
 daraus wird das einzige erlaubte `edit`-Pattern des generierten Agenten
 (PLAN.md §6). Wer den out-Raum ändert, ändert damit, was der Baumeister
-anfassen darf; `internal/hase` hat dafür einen Golden-Test, der auf
-genau diese Dateien schaut. `gaenge/entwurf/` statt `gaenge/`, damit
-kein Lauf einen benutzten Gang überschreiben kann.
+anfassen darf; `internal/hase` hat dafür einen Golden-Test, der beide
+Wurzeln prüft — dieses Verzeichnis und `internal/bau/vorlagen/`.
+`gaenge/entwurf/` statt `gaenge/`, damit kein Lauf einen benutzten Gang
+überschreiben kann.
 
 Mehrere Baumeister-Varianten dürfen nebeneinander in `hasen/` liegen
 (`baumeister-streng.md`, `baumeister-python.md`) — `hasenbau.yaml`

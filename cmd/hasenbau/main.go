@@ -36,6 +36,8 @@ const usage = `hasenbau — Daemon, der opencode headless orchestriert.
 
 Befehle:
   init <pfad>           leeren Bau anlegen (nicht-destruktiv, idempotent)
+  fix                   fehlende Teile des Baus ergänzen — dasselbe für
+                        einen Bau, den es schon gibt
   daemon                Daemon starten (Trigger + opencode-Server)
   lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
                         auslösende Datei (Bau-relativ, nur watch)
@@ -90,6 +92,12 @@ func run(args []string, out, errw io.Writer) int {
 			return 2
 		}
 		return cmdInit(rest[1], out, errw)
+	case "fix":
+		if len(rest) != 1 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau [-bau <pfad>] fix")
+			return 2
+		}
+		return cmdFix(bau, out, errw)
 	case "daemon":
 		return cmdDaemon(bau, errw)
 	case "lauf":
@@ -131,6 +139,44 @@ func run(args []string, out, errw io.Writer) int {
 	}
 }
 
+// cmdFix ergänzt, was einem bestehenden Bau fehlt. Es ist derselbe
+// Vorgang wie `init` — der ist seit jeher idempotent und
+// nicht-destruktiv — nur mit umgekehrter Erwartung: init legt an, fix
+// stellt her. Deshalb auch die andere Abgrenzung: wo nichts ist, ist
+// nichts zu reparieren, und der Nutzer soll `init` lesen statt einen
+// halben Bau im falschen Verzeichnis zu bekommen.
+//
+// Was fix schreibt, ist genau das, was `describe bau` als fehlend
+// meldet — beide gehen über dieselbe Tabelle (internal/bau).
+func cmdFix(pfad string, out, errw io.Writer) int {
+	if _, err := os.Stat(filepath.Join(pfad, "hasenbau.yaml")); err != nil {
+		fmt.Fprintf(errw, "hasenbau fix: %s ist kein Bau (hasenbau.yaml fehlt) — einen neuen legt `hasenbau init %s` an.\n", pfad, pfad)
+		return 1
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(errw, "hasenbau: eigenen Pfad bestimmen: %v\n", err)
+		return 1
+	}
+	ergaenzt, err := bau.Init(pfad, exe)
+	for _, c := range ergaenzt {
+		fmt.Fprintf(out, "ergänzt: %s\n", c)
+	}
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if _, err := loadAndGenerate(pfad); err != nil {
+		fmt.Fprintf(errw, "hasenbau fix: Agenten nicht generiert: %v\n", err)
+	}
+	if len(ergaenzt) == 0 {
+		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
+	} else {
+		fmt.Fprintln(out, "Was davon inhaltlich stimmt, sagt `hasenbau describe bau`.")
+	}
+	return 0
+}
+
 func cmdInit(pfad string, out, errw io.Writer) int {
 	// Absolut, wie das -bau-Flag auch: der Pfad landet im
 	// Rückkanal-Eintrag, und den startet opencode mit einem CWD, das
@@ -153,6 +199,15 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
+	}
+	// Agenten gleich mitschreiben. Seit init den Baumeister anlegt,
+	// käme ein frischer Bau sonst mit einem offenen Punkt auf die Welt
+	// („nicht generiert"), und genau das soll die Diagnose nicht melden
+	// müssen. Ein Fehler hier bricht init nicht ab: angelegt ist
+	// angelegt, und der nächste Daemon- oder Lauf-Start generiert
+	// ohnehin neu.
+	if _, err := loadAndGenerate(pfad); err != nil {
+		fmt.Fprintf(errw, "hasenbau init: Agenten noch nicht generiert: %v\n", err)
 	}
 	if len(created) == 0 {
 		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")

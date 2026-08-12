@@ -59,9 +59,10 @@ func TestBaumeisterGangZiehtMaterial(t *testing.T) {
 	}
 	st.Close()
 
-	// Der ausgelieferte Auftrag, unverändert — der Test prüft die
-	// Beispiel-Datei, nicht eine Testkopie davon.
-	src, err := os.ReadFile(filepath.Join("..", "..", "beispiele", "auftraege", "baumeister.md"))
+	// Die ausgelieferte Vorlage, unverändert — der Test prüft die
+	// Datei, die `hasenbau init` in den Bau schreibt, nicht eine
+	// Testkopie davon.
+	src, err := os.ReadFile(filepath.Join("..", "..", "internal", "bau", "vorlagen", "auftraege", "baumeister.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

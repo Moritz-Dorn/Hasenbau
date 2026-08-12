@@ -38,8 +38,12 @@ func TestLadeConfigSkelettParst(t *testing.T) {
 	if c.LogLevel != "info" {
 		t.Errorf("log_level = %q", c.LogLevel)
 	}
-	if c.Baumeister != "" {
-		t.Errorf("baumeister ist im Skelett auskommentiert, gelesen: %q", c.Baumeister)
+	// Seit init den Baumeister mit anlegt, ist der Eintrag aktiv statt
+	// auskommentiert — sonst zeigte die Config auf einen Auftrag, den
+	// es nicht gibt, oder der Auftrag läge da, ohne dass ihn jemand
+	// benennt.
+	if c.Baumeister != "baumeister" {
+		t.Errorf("baumeister = %q, erwartet \"baumeister\"", c.Baumeister)
 	}
 }
 

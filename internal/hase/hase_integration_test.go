@@ -86,7 +86,7 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := SchreibeAgent(root, auftraege[0], tpl); err != nil {
+	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,7 +123,7 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	// Template verschärfen, neu generieren, Caches verwerfen: die neue
 	// Regel muss ohne Server-Restart erscheinen.
 	tpl.Denies = append(tpl.Denies, Regel{Permission: "edit", Pattern: "raeume/lager/intern/**"})
-	if _, err := SchreibeAgent(root, auftraege[0], tpl); err != nil {
+	if _, err := SchreibeAgent(root, nimm(t, auftraege, "pdf-einlagern"), tpl); err != nil {
 		t.Fatal(err)
 	}
 	if err := opencode.DisposeInstance(ctx, opencode.New(sup.BaseURL())); err != nil {
@@ -142,4 +142,18 @@ func TestGenerierterAgentImEchtenServer(t *testing.T) {
 	if !gefunden {
 		t.Errorf("neue Template-Regel nach DisposeInstance nicht sichtbar: %+v", agent.Permission)
 	}
+}
+
+// nimm sucht einen Auftrag nach Namen. Nicht auftraege[0]: seit
+// bau.Init den Baumeister mitanlegt, liegen zwei Aufträge im Bau, und
+// Load sortiert alphabetisch.
+func nimm(t *testing.T, auftraege []*auftrag.Auftrag, name string) *auftrag.Auftrag {
+	t.Helper()
+	for _, a := range auftraege {
+		if a.Name == name {
+			return a
+		}
+	}
+	t.Fatalf("Auftrag %q nicht geladen", name)
+	return nil
 }
