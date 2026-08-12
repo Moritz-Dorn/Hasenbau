@@ -352,15 +352,20 @@ func kurzText(s string) string {
 }
 
 // TestGenerierterAgentSchaltetTaskAb nagelt Hasenbau-wiu auf der Ebene
-// fest, die ohne LLM-Lauf prüfbar ist: der Block steht in der
-// generierten Datei, und `task` ist darin.
+// fest, die ohne LLM-Lauf prüfbar ist: `task` steht als deny im
+// permission-Block der generierten Datei.
+//
+// Seit Hasenbau-8fd steht es dort und nicht mehr in einem eigenen
+// `tools:`-Block. Beide Wege entziehen dem Modell das Werkzeug —
+// gemessen, nicht angenommen —, und `tools` ist laut opencode-Doku
+// deprecated. Ein zweiter Mechanismus für dieselbe Aussage wäre eine
+// Stelle mehr, an der die beiden auseinanderlaufen können.
 //
 // Was dieser Test NICHT zeigt: dass opencode das Feld auch auswertet.
-// Das ist über keinen Endpoint messbar — /agent gibt die Tools nicht
-// zurück, und /experimental/tool antwortet je Provider und Modell, nicht
-// je Agent (gemessen an 1.15.13, agent=gibtesnicht liefert dieselbe
-// Liste). Solange das offen ist, steht die zweite Verteidigungslinie in
-// Hasenbau-wiu.
+// Über die Endpoints ist das nicht messbar (/agent gibt die Werkzeuge
+// nicht zurück, /experimental/tool antwortet je Provider und Modell,
+// nicht je Agent). Gezeigt hat es ein echter Lauf mit Gegenprobe; die
+// Grenze, die unabhängig davon hält, ist der Sandbox-Wächter.
 func TestGenerierterAgentSchaltetTaskAb(t *testing.T) {
 	a := &auftrag.Auftrag{
 		Name: "einlagern", Hase: "archivar",
@@ -374,22 +379,25 @@ func TestGenerierterAgentSchaltetTaskAb(t *testing.T) {
 	}
 	agent := string(roh)
 
-	start := strings.Index(agent, "\ntools:\n")
-	if start < 0 {
-		t.Fatalf("kein tools-Block im generierten Agenten:\n%s", agent)
+	kopf, _, ok := strings.Cut(strings.TrimPrefix(agent, "---\n"), "\n---\n")
+	if !ok {
+		t.Fatalf("kein Frontmatter im generierten Agenten:\n%s", agent)
 	}
-	block := agent[start:]
-	block = block[:strings.Index(block, "---")]
-	for _, name := range []string{"task", "bash", "webfetch", "question"} {
-		if !strings.Contains(block, name+": false") {
-			t.Errorf("tools-Block schaltet %q nicht ab:\n%s", name, block)
+	for _, name := range []string{"task", "bash", "webfetch", "websearch", "question", "external_directory"} {
+		if !strings.Contains(kopf, "\n  "+name+": deny") {
+			t.Errorf("permission-Block verbietet %q nicht:\n%s", name, kopf)
 		}
+	}
+	// Das deprecatete Feld darf nicht zurückkommen: zwei Quellen für
+	// dieselbe Aussage laufen irgendwann auseinander.
+	if strings.Contains(kopf, "\ntools:") {
+		t.Errorf("tools:-Block ist wieder da — die Sperre gehört in permission: (Hasenbau-8fd):\n%s", kopf)
 	}
 	// Der Rückkanal darf nicht mitabgeschaltet werden: seine Werkzeuge
 	// registriert opencode erst zur Laufzeit über MCP, eine Whitelist
 	// hätte sie still mitgenommen.
-	if strings.Contains(block, "hasenbau") {
-		t.Errorf("tools-Block fasst den Rückkanal an:\n%s", block)
+	if strings.Contains(kopf, "hasenbau_") {
+		t.Errorf("das Frontmatter fasst den Rückkanal an:\n%s", kopf)
 	}
 }
 

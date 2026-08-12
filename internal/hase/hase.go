@@ -197,33 +197,45 @@ var schreibRollen = []string{"work", "out"}
 
 // grundDenies sind die Pauschal-Verbote jedes generierten Agenten.
 // Reihenfolge = Ausgabe-Reihenfolge.
-var grundDenies = []string{"bash", "webfetch", "websearch", "external_directory"}
-
-// abgeschalteteTools nimmt dem Agenten Werkzeuge WEG, statt ihren
-// Aufruf zu verbieten. Der Unterschied ist keine Feinheit, sondern der
-// Grund für Hasenbau-wiu: `permission: bash: deny` lässt das Werkzeug
-// in der Liste des Modells stehen und lehnt erst den Aufruf ab. Ein
-// Hase hat daraufhin `task` benutzt, einen Subagenten gestartet und
-// diesen ausführen lassen — der Subagent ist ein eigener Agent und
-// erbt weder die Permissions noch die Raum-Grenzen. Gemessen an
-// opencode 1.15.13: der generierte Hase hatte exakt dieselbe
-// Werkzeugliste wie der ungebremste Standard-Agent.
 //
-//   task      Subagenten starten. Das Loch.
-//   bash      doppelt gemoppelt zum Deny, aber ein Werkzeug, das nicht
-//             da ist, versucht niemand.
-//   webfetch  wie bash.
-//   question  Rückfrage an einen Menschen. Ein Lauf im Daemon hat
-//             keinen, der antwortet.
+//	bash               Ausführung. Der Hase arbeitet über seine Räume.
+//	webfetch           Netz. Was er braucht, legt ihm ein Gang hin.
+//	websearch          wie webfetch.
+//	external_directory Alles außerhalb des Baus.
+//	task               Subagenten starten. Das Loch aus Hasenbau-wiu: ein
+//	                   Subagent ist ein eigener Agent und erbt weder die
+//	                   Permissions noch die Raum-Grenzen.
+//	question           Rückfrage an einen Menschen. Ein Lauf im Daemon
+//	                   hat keinen, der antwortet.
 //
-// Was NICHT hier steht, bekommt der Hase weiterhin — auch die Werkzeuge
-// des Rückkanals, die opencode erst zur Laufzeit registriert. Deshalb
-// eine Ausschluss- und keine Einschlussliste: eine Whitelist müsste die
-// MCP-Namen kennen und nähme dem Hasen sonst still seine Meldewege.
-// Dass die Liste vollständig ist, sichert stattdessen ein Test gegen den
-// echten Server (hase_integration_test.go) — kommt in opencode ein
-// Werkzeug dazu, wird er rot.
-var abgeschalteteTools = []string{"bash", "question", "task", "webfetch"}
+// Hier stand bis 2026-08-12 nur die Hälfte davon, und task und question
+// kamen über ein zweites Feld — `tools: {name: false}` — dazu. Die
+// Begründung lautete, ein Deny lasse das Werkzeug in der Liste des
+// Modells stehen und lehne erst den Aufruf ab, ein Hase sehe also, was
+// er nicht darf, und suche einen Weg drumherum.
+//
+// Diese Begründung ist gemessen falsch (Hasenbau-8fd, opencode
+// 1.15.13). Beide Felder ENTZIEHEN das Werkzeug: ein Hase mit
+// `bash: deny` zählt seine Werkzeuge auf und bash ist nicht darunter —
+// während ein Werkzeug ohne jede Regel in derselben Liste steht. Das
+// ist die Gegenprobe, und sie stammt aus einem einzigen Lauf, damit
+// Modell und Session nicht variieren. Dazu die opencode-Doku, die
+// `tools` ausdrücklich als deprecated führt („prefer the agent's
+// permission field") und `false` als `{"*": "deny"}` übersetzt.
+//
+// Deshalb jetzt ein Mechanismus statt zweier. Was NICHT hier steht,
+// bekommt der Hase weiterhin — auch die Werkzeuge des Rückkanals, die
+// opencode erst zur Laufzeit registriert. Es bleibt eine Ausschluss-
+// und keine Einschlussliste: eine Whitelist müsste die MCP-Namen kennen
+// und nähme dem Hasen sonst still seine Meldewege. Dass die Liste
+// vollständig ist, sichert ein Test gegen den echten Server
+// (hase_integration_test.go) — kommt in opencode ein Werkzeug dazu,
+// wird er rot.
+//
+// Die Grenze, die unabhängig von diesem Feld hält, ist der
+// Sandbox-Wächter im Bau-Plugin: er sitzt im Server-Prozess und meldet,
+// wenn ein Entzug irgendwann nicht mehr greift (Hasenbau-d2p).
+var grundDenies = []string{"bash", "webfetch", "websearch", "external_directory", "task", "question"}
 
 // Optionen sind die Umstände des Baus, die in den generierten Agenten
 // einfließen — alles, was weder im Auftrag noch im Template steht. Der
@@ -317,10 +329,6 @@ func Generiere(a *auftrag.Auftrag, t *Template, o Optionen) ([]byte, error) {
 		for _, e := range eintraege {
 			fmt.Fprintf(&b, "    %q: %s\n", e.pattern, e.aktion)
 		}
-	}
-	b.WriteString("tools:\n")
-	for _, name := range abgeschalteteTools {
-		fmt.Fprintf(&b, "  %s: false\n", name)
 	}
 	b.WriteString("---\n")
 	// Der Rückkanal steht zweimal: kurz hier oben, ausführlich ganz
