@@ -13,6 +13,11 @@ permission:
   webfetch: deny
   websearch: deny
   external_directory: deny
+tools:
+  bash: false
+  question: false
+  task: false
+  webfetch: false
 ---
 **Dein Lauf endet mit einem Werkzeug-Aufruf, nicht mit einem Satz:**
 `hasenbau_summary` meldet in einer Zeile, was du getan hast. Kein Text in

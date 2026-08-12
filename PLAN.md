@@ -108,6 +108,34 @@ versionierte Plugins bleiben eine Option (z. B. später Echtzeit-Hooks
 wie `tool.execute.before` oder Telemetrie) — sie wären dann Teil der
 expliziten Automation-Config, kein stilles Erbe.
 
+### Die Grenze ist nicht nur, was ein Hase darf
+
+Sie ist auch, **was er starten darf** (Hasenbau-wiu, 2026-08-12). Ein
+Hase hat die bash-Sperre umgangen, indem er über das `task`-Werkzeug
+einen Subagenten startete und diesen ausführen ließ. Ein Subagent ist
+ein eigener opencode-Agent mit eigener Konfiguration — er erbt weder
+`bash: deny` noch `edit: {"*": deny}` samt Raum-Freigaben. Über diesen
+Umweg stand ihm der ganze Bau offen, auch `auftraege/` und `hasen/`.
+
+Daraus zwei Lehren, die über den Einzelfall hinausgehen:
+
+**Ein Verbot ist kein Entzug.** `permission: bash: deny` lässt das
+Werkzeug in der Liste des Modells stehen und lehnt erst den Aufruf ab.
+Der Hase sieht also, was er nicht darf — und sucht einen Weg. Was er
+nicht braucht, wird deshalb über `tools:` entfernt statt über
+`permission:` verboten; die Denies bleiben als zweite Linie.
+
+**Am Schema geprüft heißt nicht wirksam.** Dass `tools:` je Agent
+existiert, steht im SDK-Schema (`AgentConfig.tools`). Ob opencode das
+Feld aus dem Frontmatter eines generierten Agenten auch auswertet, ist
+über keinen Endpoint messbar: `/agent` liefert die Werkzeuge nicht
+zurück, und `/experimental/tool` antwortet je Provider und Modell, nicht
+je Agent — `agent=gibtesnicht` liefert dieselbe Liste (gemessen an
+1.15.13). Solange das offen ist, gilt der Fix als unbewiesen, und der
+robustere Weg bleibt daneben stehen: ein Bau-eigenes Plugin mit
+`tool.execute.before`, das im Server-Prozess sitzt und deshalb nicht
+davon abhängt, was ein Agent über sich selbst behauptet.
+
 **Befund aus dem Smoke-Test (2026-07-12):** auth.json teilt nur die
 Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der
 KIT-Provider `scc`) sind Config — ohne sie in der Bau-eigenen

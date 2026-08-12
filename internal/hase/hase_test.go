@@ -350,3 +350,45 @@ func kurzText(s string) string {
 	}
 	return s
 }
+
+// TestGenerierterAgentSchaltetTaskAb nagelt Hasenbau-wiu auf der Ebene
+// fest, die ohne LLM-Lauf prüfbar ist: der Block steht in der
+// generierten Datei, und `task` ist darin.
+//
+// Was dieser Test NICHT zeigt: dass opencode das Feld auch auswertet.
+// Das ist über keinen Endpoint messbar — /agent gibt die Tools nicht
+// zurück, und /experimental/tool antwortet je Provider und Modell, nicht
+// je Agent (gemessen an 1.15.13, agent=gibtesnicht liefert dieselbe
+// Liste). Solange das offen ist, steht die zweite Verteidigungslinie in
+// Hasenbau-wiu.
+func TestGenerierterAgentSchaltetTaskAb(t *testing.T) {
+	a := &auftrag.Auftrag{
+		Name: "einlagern", Hase: "archivar",
+		Trigger: auftrag.Trigger{Watch: "*.pdf"},
+		Raeume:  map[string]string{"input": "raeume/eingang/", "work": "raeume/werkstatt/"},
+		Body:    "Tu was.",
+	}
+	roh, err := Generiere(a, &Template{Name: "archivar", Prompt: "Du bist der Archivar."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := string(roh)
+
+	start := strings.Index(agent, "\ntools:\n")
+	if start < 0 {
+		t.Fatalf("kein tools-Block im generierten Agenten:\n%s", agent)
+	}
+	block := agent[start:]
+	block = block[:strings.Index(block, "---")]
+	for _, name := range []string{"task", "bash", "webfetch", "question"} {
+		if !strings.Contains(block, name+": false") {
+			t.Errorf("tools-Block schaltet %q nicht ab:\n%s", name, block)
+		}
+	}
+	// Der Rückkanal darf nicht mitabgeschaltet werden: seine Werkzeuge
+	// registriert opencode erst zur Laufzeit über MCP, eine Whitelist
+	// hätte sie still mitgenommen.
+	if strings.Contains(block, "hasenbau") {
+		t.Errorf("tools-Block fasst den Rückkanal an:\n%s", block)
+	}
+}
