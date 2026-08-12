@@ -84,7 +84,7 @@ func TestLadeConfigFehler(t *testing.T) {
 		inhalt  string
 		erwarte string
 	}{
-		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister, sandbox, throttle"},
+		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister, sandbox, wuensche, throttle"},
 		{"throttle.max ohne per", "throttle:\n  max: 20\n", "max ohne per"},
 		{"throttle.per ohne max", "throttle:\n  per: 1h\n", "per ohne max"},
 		{"throttle leer", "throttle: {}\n", "throttle ist leer"},

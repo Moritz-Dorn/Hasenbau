@@ -275,7 +275,17 @@ func cmdMCP(root string, errw io.Writer) int {
 	}
 	defer st.Close()
 
-	if err := backchannel.Serve(st, version); err != nil {
+	// Der Wunsch-Raum kommt aus der Config; ist keiner gesetzt, bleibt
+	// das Werkzeug aus. Ein Config-Fehler darf den Rückkanal nicht
+	// aufhalten — notiz und summary sind wichtiger als der Wunsch.
+	wunschRaum := ""
+	if cfg, err := bau.LoadConfig(root); err == nil {
+		wunschRaum = cfg.Wuensche
+	} else {
+		fmt.Fprintln(errw, err)
+	}
+
+	if err := backchannel.Serve(st, version, root, wunschRaum); err != nil {
 		fmt.Fprintln(errw, err)
 		return 1
 	}

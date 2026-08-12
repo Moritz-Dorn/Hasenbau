@@ -52,7 +52,7 @@ func TestSandboxVorfallWeistAbUndVerbucht(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("Exit = %d, erwartet 3 (abweisen); stderr: %s", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "hasenbau_notiz") {
+	if !strings.Contains(out.String(), "hasenbau_werkzeug_wunsch") {
 		t.Errorf("Abweisung nennt den Weg nicht:\n%s", out.String())
 	}
 

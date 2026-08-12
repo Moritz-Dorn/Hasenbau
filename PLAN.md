@@ -170,6 +170,39 @@ Wächter, der nicht geladen ist, schweigt genauso. `describe bau` prüft
 deshalb Datei und `plugin:`-Eintrag; dieselbe Falle hat beim Rückkanal
 schon einmal fünf Tage gekostet (Hasenbau-2nq/08u).
 
+**Das Messergebnis (2026-08-12).** Ein Hase wurde ausdrücklich
+aufgefordert, über `task` einen Subagenten zu starten:
+
+| | Hase ruft `task`? | Wächter |
+|---|---|---|
+| mit `tools:`-Block | nein — „habe kein task-Werkzeug" | schweigt |
+| ohne (Gegenprobe) | ja | weist ab |
+
+Damit ist beides belegt: `tools:` wirkt, und der Wächter ist nicht
+blind. Erst die Gegenprobe macht daraus einen Nachweis — ein Lauf, in
+dem nichts passiert, beweist für sich genommen nichts.
+
+### Wenn ein Werkzeug fehlt
+
+Ein Hase, dem man ein Werkzeug nimmt, sucht sich einen Umweg — so ist
+dieser Abschnitt entstanden. Deshalb gibt es einen Weg nach vorn:
+`hasenbau_werkzeug_wunsch` (Zweck, Eingabe, Ausgabe, optional der
+gescheiterte Versuch) legt einen Wunsch in den Raum aus
+`wuensche:` und vermerkt ihn am Lauf. Der Raum ist der Eingang des
+Schmieds (§1) — ein `watch`-Trigger darauf braucht keinen neuen
+Mechanismus. Ohne konfigurierten Raum bietet der Rückkanal das Werkzeug
+nicht an; ein Briefkasten, den niemand leert, ist schlimmer als keiner.
+
+Der Abweisungstext des Wächters nennt genau dieses Werkzeug, und im
+ersten echten Lauf hat der Hase es benutzt statt weiterzusuchen.
+
+**Der Wunsch muss die Aufgabe beschreiben, nicht das Mittel.** Auch das
+ist gemessen: Als Erstes wünschte sich ein Hase „ein Shell-Werkzeug,
+das beliebige Kommandos ausführt" — also die Umgehung, die der Wächter
+gerade verhindert hatte. Ein Kanal, der solche Wünsche annimmt, baut die
+Hintertür nur langsamer; die Werkzeug-Beschreibung weist sie deshalb
+ausdrücklich ab.
+
 **Befund aus dem Smoke-Test (2026-07-12):** auth.json teilt nur die
 Schlüssel. *Custom* Provider-Definitionen (`provider:`-Block, z.B. der
 KIT-Provider `scc`) sind Config — ohne sie in der Bau-eigenen

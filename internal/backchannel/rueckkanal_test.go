@@ -2,6 +2,8 @@ package backchannel
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +51,14 @@ func (f *fakeStore) WriteSummary(lauf int64, text string) error {
 // Weg, den opencode über stdio nimmt, nur ohne Prozessgrenze.
 func verbinde(t *testing.T, st Store) (*client.Client, context.Context) {
 	t.Helper()
-	c, err := client.NewInProcessClient(Server(st, "test"))
+	return verbindeMitRaum(t, st, "", "")
+}
+
+// verbindeMitRaum ist dasselbe mit Wunsch-Raum — ohne ihn bietet der
+// Server werkzeug_wunsch gar nicht an.
+func verbindeMitRaum(t *testing.T, st Store, bauRoot, wunschRaum string) (*client.Client, context.Context) {
+	t.Helper()
+	c, err := client.NewInProcessClient(Server(st, "test", bauRoot, wunschRaum))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,3 +207,72 @@ var errSchreib = errString("store: Datenbank zu")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// TestWerkzeugWunschLegtDateiUndNotizAn: der Wunsch hat zwei Leser. Die
+// Datei im Wunsch-Raum ist der Eingang des Schmieds — ein watch-Trigger
+// darauf braucht keinen neuen Mechanismus. Die Notiz macht im Trace
+// sichtbar, dass der Hase gefragt hat; ohne sie sähe der Baumeister nur
+// einen Lauf, der nichts zustande brachte.
+func TestWerkzeugWunschLegtDateiUndNotizAn(t *testing.T) {
+	bauRoot := t.TempDir()
+	st := &fakeStore{aktiv: &store.Lauf{ID: 7, Auftrag: "einlagern"}}
+	c, ctx := verbindeMitRaum(t, st, bauRoot, "raeume/wuensche/")
+
+	res, err := c.CallTool(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "werkzeug_wunsch",
+			Arguments: map[string]any{
+				"zweck":   "120 Vorlagen nach Typ verteilen",
+				"eingabe": "ein Verzeichnis mit Vorlagen",
+				"ausgabe": "Dateien je Typ einsortiert, plus CSV",
+				"versuch": "von Hand kopiert, nach 20 abgebrochen",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("Fehler: %s", text(t, res))
+	}
+
+	dateien, err := filepath.Glob(filepath.Join(bauRoot, "raeume/wuensche", "*.md"))
+	if err != nil || len(dateien) != 1 {
+		t.Fatalf("Wunsch-Dateien = %v (%v)", dateien, err)
+	}
+	inhalt, err := os.ReadFile(dateien[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, muss := range []string{"Lauf 7", "einlagern", "120 Vorlagen", "ein Verzeichnis", "plus CSV", "nach 20 abgebrochen"} {
+		if !strings.Contains(string(inhalt), muss) {
+			t.Errorf("Wunsch-Datei enthält %q nicht:\n%s", muss, inhalt)
+		}
+	}
+	if len(st.notizen) != 1 || !strings.Contains(st.notizen[0], "120 Vorlagen") {
+		t.Errorf("Notiz am Lauf fehlt: %v", st.notizen)
+	}
+	// Der Hase muss erfahren, dass er das Werkzeug JETZT nicht bekommt —
+	// sonst wartet er darauf oder hält die Aufgabe für gelöst.
+	if !strings.Contains(text(t, res), "in diesem Lauf") {
+		t.Errorf("Antwort sagt nicht, dass das Werkzeug jetzt fehlt: %s", text(t, res))
+	}
+}
+
+// TestWerkzeugWunschOhneRaumGibtEsNicht: ein Briefkasten, den niemand
+// leert, ist schlimmer als keiner. Ohne Wunsch-Raum darf der Hase das
+// Werkzeug nicht einmal sehen.
+func TestWerkzeugWunschOhneRaumGibtEsNicht(t *testing.T) {
+	st := &fakeStore{aktiv: &store.Lauf{ID: 1, Auftrag: "x"}}
+	c, ctx := verbinde(t, st)
+
+	liste, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range liste.Tools {
+		if w.Name == "werkzeug_wunsch" {
+			t.Error("werkzeug_wunsch wird ohne Wunsch-Raum angeboten")
+		}
+	}
+}
