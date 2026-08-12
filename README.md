@@ -254,8 +254,8 @@ schreibt: `hasenbau_summary` für die eine Zeile, was der Lauf getan hat
 `hasenbau dig`. Ist in `hasenbau.yaml` ein `wuensche:`-Raum gesetzt,
 kommt `hasenbau_werkzeug_wunsch` dazu: damit fordert ein Hase ein
 Werkzeug an, das ihm für seine Aufgabe fehlt, statt sich einen Weg an
-seinen Grenzen vorbei zu suchen. Der Wunsch landet als Datei im Raum —
-dem künftigen Eingang des Schmieds. Dahinter steckt ein MCP-Server, den opencode als
+seinen Grenzen vorbei zu suchen. Der Wunsch landet als Datei unter
+`<wuensche>/tools/` — dem künftigen Eingang des Schmieds. Dahinter steckt ein MCP-Server, den opencode als
 `hasenbau mcp` startet; eingetragen wird er von `hasenbau init`, und
 jeder Daemon- oder Lauf-Start korrigiert den Eintrag auf das gerade
 laufende Binary und sagt es im Log — auch nach einem Rebuild an einen

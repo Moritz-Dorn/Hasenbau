@@ -236,7 +236,9 @@ func TestWerkzeugWunschLegtDateiUndNotizAn(t *testing.T) {
 		t.Fatalf("Fehler: %s", text(t, res))
 	}
 
-	dateien, err := filepath.Glob(filepath.Join(bauRoot, "raeume/wuensche", "*.md"))
+	// tools/ und nicht der Raum selbst: dort sollen später andere
+	// Wunsch-Arten danebenliegen können.
+	dateien, err := filepath.Glob(filepath.Join(bauRoot, "raeume/wuensche/tools", "*.md"))
 	if err != nil || len(dateien) != 1 {
 		t.Fatalf("Wunsch-Dateien = %v (%v)", dateien, err)
 	}

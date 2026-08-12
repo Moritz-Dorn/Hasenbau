@@ -176,8 +176,15 @@ func wunschHandler(st Store, bauRoot, wunschRaum string) server.ToolHandlerFunc 
 	}
 }
 
+// UnterordnerTools ist die Ablage der Werkzeug-Wünsche im Wunsch-Raum.
+// Ein Unterordner statt des Raums selbst, damit dort später andere
+// Arten von Wünschen daneben liegen können, ohne dass ein Schmied, der
+// auf `tools/` schaut, sie mitliest.
+const UnterordnerTools = "tools"
+
 // schreibeWunsch legt die Datei an und liefert ihren Bau-relativen Pfad.
 func schreibeWunsch(bauRoot, wunschRaum string, l *store.Lauf, zweck, eingabe, ausgabe, versuch string) (string, error) {
+	wunschRaum = filepath.Join(wunschRaum, UnterordnerTools)
 	dir := filepath.Join(bauRoot, wunschRaum)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
