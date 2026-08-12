@@ -82,6 +82,7 @@ func newAuftrag(root string, args []string, out, errw io.Writer) int {
 	fmt.Fprintf(out, "Als Nächstes:\n"+
 		"  1. Den Markdown-Teil schreiben — er ist der Prompt-Kern, nicht Deko.\n"+
 		"  2. Trigger wählen: das Gerüst steht auf manual, watch und cron liegen auskommentiert daneben.\n"+
+		"     Bei watch gehört der Eingang als raeume: input: dazu — watch: trägt nur das Muster.\n"+
 		"  3. Räume prüfen. Anlegen muss sie niemand, das tut der erste Lauf.\n"+
 		"  4. hasenbau describe auftrag %s  — zeigt, was der Bau daraus liest.\n"+
 		"  5. hasenbau lauf %s  — einmal von Hand auslösen.\n", name, name)
@@ -239,16 +240,54 @@ func auftragGeruest(name, haseName string) string {
 # Genau eine Trigger-Art. Die anderen beiden bleiben auskommentiert.
 trigger:
   manual: true                     # läuft nur auf Zuruf: hasenbau lauf %[1]s
-  # watch: raeume/eingang/*.txt    # Glob, Bau-relativ; $INPUT ist dann die Datei
+  # watch: "*.txt"                 # NUR das Muster — der Eingang steht
+  #                                # unten als raeume: input:, beobachtet
+  #                                # wird die Summe aus beidem
   # debounce: 5s                   # nur bei watch: Ruhe vor dem Zugriff
-  # cron: "0 7 * * *"              # Standard-Cron, fünf Felder
+  # cron: "0 7 * * *"              # fünf Felder, keine Sekunden — siehe unten
+
+# Cron: fünf Felder, immer in Anführungszeichen. Ein nacktes */15 ist
+# kein gültiges YAML, dort beginnt ein Alias.
+#
+#   Minute  Stunde  Tag-im-Monat  Monat          Wochentag
+#   0-59    0-23    1-31          1-12, JAN-DEC  0-6, SUN-SAT (0 = Sonntag)
+#
+# Je Feld: * alles, , Liste, - Bereich, / Schrittweite.
+#
+#   cron: "0 7 * * *"          täglich 07:00
+#   cron: "*/15 * * * *"       alle 15 Minuten
+#   cron: "0 7 * * MON-FRI"    werktags 07:00
+#   cron: "0 9,17 * * *"       09:00 und 17:00
+#   cron: "30 3 1 * *"         am Ersten jeden Monats, 03:30
+#   cron: "@daily"             ebenso @hourly @weekly @monthly @yearly
+#   cron: "@every 90m"         ab Daemon-Start gezählt, nicht zur vollen Stunde
+#
+# Es gilt die Ortszeit der Maschine; "CRON_TZ=UTC 0 2 * * *" stellt das
+# um. Sind Tag-im-Monat UND Wochentag gesetzt, feuert es an beiden — "0 7
+# 13 * FRI" heißt jeden Dreizehnten ODER jeden Freitag. Verpasste Ticks
+# holt niemand nach (anders als beim Eingang eines watch-Auftrags), und
+# läuft der Auftrag beim nächsten Tick noch, fällt dieser Tick aus.
 
 # Deterministische Vorverarbeitung, läuft VOR dem Hasen. Kein Modell,
-# kein Urteil. Ersetzt werden nur $BAU, $INPUT, $WORK, $RAUM_<rolle>
-# und $HASENBAU — jeder andere $GROSS-Name ist ein harter Fehler.
+# kein Urteil. Ersetzt werden genau diese fünf Namen — jeder andere
+# $GROSS-Name ist ein harter Fehler, auch $HOME:
+#
+#   $BAU           Root des Baus, also dieses Verzeichnis
+#   $TRIGGER_FILE  die auslösende Datei — NUR bei watch gebunden
+#   $TRIGGER_ARG   das Argument von: hasenbau lauf %[1]s <arg>
+#                  — NUR bei manual gebunden, freier Text, kein Pfad
+#   $WORK          Scratch dieses Laufs, frisch pro Lauf angelegt;
+#                  gebunden nur mit einem Raum der Rolle work
+#   $RAUM_<rolle>  ein Raum von unten, Rolle wörtlich wie dort
+#                  geschrieben: $RAUM_out, nicht $RAUM_OUT
+#   $HASENBAU      Pfad des laufenden Binaries, für Gänge, die den
+#                  Hasenbau selbst rufen
+#
+# Ersetzt wird textuell, bevor die Shell die Zeile sieht — Pfade also
+# in Anführungszeichen setzen, sie können Leerzeichen enthalten.
 # gaenge:
 #   - name: extrakt
-#     run: gaenge/mein_gang.py "$INPUT" --out "$WORK/extrakt.md"
+#     run: gaenge/mein_gang.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
 #     timeout: 120s
 
 hase: %[2]s
@@ -274,12 +313,15 @@ hase: %[2]s
 # ohnehin alles, und `+"`hasenbau findings %[1]s`"+` rechnet auch ohne.
 # monitored: true
 
-# Die Rollen sind Konvention, kein Gesetz: input (Drop-Zone), work
-# (Scratch dieses Laufs, $WORK), out (Ziel), done (Archiv des
-# Rohmaterials), quarantine (was schiefging). Schreibrecht bekommt der
-# Hase AUSSCHLIESSLICH für work und out — daraus entstehen seine
-# Permissions, nicht aus seiner Rolle.
+# Die Rollen: input ist der Eingang und bei einem watch-Trigger
+# PFLICHT — dort sucht der Watcher, und das Muster oben ist relativ
+# dazu. Bei cron und manual ist er der Suchraum, den Gänge über
+# $RAUM_input ansprechen. work ist das Scratch dieses Laufs ($WORK),
+# out das Ziel, done das Archiv des Rohmaterials, quarantine, was
+# schiefging. Schreibrecht bekommt der Hase AUSSCHLIESSLICH für work
+# und out — daraus entstehen seine Permissions, nicht aus seiner Rolle.
 raeume:
+  # input: raeume/eingang/
   work: raeume/werkstatt/
   out: raeume/lager/
 
@@ -289,9 +331,25 @@ raeume:
 #   - file: $WORK/extrakt.md
 #   - last_summaries: 3
 
-# Aufräumen nach einem geglückten Lauf (move, copy, delete).
+# Aufräumen nach einem geglückten Lauf — und nur nach einem geglückten.
+# Genau eine Aktion pro Schritt, abgearbeitet in der Reihenfolge, in der
+# sie hier stehen; der erste Fehler bricht ab.
+#
+#   move:   VON -> NACH   verschiebt
+#   copy:   VON -> NACH   kopiert, das Original bleibt liegen
+#   delete: PFAD          löscht eine Datei, ohne Nachfrage
+#
+# Endet NACH auf einem Schrägstrich oder ist es ein vorhandenes
+# Verzeichnis, behält die Datei ihren Namen; fehlende Zielverzeichnisse
+# entstehen von selbst. Liegt dort schon eine gleichnamige Datei,
+# bekommt die neue einen Zeitstempel vorangestellt — überschrieben wird
+# nie. $BAU ist hier tabu (absolut), und $TRIGGER_ARG ist kein Pfad —
+# was in einem manual-Auftrag hier zu verschieben wäre, muss aus einem
+# Raum kommen.
 # after:
-#   - move: $INPUT -> raeume/archiv/
+#   - move: $TRIGGER_FILE -> raeume/archiv/     # Auslöser wegräumen
+#   - copy: $WORK/bericht.md -> raeume/lager/   # Ergebnis sichern
+#   - delete: raeume/werkstatt/zwischenstand.json  # Rest wegwerfen
 ---
 
 Hier steht, was der Hase tun soll — dieser Text ist der Prompt-Kern und
