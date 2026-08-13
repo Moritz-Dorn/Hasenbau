@@ -549,9 +549,9 @@ ungelesen". Ein selbstgeschriebener Block nützt ohnehin nichts, weil der
 Hash nicht passt.
 
 **Und der Probelauf ist keine Sicherheitsprüfung.** Er führt das Skript
-aus — unsandboxed, mit den Rechten dessen, der ihn tippt. Gegen
-bösartigen Code hilft er nicht: er wäre die Ausführung. Er findet
-Fehler, keine Absichten. Genau deshalb steht das Review davor.
+aus. Gegen bösartigen Code ist er nicht die Abwehr, sondern die
+Ausführung; er findet Fehler, keine Absichten. Genau deshalb steht das
+Review davor.
 
 Der Weg dorthin ist real und gehört benannt: ein Hase liest fremdes
 Material (eine PDF, eine Notiz), darin stehen eingeschleuste
@@ -565,8 +565,51 @@ Das ist die Stelle, an der ein bequemer Befehl schaden kann: wer
 `tool test` als Ersatz fürs Lesen benutzt, hat die einzige Prüfung
 übersprungen, die es gibt. Die Reihenfolge steht deshalb überall, wo
 jemand vorbeikommt — in der Ausgabe des Befehls, in `describe bau`, im
-README. Eine Grenze, die auch ohne Disziplin hält, wäre ein Sandkasten
-um den Probelauf (`bwrap` liegt auf dieser Maschine); das ist offen.
+README.
+
+#### Der Sandkasten um den Probelauf
+
+Weil eine Grenze besser ist als eine Ermahnung, läuft der Probelauf seit
+Hasenbau-9w6 in `bwrap`: **kein Netz, der Bau nur lesbar, kein `$HOME`,
+Zeitlimit eine Minute.** Das Netz ist dabei der Teil, den ein Blick aufs
+Skript am ehesten übersieht — so fällt auch auf, wenn ein Werkzeug
+heimlich nach draußen telefoniert, und das ist etwas anderes als „es
+stürzt nicht ab".
+
+Die Reihenfolge der Mounts trägt die Bedeutung: erst das Dateisystem
+lesend, dann `$HOME` wegwerfen, **zuletzt** den Bau wieder einblenden.
+Andersherum wäre der Sandkasten dicht, aber unbrauchbar — der Bau liegt
+in aller Regel unter `$HOME`.
+
+Fehlt `bwrap`, läuft es wie vorher und der Befehl **sagt das laut**. Ein
+Sandkasten, den man für aktiv hält und der es nicht ist, ist schlimmer
+als gar keiner.
+
+Der Preis steht schon oben: ein Sandkasten ändert das Ergebnis. Ein
+Werkzeug, das legitim in einen Raum schreibt, scheitert darin — deshalb
+`-no-sandbox`, das den Lauf unter Ernstfall-Bedingungen wiederholt, mit
+den Rechten dessen, der ihn tippt.
+
+Daraus folgt eine Feinheit, die die Asymmetrie von oben fortschreibt:
+**ein Fehlschlag im Sandkasten widerlegt nicht von selbst.** Er kann vom
+Werkzeug kommen oder von dessen Grenzen, und dieser Unterschied steht
+zwar auf stderr, ist aber für eine Maschine nicht zu lesen — ein
+`Permission denied` heißt hier etwas anderes als ein `TypeError`.
+Deshalb fragt der Befehl: *Lag es am Werkzeug?* Wer bejaht, setzt
+`invalid`; bleibt die Antwort aus, weil kein Mensch am Terminal steht,
+bleibt der Zustand unverändert. Das ist die sichere Richtung, denn
+`invalid` sperrt auch das erneute Testen: ein Werkzeug, das bloß
+schreiben wollte, käme ohne neues Review nicht mehr heraus.
+
+Zeitlimit und ein geplatzter Sandkasten (`bwrap` selbst scheitert, etwa
+ohne User-Namespaces) werden gar nicht erst gefragt — sie sagen nichts
+über das Werkzeug, sondern etwas über die Maschine.
+
+**Was der Sandkasten nicht leistet:** das freigegebene Werkzeug läuft im
+Betrieb weiterhin ungesandboxed im opencode-Prozess. Er schützt die
+Probe, nicht den Betrieb. Letzteres wäre „Schmied-Werkzeuge laufen
+grundsätzlich eingeschränkt" und damit ein Entwurf zu §3 — offen, und
+der eigentlich größere Teil der Frage.
 
 Dass ein Mensch LLM-geschriebenen Code freigibt, ist dabei nicht neu —
 beim Gang-Entwurf des Baumeisters ist es dieselbe Lage, und auch ein

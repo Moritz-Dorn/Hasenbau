@@ -234,7 +234,8 @@ hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
 hasenbau get tools             # freigegebene Werkzeuge und wer sie rufen darf
 hasenbau get tools -entwuerfe  # was auf Review wartet
 hasenbau tool review --next    # den nächsten Entwurf lesen und verantworten
-hasenbau tool test <name> --<arg> <wert>   # ausführen und zeigen, was kommt
+hasenbau tool test <name> --<arg> <wert>   # im Sandkasten ausführen und zeigen, was kommt
+hasenbau tool test <name> -no-sandbox …    # dasselbe unter Ernstfall-Bedingungen
 hasenbau tool release <name>   # Ausgabe bestätigen und freigeben (macht actual)
 hasenbau get laeufe        # Historie
 hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
@@ -415,10 +416,9 @@ richtig gerechnetem Hash kommt durch, auch mit `reviewed-by: niemand`.
 Was er verhindert, ist stilles Abdriften, und was er erzwingt, ist ein
 Name — mehr nicht.
 
-`test` ist dabei **keine Sicherheitsprüfung**: er führt das Skript mit
-deinen Rechten und ohne Sandkasten aus, ist gegen bösartigen Code also
-nicht die Abwehr, sondern die Ausführung. Genau deshalb verlangt er
-vorher ein Review — gelesen wird zuerst.
+`test` ist dabei **keine Sicherheitsprüfung**: er führt das Skript aus
+und ist gegen bösartigen Code nicht die Abwehr, sondern die Ausführung.
+Genau deshalb verlangt er vorher ein Review — gelesen wird zuerst.
 
 Das ist kein hypothetischer Einwand. Ein Hase liest fremdes Material,
 darin stehen eingeschleuste Anweisungen, er stellt daraufhin einen
@@ -426,6 +426,24 @@ Werkzeug-Wunsch, und der Schmied baut, was im Wunsch steht — am Ende
 dieser Kette liegt Python, das im Server-Prozess laufen soll. Die
 einzige Stelle, an der das auffällt, ist ein Mensch, der den Entwurf
 liest. Dafür ist er kurz und in einer Datei.
+
+Weil eine Grenze besser ist als eine Ermahnung, läuft der Probelauf in
+einem Sandkasten (`bwrap`): **kein Netz, der Bau nur lesbar, kein
+`$HOME`, Zeitlimit eine Minute.** So fällt auch auf, wenn ein Werkzeug
+heimlich nach draußen telefoniert. Fehlt `bwrap`, läuft es wie ohne —
+und der Befehl sagt das laut, statt es zu verschweigen.
+
+Ein Sandkasten ändert allerdings das Ergebnis: ein Werkzeug, das legitim
+in einen Raum schreibt, scheitert darin. Dafür gibt es `-no-sandbox`,
+den Lauf unter Ernstfall-Bedingungen. Und deshalb widerlegt ein
+Fehlschlag im Sandkasten nicht von selbst — er kann vom Werkzeug kommen
+oder von dessen Grenzen. Der Befehl fragt dann: *Lag es am Werkzeug?*
+Wer bejaht, setzt `invalid`; ohne Antwort bleibt der Zustand, wie er
+war.
+
+Was der Sandkasten **nicht** leistet: das freigegebene Werkzeug läuft im
+Betrieb weiterhin ohne ihn, im opencode-Prozess. Er schützt die Probe,
+nicht den Betrieb.
 
 Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
 Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
