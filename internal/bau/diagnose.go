@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
 )
 
 // Check ist eine einzelne Prüfung. Hint steht nur da, wenn etwas zu tun
@@ -43,7 +45,76 @@ func Diagnose(root string) []Check {
 		checkMCP(root),
 		checkWaechter(root),
 		checkHasenbauYAML(root),
+		checkWerkzeuge(root),
 	}
+}
+
+// checkWerkzeuge prüft die zwei Stellen, an denen die Werkzeug-Kette
+// still reißt (Hasenbau-hcs).
+//
+// Erstens ein kaputtes Manifest: die Go-Seite verweigert dann das
+// Generieren der Agenten, das Plugin überspringt nur dieses eine
+// Werkzeug — der Bau läuft also weiter und ein Hase bekommt sein
+// Werkzeug nicht. Zweitens die Kopplung zwischen `requests:` und dem
+// input-Raum des Schmied-Auftrags: passen sie nicht zusammen, wartet
+// der Schmied an einem Briefkasten, in den niemand einwirft. Beides
+// sieht man dem Bau nicht an.
+func checkWerkzeuge(root string) Check {
+	const name = "Werkzeuge"
+	alle, err := LadeTools(root)
+	if err != nil {
+		return Check{Name: name, Detail: err.Error(),
+			Hint: "solange das Manifest kaputt ist, generiert `hasenbau daemon` keine Agenten"}
+	}
+	var frei, entwuerfe int
+	for _, t := range alle {
+		if t.Entwurf {
+			entwuerfe++
+			continue
+		}
+		frei++
+	}
+	detail := fmt.Sprintf("%d freigegeben, %d im Entwurf", frei, entwuerfe)
+
+	// Die Kopplung: der Schmied beobachtet einen input-Raum, die Hasen
+	// werfen in den `requests:`-Raum ein. Nichts hält die beiden
+	// synchron, und ein Schmied, der am falschen Briefkasten wartet,
+	// sieht aus wie einer, der nie etwas zu tun bekommt.
+	if hinweis := schmiedEingang(root); hinweis != "" {
+		return Check{Name: name, Detail: detail, Hint: hinweis}
+	}
+	if entwuerfe > 0 {
+		return Check{Name: name, OK: true, Detail: detail,
+			Hint: "Entwürfe liest niemand von selbst: ansehen, dann nach " + ToolsDir + "/ verschieben (`hasenbau get tools`)"}
+	}
+	return Check{Name: name, OK: true, Detail: detail}
+}
+
+// schmiedEingang liefert einen Hinweis, wenn Wunsch-Raum und
+// Schmied-Eingang auseinanderlaufen — sonst den leeren String. Kein
+// Schmied-Auftrag ist kein Fehler: nicht jeder Bau will einen.
+func schmiedEingang(root string) string {
+	conf, err := LoadConfig(root)
+	if err != nil || conf.Requests == "" {
+		return ""
+	}
+	auftraege, err := auftrag.Load(root)
+	if err != nil {
+		return "" // Ladefehler meldet die CLI ohnehin, und zwar genauer
+	}
+	soll := filepath.Join(conf.Requests, "tools") + "/"
+	for _, a := range auftraege {
+		if a.Hase != "schmied" {
+			continue
+		}
+		ist := a.Raeume["input"]
+		if ist == "" || filepath.Clean(ist) == filepath.Clean(soll) {
+			return ""
+		}
+		return fmt.Sprintf("Auftrag %s beobachtet %s, die Wünsche landen aber in %s — der Schmied bekommt sie nie",
+			a.Name, ist, soll)
+	}
+	return ""
 }
 
 func checkLayout(root string) Check {

@@ -98,6 +98,67 @@ func TestBeispieleGenerierenGolden(t *testing.T) {
 	}
 }
 
+// TestSchmiedSchreibtNurInDenEntwurfsraum: der Schmied schreibt Code,
+// der später IM SERVER-PROZESS läuft — außerhalb der Sandbox, in der
+// die Hasen sitzen. Zwischen dem, was ein Modell geschrieben hat, und
+// dem, was ein Hase rufen darf, muss deshalb ein Mensch stehen. Das
+// Schreibrecht auf tools/entwurf/ und nirgends sonst ist die technische
+// Hälfte dieser Zusage; die andere ist, dass tools/entwurf/ nicht
+// registriert wird (internal/bau/tools.go).
+func TestSchmiedSchreibtNurInDenEntwurfsraum(t *testing.T) {
+	root := filepath.Join("..", "bau", "vorlagen")
+	auftraege, err := auftrag.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schmied *auftrag.Auftrag
+	for _, a := range auftraege {
+		if a.Name == "schmied" {
+			schmied = a
+		}
+	}
+	if schmied == nil {
+		t.Fatal("internal/bau/vorlagen/auftraege/schmied.md fehlt")
+	}
+	tpl, err := Lade(root, schmied.Hase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roh, err := Generiere(schmied, tpl, Optionen{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := string(roh)
+
+	var allows []string
+	for _, zeile := range strings.Split(agent, "\n") {
+		if strings.HasSuffix(strings.TrimSpace(zeile), ": allow") {
+			allows = append(allows, strings.TrimSpace(zeile))
+		}
+	}
+	erwartet := []string{`"raeume/schmiede/work/**": allow`, `"tools/entwurf/**": allow`}
+	if strings.Join(allows, "|") != strings.Join(erwartet, "|") {
+		t.Errorf("allow-Regeln = %v, erwartet %v", allows, erwartet)
+	}
+	// tools/ selbst ist die Freigabe-Stufe des Menschen. Schriebe der
+	// Schmied dorthin, wäre der Lauf, der ein Werkzeug entwirft, zugleich
+	// der, der es scharf schaltet.
+	for _, a := range allows {
+		if strings.Contains(a, `"tools/**"`) || strings.Contains(a, `"tools/*.`) {
+			t.Errorf("Schreibrecht auf das freigegebene tools/: %q", a)
+		}
+	}
+
+	// Er muss die Regel gegen Universalwerkzeuge im Prompt tragen: sein
+	// Skript läuft außerhalb der Sandbox, ein Interpreter wäre die
+	// Hintertür, die der Wächter gerade zugemacht hat.
+	for _, satz := range []string{"Ein Werkzeug, eine Aufgabe", "Interpreter"} {
+		if !strings.Contains(agent, satz) {
+			t.Errorf("Schmied-Prompt ohne %q — genau das ist schon gewünscht worden", satz)
+		}
+	}
+}
+
 // TestBaumeisterDarfNichtsScharfSchalten prüft die Garantie direkt,
 // nicht nur über den Golden-Vergleich: ein Golden-Diff könnte man
 // gedankenlos mit -update wegwischen, diese Zusicherungen nicht.

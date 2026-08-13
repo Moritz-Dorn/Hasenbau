@@ -58,7 +58,10 @@ baumeister: baumeister
 # dann auch nicht darauf. Ein Briefkasten, den niemand leert, ist
 # schlimmer als keiner; ein Wegweiser auf einen, den es nicht gibt,
 # erst recht.
-# requests: raeume/wuensche/
+#
+# Steht hier ein Raum, muss der input-Raum des Schmied-Auftrags derselbe
+# sein plus ` + "`tools/`" + `. ` + "`hasenbau describe bau`" + ` prüft das.
+requests: raeume/wuensche/
 `
 
 // Die Vorlagen der Sonder-Hasen liegen im Binary, nicht in beispiele/:
@@ -71,6 +74,10 @@ var (
 	auftragBaumeister string
 	//go:embed vorlagen/hasen/baumeister.md
 	haseBaumeister string
+	//go:embed vorlagen/auftraege/schmied.md
+	auftragSchmied string
+	//go:embed vorlagen/hasen/schmied.md
+	haseSchmied string
 	//go:embed vorlagen/plugin/hasenbau.js
 	sandboxWaechter string
 )
@@ -109,6 +116,8 @@ var files = map[string]string{
 	OpencodeConfig:            opencodeJSON,
 	"auftraege/baumeister.md": auftragBaumeister,
 	"hasen/baumeister.md":     haseBaumeister,
+	"auftraege/schmied.md":    auftragSchmied,
+	"hasen/schmied.md":        haseSchmied,
 	PluginDatei:               sandboxWaechter,
 }
 

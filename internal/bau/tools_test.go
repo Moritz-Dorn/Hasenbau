@@ -115,3 +115,57 @@ func TestLadeToolsOhneVerzeichnis(t *testing.T) {
 		t.Errorf("%d Werkzeuge in einem leeren Bau", len(alle))
 	}
 }
+
+// TestDiagnoseMeldetSchmiedAmFalschenBriefkasten: der Schmied
+// beobachtet einen input-Raum, die Hasen werfen in den requests:-Raum
+// ein. Nichts haelt die beiden synchron — und ein Schmied, der am
+// falschen Briefkasten wartet, sieht aus wie einer, der nie etwas zu
+// tun bekommt (Hasenbau-hcs).
+func TestDiagnoseMeldetSchmiedAmFalschenBriefkasten(t *testing.T) {
+	werkzeugCheck := func(root string) Check {
+		for _, c := range Diagnose(root) {
+			if c.Name == "Werkzeuge" {
+				return c
+			}
+		}
+		t.Fatal("kein Werkzeuge-Check in der Diagnose")
+		return Check{}
+	}
+
+	bauMitSchmied := func(t *testing.T, requests, input string) string {
+		t.Helper()
+		root := t.TempDir()
+		for _, d := range []string{"auftraege", "hasen"} {
+			if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		schreib := func(rel, inhalt string) {
+			if err := os.WriteFile(filepath.Join(root, rel), []byte(inhalt), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		schreib(ConfigFile, "requests: "+requests+"\n")
+		schreib("hasen/schmied.md", "---\ndescription: Schmied\n---\nDu bist der Schmied.\n")
+		schreib("auftraege/schmied.md", "---\ntrigger:\n  watch: \"*.md\"\nhase: schmied\nraeume:\n  input: "+input+"\n  out: tools/entwurf/\n---\nBau ein Werkzeug.\n")
+		return root
+	}
+
+	t.Run("passt zusammen", func(t *testing.T) {
+		root := bauMitSchmied(t, "raeume/wuensche/", "raeume/wuensche/tools/")
+		if c := werkzeugCheck(root); !c.OK || c.Hint != "" {
+			t.Errorf("stimmiger Bau wird bemaengelt: %+v", c)
+		}
+	})
+
+	t.Run("laeuft auseinander", func(t *testing.T) {
+		root := bauMitSchmied(t, "raeume/anders/", "raeume/wuensche/tools/")
+		c := werkzeugCheck(root)
+		if c.OK {
+			t.Errorf("auseinanderlaufende Raeume gelten als in Ordnung: %+v", c)
+		}
+		if !strings.Contains(c.Hint, "raeume/anders/tools/") {
+			t.Errorf("Hinweis %q nennt den erwarteten Raum nicht", c.Hint)
+		}
+	})
+}
