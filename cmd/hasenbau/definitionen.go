@@ -99,7 +99,11 @@ func exists(root, rel string) bool {
 // Rechte stehen weder im Template noch im Auftrag, sie entstehen erst
 // beim Generieren.
 func effectivePermissions(root string, a *auftrag.Auftrag, t *hase.Template) ([]string, error) {
-	roh, err := hase.Generiere(a, t, generierOptionen(root))
+	o, err := generierOptionen(root)
+	if err != nil {
+		return nil, err
+	}
+	roh, err := hase.Generiere(a, t, o)
 	if err != nil {
 		return nil, err
 	}

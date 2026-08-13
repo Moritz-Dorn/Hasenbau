@@ -313,6 +313,14 @@ hase: %[2]s
 # ohnehin alles, und `+"`hasenbau findings %[1]s`"+` rechnet auch ohne.
 # monitored: true
 
+# Schmied-Werkzeuge, die der Hase in DIESEM Auftrag rufen darf. Ohne
+# Eintrag bekommt er keines: die Vorgabe ist nichts, nicht alles.
+# Genannt wird der Dateiname unter tools/ ohne Endung; steht dort
+# keines, lädt der Auftrag nicht. Was es im Bau gibt, zeigt
+# `+"`hasenbau get tools`"+`.
+# tools:
+#   - zeilen_zaehlen
+
 # Die Rollen: input ist der Eingang und bei einem watch-Trigger
 # PFLICHT — dort sucht der Watcher, und das Muster oben ist relativ
 # dazu. Bei cron und manual ist er der Suchraum, den Gänge über

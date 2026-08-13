@@ -241,6 +241,17 @@ var grundDenies = []string{"bash", "webfetch", "websearch", "external_directory"
 // einfließen — alles, was weder im Auftrag noch im Template steht. Der
 // Nullwert ist der karge Fall: nichts zusätzlich angeboten.
 type Optionen struct {
+	// Tools sind die Namen ALLER Schmied-Werkzeuge, die im Bau liegen —
+	// nicht die des Auftrags. Der Generator braucht die Gesamtliste,
+	// weil die Freigabe je Auftrag über ein Verbot der übrigen
+	// entsteht: ein plugin-registriertes Werkzeug steht in keiner
+	// Grund-Verbotsliste und wäre sonst für jeden Hasen sichtbar
+	// (gemessen 2026-08-12, Hasenbau-hcs).
+	//
+	// Damit ist die Liste hier so wichtig wie das `tools:` des
+	// Auftrags: fehlt ein Werkzeug darin, bekommt es jeder Hase.
+	Tools []string
+
 	// ToolRequests sagt, ob der Bau einen `requests:`-Raum hat. Nur
 	// dann bietet der Rückkanal `hasenbau_tool_request` überhaupt an
 	// (cmd/hasenbau: wunschRaum aus cfg.Requests), und nur dann darf
@@ -261,6 +272,36 @@ func Generiere(a *auftrag.Auftrag, t *Template, o Optionen) ([]byte, error) {
 	if a.Hase != t.Name {
 		return nil, fmt.Errorf("auftrag %s verlangt Hase %q, Template heißt %q", a.Name, a.Hase, t.Name)
 	}
+
+	// Freigabe je Auftrag: das Plugin registriert seine Werkzeuge beim
+	// Server, sichtbar sind sie damit zunächst für JEDEN Agenten. Wer
+	// hier nicht genannt ist, wird deshalb ausdrücklich verboten.
+	//
+	// Ein genanntes Werkzeug, das es nicht gibt, ist ein Ladefehler und
+	// kein stiller Verzicht: sonst merkt man den Tippfehler erst an
+	// einem Lauf, in dem der Hase behauptet, er habe das Werkzeug
+	// nicht — und das sieht aus wie ein Modellfehler.
+	freigegeben := map[string]bool{}
+	for _, name := range a.Tools {
+		freigegeben[name] = true
+	}
+	var gesperrteTools []string
+	for _, name := range o.Tools {
+		if !freigegeben[name] {
+			gesperrteTools = append(gesperrteTools, name)
+		}
+		delete(freigegeben, name)
+	}
+	if len(freigegeben) > 0 {
+		fehlend := make([]string, 0, len(freigegeben))
+		for name := range freigegeben {
+			fehlend = append(fehlend, name)
+		}
+		sort.Strings(fehlend)
+		return nil, fmt.Errorf("auftrag %s: tools: %s — kein solches Werkzeug im Bau (tools/<name>.json)",
+			a.Name, strings.Join(fehlend, ", "))
+	}
+	sort.Strings(gesperrteTools)
 
 	// edit-Regeln: alles verbieten, dann die Schreib-Räume des Auftrags
 	// erlauben. Template-Denies kommen ans Ende — die letzte matchende
@@ -319,6 +360,10 @@ func Generiere(a *auftrag.Auftrag, t *Template, o Optionen) ([]byte, error) {
 		// Pattern-Denies auf Grund-Permissions wären toter Code unter *.
 		delete(sonst, perm)
 		fmt.Fprintf(&b, "  %s: deny\n", perm)
+	}
+	for _, name := range gesperrteTools {
+		delete(sonst, name)
+		fmt.Fprintf(&b, "  %s: deny\n", name)
 	}
 	for _, perm := range sonstReihenfolge {
 		eintraege, ok := sonst[perm]

@@ -633,3 +633,45 @@ func TestParseHaseTimeout(t *testing.T) {
 		t.Errorf("ohne Angabe: HaseTimeout = %v, erwartet 0", ohne.HaseTimeout)
 	}
 }
+
+// TestToolsFreigabeImFrontmatter: `tools:` nennt die Schmied-Werkzeuge,
+// die der Hase in diesem Auftrag rufen darf (Hasenbau-hcs). Ein Name
+// wandert von hier in den permission-Block des generierten Agenten und
+// in einen Dateinamen unter tools/ — ein Tippfehler soll deshalb beim
+// Laden auffallen und nicht an einem Lauf, in dem der Hase sagt, er
+// habe das Werkzeug nicht.
+func TestToolsFreigabeImFrontmatter(t *testing.T) {
+	kopf := func(tools string) []byte {
+		return []byte("---\ntrigger:\n  manual: true\nhase: archivar\n" + tools + "---\nTu was.\n")
+	}
+
+	a, err := Parse("einlagern", kopf("tools:\n  - zeilen_zaehlen\n  - exif_lesen\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Tools) != 2 || a.Tools[0] != "zeilen_zaehlen" || a.Tools[1] != "exif_lesen" {
+		t.Errorf("Tools = %v", a.Tools)
+	}
+
+	// Ohne den Schlüssel: keine Werkzeuge. Die Vorgabe ist nichts,
+	// nicht alles — ein neu gebautes Werkzeug soll nicht dadurch bei
+	// jedem Hasen landen, dass niemand es verboten hat.
+	a, err = Parse("einlagern", kopf(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Tools) != 0 {
+		t.Errorf("ohne tools: sind es %v, erwartet keine", a.Tools)
+	}
+
+	for name, eingabe := range map[string]string{
+		"ungültiger Name": "tools:\n  - \"pfad/raus\"\n",
+		"doppelt":         "tools:\n  - zaehlen\n  - zaehlen\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse("einlagern", kopf(eingabe)); err == nil {
+				t.Errorf("%s wurde angenommen", name)
+			}
+		})
+	}
+}

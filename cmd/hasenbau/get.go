@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/auftrag"
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
@@ -25,6 +26,7 @@ Ressourcen:
   auftraege       die Aufträge des Baus
   hasen           die Hasen-Templates
   gaenge          die Gang-Skripte und wer sie benutzt
+  tools           die Schmied-Werkzeuge und wer sie rufen darf
   laeufe [-n N]   die letzten Läufe
   lauf <id>       ein Lauf (Details: hasenbau describe lauf <id>)
   provider        Provider der Bau-Config: Endpoint, Modelle, Schlüssel
@@ -48,6 +50,8 @@ func cmdGet(root string, args []string, out, errw io.Writer) int {
 		return getHasen(root, args[1:], out, errw)
 	case "gaenge", "gang":
 		return getGaenge(root, args[1:], out, errw)
+	case "tools", "tool":
+		return getTools(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau get: unbekannte Ressource %q\n\n%s", args[0], getUsage)
 		return 2
@@ -390,6 +394,65 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 	w.Flush()
 	if ladefehler != nil {
 		fmt.Fprintf(out, "\nSpalte BENUTZT VON unvollständig: %v\n", ladefehler)
+	}
+	return 0
+}
+
+// getTools zeigt die Schmied-Werkzeuge und, ebenso wichtig, WER sie
+// rufen darf (Hasenbau-hcs). Die Freigabe ist zweistufig — ein Mensch
+// verschiebt die Datei aus tools/entwurf/ nach tools/, und ein Auftrag
+// nennt sie in seinem `tools:`. Ein Werkzeug, das die erste Stufe
+// genommen hat und die zweite nicht, sieht kein Hase; ohne diese Spalte
+// merkt man das erst an einem Lauf.
+func getTools(root string, args []string, out, errw io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get tools")
+		return 2
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if len(werkzeuge) == 0 {
+		fmt.Fprintf(out, "keine Werkzeuge unter %s/\n", bau.ToolsDir)
+		return 0
+	}
+	auftraege, ladefehler := loadDefinitions(root)
+	nutzer := map[string][]string{}
+	for _, a := range auftraege {
+		for _, w := range a.Tools {
+			nutzer[w] = append(nutzer[w], a.Name)
+		}
+	}
+
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tARGUMENTE\tFREIGEGEBEN FÜR")
+	for _, t := range werkzeuge {
+		var args []string
+		for _, a := range t.Args {
+			if a.Pflicht {
+				args = append(args, a.Name)
+				continue
+			}
+			args = append(args, "["+a.Name+"]")
+		}
+		argSpalte := strings.Join(args, " ")
+		if argSpalte == "" {
+			argSpalte = "—"
+		}
+		frei := strings.Join(nutzer[t.Name], ", ")
+		switch {
+		case t.Entwurf:
+			frei = "—  (Entwurf, nicht freigegeben)"
+		case frei == "":
+			frei = "—  (kein Auftrag nennt es)"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", t.Name, argSpalte, frei)
+	}
+	w.Flush()
+	if ladefehler != nil {
+		fmt.Fprintf(out, "\nSpalte FREIGEGEBEN FÜR unvollständig: %v\n", ladefehler)
 	}
 	return 0
 }

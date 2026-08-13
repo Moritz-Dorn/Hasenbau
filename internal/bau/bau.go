@@ -93,6 +93,12 @@ var dirs = []string{
 	"hasen",
 	"raeume",
 	"state",
+	// tools/ liegt neben gaenge/ und nicht unter raeume/: ein Werkzeug
+	// ist kein Material, es fließt nicht durch den Bau. entwurf/ hat
+	// dieselbe Bedeutung wie bei den Gängen — was dort liegt, hat ein
+	// Sonder-Hase geschrieben und noch kein Mensch angesehen.
+	ToolsDir,
+	ToolsEntwurfDir,
 }
 
 // files sind die Dateien eines frischen Baus. Bestehende Dateien werden

@@ -448,3 +448,70 @@ func TestToolRequestAbsatzHaengtAmRequestsRaum(t *testing.T) {
 		}
 	}
 }
+
+// TestWerkzeugFreigabeIstEinschlussliste hält die Zusicherung aus
+// Hasenbau-hcs fest: ein Schmied-Werkzeug bekommt nur, wer es im
+// Auftrag nennt.
+//
+// Die Freigabe entsteht über ein VERBOT der übrigen, und das ist kein
+// Umweg, sondern nötig: das Bau-Plugin registriert seine Werkzeuge beim
+// Server, sichtbar sind sie damit zunächst für jeden Agenten. Gemessen
+// am 2026-08-12 — ein plugin-registriertes Werkzeug stand in der
+// Werkzeugliste eines Hasen, der nie davon gehört hatte.
+func TestWerkzeugFreigabeIstEinschlussliste(t *testing.T) {
+	basis := func(tools []string) *auftrag.Auftrag {
+		return &auftrag.Auftrag{
+			Name: "einlagern", Hase: "archivar",
+			Trigger: auftrag.Trigger{Manual: true},
+			Raeume:  map[string]string{"work": "raeume/werkstatt/"},
+			Tools:   tools,
+			Body:    "Tu was.",
+		}
+	}
+	tpl := &Template{Name: "archivar", Prompt: "Du bist der Archivar."}
+	imBau := Optionen{Tools: []string{"exif_lesen", "zeilen_zaehlen"}}
+
+	// Genannt: kein Verbot. Nicht genannt: Verbot.
+	roh, err := Generiere(basis([]string{"zeilen_zaehlen"}), tpl, imBau)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := string(roh)
+	if strings.Contains(agent, "zeilen_zaehlen: deny") {
+		t.Errorf("freigegebenes Werkzeug wird trotzdem verboten:\n%s", agent)
+	}
+	if !strings.Contains(agent, "exif_lesen: deny") {
+		t.Errorf("nicht freigegebenes Werkzeug wird nicht verboten:\n%s", agent)
+	}
+
+	// Ohne `tools:` bekommt der Hase keines — die Vorgabe ist nichts,
+	// nicht alles.
+	roh, err = Generiere(basis(nil), tpl, imBau)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range imBau.Tools {
+		if !strings.Contains(string(roh), name+": deny") {
+			t.Errorf("ohne tools: fehlt das Verbot für %q:\n%s", name, roh)
+		}
+	}
+
+	// Ein Werkzeug, das es nicht gibt, ist ein Ladefehler. Sonst merkt
+	// man den Tippfehler erst an einem Lauf, in dem der Hase sagt, er
+	// habe das Werkzeug nicht — und das sieht aus wie ein Modellfehler.
+	_, err = Generiere(basis([]string{"gibtsnicht"}), tpl, imBau)
+	if err == nil {
+		t.Error("ein unbekanntes Werkzeug im Auftrag ist kein Fehler — der Tippfehler bliebe still")
+	} else if !strings.Contains(err.Error(), "gibtsnicht") {
+		t.Errorf("Fehler %q nennt das Werkzeug nicht", err)
+	}
+
+	// Ein Bau ohne Werkzeuge erzeugt keine leeren Verbote.
+	roh, err = Generiere(basis(nil), tpl, Optionen{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(roh), ": deny\n  : deny") {
+		t.Errorf("leerer Verbots-Eintrag im Agenten:\n%s", roh)
+	}
+}

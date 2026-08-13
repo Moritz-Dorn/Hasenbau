@@ -394,7 +394,10 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	if err != nil {
 		return nil, err
 	}
-	o := generierOptionen(root)
+	o, err := generierOptionen(root)
+	if err != nil {
+		return nil, err
+	}
 	for _, a := range auftraege {
 		t, err := hase.Lade(root, a.Hase)
 		if err != nil {
@@ -412,12 +415,27 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 // abzubrechen: er meldet sich an anderer Stelle laut genug, und der
 // karge Agent ist der sichere Fall — er verweist auf nichts, was es
 // womöglich nicht gibt.
-func generierOptionen(root string) hase.Optionen {
-	cfg, err := bau.LoadConfig(root)
-	if err != nil {
-		return hase.Optionen{}
+func generierOptionen(root string) (hase.Optionen, error) {
+	var o hase.Optionen
+	// Ein Config-Fehler ist hier kein Grund abzubrechen: er meldet sich
+	// an anderer Stelle laut genug, und der karge Agent ist der sichere
+	// Fall — er verweist auf nichts, was es womöglich nicht gibt.
+	if cfg, err := bau.LoadConfig(root); err == nil {
+		o.ToolRequests = cfg.Requests != ""
 	}
-	return hase.Optionen{ToolRequests: cfg.Requests != ""}
+	// Bei den Werkzeugen ist es umgekehrt, und deshalb bricht es hier
+	// ab: die Freigabe je Auftrag entsteht dadurch, dass der Generator
+	// alles VERBIETET, was der Auftrag nicht nennt. Eine leere Liste
+	// hiesse also „nichts zu verbieten" — und ein Werkzeug, das das
+	// Plugin trotzdem registriert, stünde jedem Hasen offen. Ein Bau,
+	// dessen Werkzeuge man nicht lesen kann, darf keine Agenten
+	// generieren.
+	namen, err := bau.FreigegebeneToolNamen(root)
+	if err != nil {
+		return o, err
+	}
+	o.Tools = namen
+	return o, nil
 }
 
 // waitForServer blockiert, bis der Supervisor eine BaseURL meldet —

@@ -46,6 +46,20 @@ type Auftrag struct {
 	// ungefragt sehen will — in `hasenbau status` (Hasenbau-4cx.3).
 	Monitored bool
 
+	// Tools sind die Namen der Schmied-Werkzeuge, die der Hase in
+	// DIESEM Auftrag rufen darf (Hasenbau-hcs). Leer heißt keine — die
+	// Freigabe ist eine Einschluss- und keine Ausschlussliste, anders
+	// als die Grund-Verbote des generierten Agenten.
+	//
+	// Der Unterschied hat einen Grund: die Grund-Verbote zählen auf, was
+	// es an opencode-Werkzeugen gibt und was davon wegfällt; die
+	// Schmied-Werkzeuge entstehen dagegen laufend neu, und ein neues
+	// soll nicht dadurch bei jedem Hasen landen, dass es niemand
+	// verboten hat. Ein Werkzeug darf existieren, ohne dass jeder es
+	// sieht — deshalb ist die Freigabe zweistufig: ein Mensch verschiebt
+	// die Datei nach tools/, und ein Auftrag nennt sie hier.
+	Tools []string
+
 	Context []Context
 	After   []After
 	Body    string // Prompt-Kern
@@ -351,6 +365,7 @@ type header struct {
 	Hase        string    `yaml:"hase"`
 	HaseTimeout *duration `yaml:"hase_timeout"`
 	Monitored   bool      `yaml:"monitored"`
+	Tools       []string  `yaml:"tools"`
 	Throttle    *struct {
 		Max     int       `yaml:"max"`
 		Per     *duration `yaml:"per"`
@@ -392,8 +407,23 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		Name:      name,
 		Hase:      fm.Hase,
 		Monitored: fm.Monitored,
+		Tools:     fm.Tools,
 		Raeume:    fm.Raeume,
 		Body:      strings.TrimSpace(body),
+	}
+	// Ein Werkzeugname wandert in den permission-Block des generierten
+	// Agenten und in einen Dateinamen unter tools/. Beides verträgt
+	// keine Überraschungen, und ein Tippfehler soll hier auffallen und
+	// nicht erst an einem Lauf, in dem der Hase das Werkzeug nicht hat.
+	gesehenesTool := map[string]bool{}
+	for _, w := range a.Tools {
+		if err := ValidName(w); err != nil {
+			return nil, fehler("tools: %v", err)
+		}
+		if gesehenesTool[w] {
+			return nil, fehler("tools: %q steht zweimal", w)
+		}
+		gesehenesTool[w] = true
 	}
 
 	// Trigger: genau eines von watch, cron oder manuell.
