@@ -230,6 +230,7 @@ hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
+hasenbau get tools         # Schmied-Werkzeuge, ihre Argumente, wer sie rufen darf
 hasenbau get laeufe        # Historie
 hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
@@ -318,6 +319,16 @@ jemand danach fragt. Das Flag steuert nur die Meldung — aufgezeichnet
 wird bei jedem Auftrag alles, und `hasenbau findings <auftrag>` rechnet
 auch über die, die es nicht setzen. Wer es später nachträgt, bekommt die
 Historie mitgeliefert.
+
+Neben den Gängen, die **vor** dem Hasen laufen, gibt es Werkzeuge, die
+er **während** seines Laufs ruft. Sie liegen als Skript plus Manifest
+unter `tools/` und werden vom Bau-Plugin beim Server-Start registriert;
+geschrieben hat sie der Schmied, freigegeben ein Mensch. Die Freigabe
+ist zweistufig: erst wandert die Datei aus `tools/entwurf/` nach
+`tools/`, dann nennt ein Auftrag sie in seinem `tools:`. Ohne Eintrag
+bekommt ein Hase kein Werkzeug — ein neu gebautes soll nicht dadurch
+bei allen landen, dass niemand es verboten hat. `hasenbau get tools`
+zeigt, was es gibt und wer es rufen darf.
 
 Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
 Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`

@@ -315,9 +315,13 @@ bau/
 │   └── baumeister.md
 ├── auftraege/               # Auftrags-Definitionen (Markdown + YAML-Frontmatter)
 │   └── pdf-einlagern.md
-├── gaenge/                  # deterministische Skripte
+├── gaenge/                  # deterministische Skripte, laufen VOR dem Hasen
 │   ├── pdf_to_md.py
 │   └── entwurf/             #   was der Baumeister schreibt — nie aktiv (§8)
+├── tools/                   # Schmied-Werkzeuge, ruft der Hase WÄHREND des Laufs
+│   ├── zeilen_zaehlen.py    #   Skript …
+│   ├── zeilen_zaehlen.json  #   … und sein Manifest, immer als Paar
+│   └── entwurf/             #   was der Schmied schreibt — nie registriert
 ├── raeume/                  # der eigentliche Materialfluss
 │   ├── laderampe/
 │   │   ├── sources/         #   Drop-Zone
@@ -331,6 +335,22 @@ bau/
 
 Räume sind nicht hartkodiert. Der Auftrag benennt sie; der Daemon legt
 fehlende an. `laderampe/`, `lager/` usw. sind Konvention, kein Vertrag.
+
+`tools/` liegt neben `gaenge/` und nicht unter `raeume/`, weil ein
+Werkzeug kein Material ist: es fließt nicht durch den Bau, es wird
+gerufen. Der Unterschied zum Gang ist der Zeitpunkt — ein Gang läuft
+**vor** dem Hasen und deterministisch, ein Werkzeug **während** seines
+Laufs und weil er es will.
+
+Ein Werkzeug sind immer zwei Dateien nebeneinander: das Skript und ein
+Manifest (`description`, `script`, `args`). Das Manifest ist die
+Wahrheit — ein Skript ohne Manifest ist kein halbes Werkzeug, sondern
+keines. Registriert werden sie vom Bau-Plugin beim Server-Start; im Bau
+liegt deshalb kein generiertes TypeScript (§3, Hasenbau-hcs).
+
+`entwurf/` bedeutet hier dasselbe wie bei den Gängen: was dort liegt,
+hat ein Sonder-Hase geschrieben und noch kein Mensch angesehen. Es wird
+nicht registriert.
 
 `hasenbau.yaml` ist bewusst dünn: `log_level` (noch ohne Konsumenten —
 der Daemon loggt levelfrei) und `baumeister`, der Auftrag, den
@@ -553,6 +573,9 @@ hase: archivar                     # → Template hasen/archivar.md
 # hase_timeout: 60m                # Zeitlimit des LLM-Schritts; Vorgabe 30m
 monitored: true                    # Befunde routinemäßig melden (§8)
 
+tools:                             # Schmied-Werkzeuge für DIESEN Auftrag
+  - zeilen_zaehlen                 # ohne Eintrag: keine
+
 throttle:                          # höchstens so viele Läufe je Fenster
   max: 5
   per: 1h
@@ -726,6 +749,31 @@ jederzeit nachziehen und bekommt die Historie mitgeliefert.
 Der Schlüssel ist englisch wie alle Formatschlüssel außer den acht
 Begriffen aus §1 — in der Prosa und in der Ausgabe heißt die Sache
 weiter „überwacht".
+
+**`tools:` ist eine Einschlussliste, und das ist der Unterschied zu
+allem anderen im generierten Agenten.** Die Grund-Verbote zählen auf,
+was es an opencode-Werkzeugen gibt und was davon wegfällt; die
+Schmied-Werkzeuge dagegen entstehen laufend neu. Ein neues soll nicht
+dadurch bei jedem Hasen landen, dass es niemand verboten hat — ohne
+`tools:` bekommt ein Auftrag deshalb keines.
+
+Technisch entsteht die Freigabe trotzdem über ein Verbot: das
+Bau-Plugin registriert seine Werkzeuge beim Server, sichtbar sind sie
+damit zunächst für jeden Agenten (gemessen 2026-08-12). Der Generator
+verbietet deshalb ausdrücklich jedes vorhandene Werkzeug, das der
+Auftrag nicht nennt. Daraus folgt zweierlei: er muss die Gesamtliste
+kennen, und ein Bau, dessen Manifeste sich nicht lesen lassen,
+generiert gar nichts — eine leere Liste hieße „nichts zu verbieten".
+
+Ein `tools:`-Eintrag ohne Werkzeug im Bau ist ein Ladefehler. Sonst
+merkt man den Tippfehler erst an einem Lauf, in dem der Hase sagt, er
+habe das Werkzeug nicht — und das sieht aus wie ein Modellfehler.
+
+Die Freigabe ist damit **zweistufig**: ein Mensch verschiebt die Datei
+aus `tools/entwurf/` nach `tools/`, und ein Auftrag nennt sie hier. Das
+ist eher ein Vorzug als ein Umstand — ein Werkzeug darf existieren,
+ohne dass jeder Hase es sieht. `hasenbau get tools` zeigt beide Stufen
+in einer Tabelle.
 
 ### Hasen-Templates und generierte Agenten
 
