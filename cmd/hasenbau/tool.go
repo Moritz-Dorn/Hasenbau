@@ -20,11 +20,31 @@
 // und das lässt sich nicht ins Manifest schreiben. Der Befehl zeigt
 // deshalb Exit-Code, stdout und stderr und überlässt den Schluss dem
 // Menschen.
+//
+// WAS DIESER BEFEHL NICHT IST: eine Sicherheitsprüfung. Er führt das
+// Skript aus, unsandboxed, mit den Rechten dessen, der ihn tippt. Gegen
+// bösartigen Code hilft er deshalb nicht — er WÄRE die Ausführung. Er
+// findet Fehler, keine Absichten.
+//
+// Das ist keine Spitzfindigkeit, denn der Weg dorthin ist real: ein
+// Hase liest fremdes Material (eine PDF, eine Notiz), darin stehen
+// eingeschleuste Anweisungen, er stellt daraufhin einen Werkzeug-Wunsch,
+// und der Schmied baut, was im Wunsch steht. Am Ende dieser Kette liegt
+// Python, das im Server-Prozess laufen soll.
+//
+// Die Reihenfolge lautet deshalb LESEN, dann probieren, dann freigeben —
+// nicht umgekehrt. Ein Befehl, der das Ausführen bequem macht, verführt
+// dazu, das Lesen zu überspringen; dagegen hilft nur, es überall
+// hinzuschreiben, wo jemand vorbeikommt (hier, in `describe bau`, im
+// README und in der Ausgabe des Befehls selbst). Eine echte Grenze wäre
+// ein Sandkasten um den Probelauf — offen als Hasenbau-hiz/Nachfolger.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -35,12 +55,15 @@ import (
 
 const toolUsage = `Aufruf: hasenbau tool test <name> [--<arg> <wert> …]
 
-Führt ein Werkzeug einmal aus und zeigt, was zurückkam. Gesucht wird
-zuerst unter ` + bau.ToolsEntwurfDir + `/, dann unter ` + bau.ToolsDir + `/ —
-ein Entwurf ist ungeprüfter Code, und genau der gehört probiert, bevor
-ihn jemand freigibt.
+Führt ein Werkzeug einmal aus und zeigt Exit-Code, stdout und stderr.
+Gesucht wird zuerst unter ` + bau.ToolsEntwurfDir + `/, dann unter ` + bau.ToolsDir + `/.
 
   hasenbau tool test pdf_seiten_zaehlen --pdf raeume/eingang/a.pdf
+
+ZUERST LESEN. Ein Entwurf ist Code, den ein Modell geschrieben hat;
+dieser Befehl führt ihn aus, mit deinen Rechten und ohne Sandkasten. Er
+findet Fehler, keine Absichten — gegen bösartigen Code hilft er nicht,
+er wäre die Ausführung.
 
 Was der Bau kennt, zeigt ` + "`hasenbau get tools`" + `.
 `
@@ -103,9 +126,13 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	fmt.Fprintf(out, "%s  (%s)\n", gefunden.Name, gefunden.Skript)
+	fmt.Fprintf(out, "%s  (%s, %d Zeilen)\n", gefunden.Name, gefunden.Skript, zeilen(skript))
 	if gefunden.Entwurf {
-		fmt.Fprintln(out, "Entwurf — noch nicht freigegeben.")
+		// Der Hinweis steht VOR der Ausführung, nicht danach: wer ihn
+		// erst im Ergebnis liest, hat das Skript schon laufen lassen.
+		fmt.Fprintln(out, "Entwurf — von einem Modell geschrieben, noch nicht freigegeben.")
+		fmt.Fprintln(out, "Dieser Befehl FÜHRT IHN AUS, mit deinen Rechten und ohne Sandkasten.")
+		fmt.Fprintln(out, "Er findet Fehler, keine Absichten — lies das Skript, bevor du es probierst.")
 	}
 	fmt.Fprintf(out, "Aufruf: %s %s\n\n", gefunden.Skript, strings.Join(argv, " "))
 
@@ -190,6 +217,17 @@ func parseToolArgs(t *bau.Tool, rest []string, errw io.Writer) (map[string]strin
 		return nil, 2
 	}
 	return werte, 0
+}
+
+// zeilen ist der billigste Hinweis darauf, wie viel da zu lesen ist —
+// acht Zeilen überfliegt man, achthundert nicht, und der Unterschied
+// gehört vor die Ausführung.
+func zeilen(pfad string) int {
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		return 0
+	}
+	return bytes.Count(roh, []byte("\n"))
 }
 
 func manifestArgs(t *bau.Tool) string {

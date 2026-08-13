@@ -85,8 +85,9 @@ func checkWerkzeuge(root string) Check {
 	}
 	if entwuerfe > 0 {
 		return Check{Name: name, OK: true, Detail: detail,
-			Hint: "Ein Entwurf ist ungeprüfter Code — der Schmied kann sein Skript nicht ausführen.\n" +
-				"                       `hasenbau tool test <name> --<arg> <wert>` läuft ihn einmal, dann lesen und nach " + ToolsDir + "/ verschieben"}
+			Hint: "Ein Entwurf ist Code, den ein Modell geschrieben und niemand gelesen hat.\n" +
+				"                       ERST LESEN. Dann `hasenbau tool test <name> …` — der Befehl FÜHRT AUS,\n" +
+				"                       mit deinen Rechten; er findet Fehler, keine Absichten. Zuletzt nach " + ToolsDir + "/ verschieben"}
 	}
 	return Check{Name: name, OK: true, Detail: detail}
 }

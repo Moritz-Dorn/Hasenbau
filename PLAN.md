@@ -377,6 +377,31 @@ nur fragt „stürzt es ab?", hätte im Fall oben nach der ersten Korrektur
 grün gemeldet; die Erwartung ist das Urteil des Lesers und lässt sich
 nicht ins Manifest schreiben. Die Freigabe bleibt eine Code-Review.
 
+**Und der Probelauf ist keine Sicherheitsprüfung.** Er führt das Skript
+aus — unsandboxed, mit den Rechten dessen, der ihn tippt. Gegen
+bösartigen Code hilft er nicht: er wäre die Ausführung. Er findet
+Fehler, keine Absichten.
+
+Der Weg dorthin ist real und gehört benannt: ein Hase liest fremdes
+Material (eine PDF, eine Notiz), darin stehen eingeschleuste
+Anweisungen, er stellt daraufhin einen Werkzeug-Wunsch, und der Schmied
+baut, was im Wunsch steht. Am Ende der Kette liegt Python, das im
+Server-Prozess laufen soll — also außerhalb jeder Hasen-Sandbox. Genau
+deshalb steht dort ein Mensch, und genau deshalb lautet die Reihenfolge
+**lesen, probieren, freigeben** und nicht umgekehrt.
+
+Das ist die Stelle, an der ein bequemer Befehl schaden kann: wer
+`tool test` als Ersatz fürs Lesen benutzt, hat die einzige Prüfung
+übersprungen, die es gibt. Die Reihenfolge steht deshalb überall, wo
+jemand vorbeikommt — in der Ausgabe des Befehls, in `describe bau`, im
+README. Eine Grenze, die auch ohne Disziplin hält, wäre ein Sandkasten
+um den Probelauf (`bwrap` liegt auf dieser Maschine); das ist offen.
+
+Dass ein Mensch LLM-geschriebenen Code freigibt, ist dabei nicht neu —
+beim Gang-Entwurf des Baumeisters ist es dieselbe Lage, und auch ein
+Gang läuft mit den Rechten des Daemons. Neu ist nur, wie leicht der
+Probelauf es macht, diesen Schritt zu überspringen.
+
 Was dabei funktioniert hat und deshalb so bleibt: der Fehlerpfad. Das
 Skript endete mit Exit 1 und der Begründung auf stderr, das Plugin
 machte daraus einen Werkzeug-Fehler, dessen Text beim rufenden Hasen

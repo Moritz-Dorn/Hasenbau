@@ -332,15 +332,26 @@ bekommt ein Hase kein Werkzeug — ein neu gebautes soll nicht dadurch
 bei allen landen, dass niemand es verboten hat. `hasenbau get tools`
 zeigt, was es gibt und wer es rufen darf.
 
-**Ein Entwurf ist ungeprüfter Code.** Der Schmied hat wie jeder Hase
-kein `bash` und kann sein Skript kein einziges Mal ausführen — er
-liefert also Code, den nie jemand laufen ließ. Der erste echte
-Schmied-Lauf zeigte genau das: tadelloses Manifest, plausibel
+**Ein Entwurf ist Code, den ein Modell geschrieben und niemand gelesen
+hat.** Der Schmied hat wie jeder Hase kein `bash` und kann sein Skript
+kein einziges Mal ausführen — er liefert also Ungetestetes. Der erste
+echte Schmied-Lauf zeigte das: tadelloses Manifest, plausibel
 aussehendes Python, und beim ersten Aufruf ein Absturz.
-`hasenbau tool test <name> --<arg> <wert>` führt einen Entwurf einmal
-aus und zeigt Exit-Code, stdout und stderr. Ob das Ergebnis *stimmt*,
-sagt der Befehl nicht — das ist der Teil, für den die Freigabe eine
-Code-Review ist und kein Durchwinken.
+
+Die Reihenfolge ist deshalb **lesen, probieren, freigeben** — in dieser
+Folge. `hasenbau tool test <name> --<arg> <wert>` führt einen Entwurf
+aus und zeigt Exit-Code, stdout und stderr; er findet Fehler und sonst
+nichts. Er ist **keine Sicherheitsprüfung**: er führt das Skript mit
+deinen Rechten und ohne Sandkasten aus, ist gegen bösartigen Code also
+nicht die Abwehr, sondern die Ausführung. Und ob das Ergebnis *stimmt*,
+sagt er auch nicht.
+
+Das ist kein hypothetischer Einwand. Ein Hase liest fremdes Material,
+darin stehen eingeschleuste Anweisungen, er stellt daraufhin einen
+Werkzeug-Wunsch, und der Schmied baut, was im Wunsch steht — am Ende
+dieser Kette liegt Python, das im Server-Prozess laufen soll. Die
+einzige Stelle, an der das auffällt, ist ein Mensch, der den Entwurf
+liest. Dafür ist er kurz und in einer Datei.
 
 Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
 Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
