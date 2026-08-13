@@ -200,3 +200,47 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		Zeilen:       strings.Count(string(roh), "\n"),
 	}, nil
 }
+
+// AktualisiereValIntent schreibt den abgeleiteten Zustand in die
+// Dateien, wo der Eintrag veraltet ist. Zurück kommen die Namen der
+// Werkzeuge, deren Zeile nachgezogen wurde.
+//
+// Gedacht ist das für `outdated`: der Eintrag steht dort nie von selbst,
+// weil geschrieben nur bei review, test und release wird — und in jedem
+// dieser Momente passt der Hash. Wer die Datei danach ändert, hinterlässt
+// eine Zeile, die „actual" behauptet. In eine Datei zu schreiben, die
+// ohnehin gerade verändert wurde, nimmt niemandem etwas weg.
+//
+// Angefasst wird ausschliesslich die valintent-Zeile. Der Hash bleibt,
+// wie er ist — ihn neu zu berechnen hiesse, die fremde Änderung
+// nachträglich zu segnen.
+func AktualisiereValIntent(root string) ([]string, error) {
+	werkzeuge, err := LadeTools(root)
+	if err != nil {
+		return nil, err
+	}
+	var nachgezogen []string
+	for _, t := range werkzeuge {
+		if t.Review.ValIntent == "" || Zustand(t.Review.ValIntent) == t.Zustand {
+			continue
+		}
+		pfad := filepath.Join(root, t.Skript)
+		roh, err := os.ReadFile(pfad)
+		if err != nil {
+			return nachgezogen, err
+		}
+		neu, geaendert := SetzeValIntent(roh, t.Zustand)
+		if !geaendert {
+			continue
+		}
+		info, err := os.Stat(pfad)
+		if err != nil {
+			return nachgezogen, err
+		}
+		if err := os.WriteFile(pfad, neu, info.Mode().Perm()); err != nil {
+			return nachgezogen, err
+		}
+		nachgezogen = append(nachgezogen, t.Name)
+	}
+	return nachgezogen, nil
+}

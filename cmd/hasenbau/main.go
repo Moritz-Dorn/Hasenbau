@@ -407,6 +407,20 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Veraltete valintent-Einträge nachziehen, bevor die Agenten
+	// entstehen. Der Eintrag steht nie von selbst auf `outdated`, weil
+	// nur review, test und release schreiben — wer die Datei danach
+	// ändert, hinterlässt eine Zeile, die „actual" behauptet. In eine
+	// Datei zu schreiben, die ohnehin gerade verändert wurde, nimmt
+	// niemandem etwas weg (Moritz, 2026-08-13). Der Hash bleibt dabei
+	// unangetastet — sonst wäre die fremde Änderung gesegnet.
+	if nachgezogen, err := bau.AktualisiereValIntent(root); err != nil {
+		log.Printf("valintent nicht nachgezogen: %v", err)
+	} else if len(nachgezogen) > 0 {
+		// Nur melden, wenn wirklich etwas nachgezogen wurde — das ist
+		// der seltene Fall, und dann will man ihn sehen.
+		log.Printf("valintent nachgezogen: %s", strings.Join(nachgezogen, ", "))
+	}
 	o, err := generierOptionen(root)
 	if err != nil {
 		return nil, err

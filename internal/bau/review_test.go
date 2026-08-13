@@ -252,3 +252,43 @@ func TestOutdatedStehtNieInDerDatei(t *testing.T) {
 			"denn niemand schreibt outdated hinein", r.ValIntent)
 	}
 }
+
+// TestSetzeValIntentLaesstDenHashInRuhe sichert die Falle ab, auf die
+// Moritz beim Durchdenken gestossen ist. Den Zustand einzutragen darf
+// NICHT ueber SchreibeReviewBlock laufen: die berechnet body-sha256 neu,
+// und auf ein veraendertes Skript angewandt hiesse das, die fremde
+// Aenderung nachtraeglich zu segnen — aus outdated wuerde wieder
+// hypothetical, und die ganze Bindung waere dahin.
+func TestSetzeValIntentLaesstDenHashInRuhe(t *testing.T) {
+	rev := beispielReview()
+	null := 0
+	rev.VerifiedExit = &null
+	rev.VerifiedAt = "2026-08-13T08:05:00Z"
+	rev.ReleasedBy = "Moritz Dorn"
+	rev.ReleasedAt = "2026-08-13T08:06:00Z"
+	mitBlock := SchreibeReviewBlock(rev, skriptOhneReview)
+	geaendert := strings.Replace(mitBlock, `print("hallo")`, "import os\nprint(\"hallo\")", 1)
+
+	vorher, _ := LiesReview([]byte(geaendert))
+	neu, wurde := SetzeValIntent([]byte(geaendert), Outdated)
+	if !wurde {
+		t.Fatal("nichts geaendert, obwohl der Eintrag veraltet war")
+	}
+	if !strings.Contains(string(neu), "valintent: outdated") {
+		t.Errorf("outdated wurde nicht eingetragen:\n%s", neu)
+	}
+
+	r, body := LiesReview(neu)
+	if r.Hash != vorher.Hash {
+		t.Errorf("der Hash wurde angefasst: %q -> %q", vorher.Hash, r.Hash)
+	}
+	// Und der entscheidende Teil: es bleibt outdated. Waere der Hash neu
+	// berechnet worden, staende hier wieder actual.
+	if z := LeiteZustandAb(r, body); z != Outdated {
+		t.Errorf("Zustand nach dem Eintrag = %q, erwartet outdated — die Aenderung wurde gesegnet", z)
+	}
+	// Der Rest des Blocks bleibt unangetastet.
+	if r.By != vorher.By || r.Does != vorher.Does || r.ReleasedBy != vorher.ReleasedBy {
+		t.Errorf("der Block wurde ueber die eine Zeile hinaus veraendert:\n%s", neu)
+	}
+}

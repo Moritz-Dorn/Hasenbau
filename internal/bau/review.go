@@ -393,3 +393,54 @@ func eingerueckt(zeile string) bool {
 	}
 	return false
 }
+
+// SetzeValIntent schreibt den abgeleiteten Zustand in den Block und
+// lässt ALLES andere unangetastet — insbesondere den Hash.
+//
+// Das ist der Grund, warum es diese Funktion gibt und nicht einfach
+// SchreibeReviewBlock benutzt wird: die berechnet `body-sha256` neu.
+// Auf ein verändertes Skript angewandt hiesse das, die Änderung
+// nachträglich zu segnen — aus `outdated` würde wieder `hypothetical`,
+// und die ganze Bindung wäre dahin. Hier wird genau eine Zeile ersetzt.
+//
+// Zurück kommt der neue Inhalt und ob sich etwas geändert hat.
+func SetzeValIntent(skript []byte, z Zustand) ([]byte, bool) {
+	zeilen := strings.Split(string(skript), "\n")
+	start, ende := -1, -1
+	for i, zeile := range zeilen {
+		inhalt, ist := kommentarInhalt(zeile)
+		if !ist {
+			if start >= 0 && ende < 0 {
+				ende = i
+			}
+			continue
+		}
+		if start < 0 && strings.HasPrefix(inhalt, ReviewMarke+":") {
+			start = i
+		}
+	}
+	if start < 0 {
+		return skript, false // kein Block — dann gibt es nichts einzutragen
+	}
+	if ende < 0 {
+		ende = len(zeilen)
+	}
+	k := kommentarZeichen(zeilen[start])
+	neu := fmt.Sprintf("%s valintent: %s", k, z)
+
+	for i := start; i < ende; i++ {
+		inhalt, _ := kommentarInhalt(zeilen[i])
+		if !strings.HasPrefix(inhalt, "valintent:") {
+			continue
+		}
+		if zeilen[i] == neu {
+			return skript, false
+		}
+		zeilen[i] = neu
+		return []byte(strings.Join(zeilen, "\n")), true
+	}
+	// Kein Eintrag vorhanden (von Hand geschriebener Block) — ans Ende
+	// des Blocks, wo ihn SchreibeReviewBlock auch hinsetzt.
+	zeilen = append(zeilen[:ende], append([]string{neu}, zeilen[ende:]...)...)
+	return []byte(strings.Join(zeilen, "\n")), true
+}
