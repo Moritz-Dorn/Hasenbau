@@ -252,6 +252,14 @@ type Optionen struct {
 	// Auftrags: fehlt ein Werkzeug darin, bekommt es jeder Hase.
 	Tools []string
 
+	// ToolsBereit ist die Teilmenge von Tools, die ein Auftrag wirksam
+	// freigeben kann: gelesen, unverändert seit dem Review und im
+	// Probelauf gezeigt (ValIntent `actual`, Hasenbau-9w6). Was ein
+	// Auftrag nennt, aber hier fehlt, bleibt verboten — ein Werkzeug,
+	// das niemand gelesen hat, bekommt kein Hase, auch wenn es im
+	// Auftrag steht.
+	ToolsBereit []string
+
 	// ToolRequests sagt, ob der Bau einen `requests:`-Raum hat. Nur
 	// dann bietet der Rückkanal `hasenbau_tool_request` überhaupt an
 	// (cmd/hasenbau: wunschRaum aus cfg.Requests), und nur dann darf
@@ -281,13 +289,22 @@ func Generiere(a *auftrag.Auftrag, t *Template, o Optionen) ([]byte, error) {
 	// kein stiller Verzicht: sonst merkt man den Tippfehler erst an
 	// einem Lauf, in dem der Hase behauptet, er habe das Werkzeug
 	// nicht — und das sieht aus wie ein Modellfehler.
+	bereit := map[string]bool{}
+	for _, name := range o.ToolsBereit {
+		bereit[name] = true
+	}
 	freigegeben := map[string]bool{}
 	for _, name := range a.Tools {
 		freigegeben[name] = true
 	}
 	var gesperrteTools []string
 	for _, name := range o.Tools {
-		if !freigegeben[name] {
+		// Verboten wird alles, was der Auftrag nicht nennt — und
+		// zusätzlich, was er zwar nennt, was aber nicht einsatzbereit
+		// ist. Ein Werkzeug, das seit dem Review geändert wurde, ist
+		// nicht gelesen worden; dass ein Auftrag es einmal freigegeben
+		// hat, ändert daran nichts.
+		if !freigegeben[name] || !bereit[name] {
 			gesperrteTools = append(gesperrteTools, name)
 		}
 		delete(freigegeben, name)

@@ -435,11 +435,11 @@ func generierOptionen(root string) (hase.Optionen, error) {
 	// Plugin trotzdem registriert, stünde jedem Hasen offen. Ein Bau,
 	// dessen Werkzeuge man nicht lesen kann, darf keine Agenten
 	// generieren.
-	namen, err := bau.FreigegebeneToolNamen(root)
+	alle, bereit, err := bau.ToolNamen(root)
 	if err != nil {
 		return o, err
 	}
-	o.Tools = namen
+	o.Tools, o.ToolsBereit = alle, bereit
 	return o, nil
 }
 

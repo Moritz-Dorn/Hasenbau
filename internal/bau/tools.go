@@ -37,7 +37,22 @@ type Tool struct {
 	Skript       string // Bau-relativer Pfad des Skripts
 	Manifest     string // Bau-relativer Pfad des Manifests
 	Args         []ToolArg
-	Entwurf      bool // liegt unter tools/entwurf/, also nicht freigegeben
+	Entwurf      bool // liegt unter tools/entwurf/, also nicht verschoben
+
+	// Review und Zustand kommen aus dem Skript selbst (review.go). Der
+	// Zustand ist abgeleitet und nirgends gespeichert — er lässt sich
+	// jederzeit nachrechnen, von diesem Code wie von einer GUI.
+	Review  Review
+	Zustand Zustand
+	Zeilen  int // des Skripts, damit man weiß, wie viel zu lesen ist
+}
+
+// Einsatzbereit heißt: dieses Werkzeug darf einem Hasen gegeben werden.
+// Beides muss stimmen — verschoben UND im Probelauf gezeigt. Ein
+// `hypothetical` ist gelesen, aber niemand hat es je laufen sehen; ein
+// `outdated` ist seit dem Lesen verändert worden.
+func (t Tool) Einsatzbereit() bool {
+	return !t.Entwurf && t.Zustand == Actual
 }
 
 // ToolArg ist ein Argument, wie das Manifest es beschreibt. Mehr Typen
@@ -91,22 +106,33 @@ func LadeTools(root string) ([]Tool, error) {
 	return alle, nil
 }
 
-// FreigegebeneToolNamen sind die Namen der Werkzeuge, die tatsächlich
-// registriert werden — Entwürfe zählen nicht mit. Genau diese Liste
-// braucht der Generator, um alles zu verbieten, was ein Auftrag nicht
-// freigibt.
-func FreigegebeneToolNamen(root string) ([]string, error) {
-	alle, err := LadeTools(root)
+// ToolNamen liefert zwei Listen für den Generator.
+//
+// `alle` sind die Namen, die das Plugin überhaupt registrieren KÖNNTE —
+// alles außerhalb von entwurf/, unabhängig vom Zustand. Genau diese
+// werden im generierten Agenten verboten, wenn der Auftrag sie nicht
+// nennt. Bewusst großzügig: sollte die Hash-Prüfung im Plugin je
+// danebengreifen, hält das Verbot trotzdem.
+//
+// `bereit` sind die, die ein Auftrag wirksam freigeben kann — gelesen,
+// unverändert und im Probelauf gezeigt. Ein Werkzeug, das ein Auftrag
+// nennt, das aber nicht bereit ist, bleibt verboten; sichtbar wird das
+// in `get tools` und `describe bau`.
+func ToolNamen(root string) (alle, bereit []string, err error) {
+	werkzeuge, err := LadeTools(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var namen []string
-	for _, t := range alle {
-		if !t.Entwurf {
-			namen = append(namen, t.Name)
+	for _, t := range werkzeuge {
+		if t.Entwurf {
+			continue
+		}
+		alle = append(alle, t.Name)
+		if t.Einsatzbereit() {
+			bereit = append(bereit, t.Name)
 		}
 	}
-	return namen, nil
+	return alle, bereit, nil
 }
 
 func ladeTool(root, dir, manifestPfad string) (Tool, error) {
@@ -139,9 +165,11 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		return fehler("script %q enthält einen Pfad — erlaubt ist nur ein Dateiname neben dem Manifest", m.Skript)
 	}
 	skript := filepath.Join(dir, m.Skript)
-	if _, err := os.Stat(filepath.Join(root, skript)); err != nil {
+	roh, lesefehler := os.ReadFile(filepath.Join(root, skript))
+	if lesefehler != nil {
 		return fehler("script %s fehlt", skript)
 	}
+	review, body := LiesReview(roh)
 
 	gesehen := map[string]bool{}
 	for i, a := range m.Args {
@@ -167,5 +195,8 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		Manifest:     rel,
 		Args:         m.Args,
 		Entwurf:      dir == ToolsEntwurfDir,
+		Review:       review,
+		Zustand:      LeiteZustandAb(review, body),
+		Zeilen:       strings.Count(string(roh), "\n"),
 	}, nil
 }

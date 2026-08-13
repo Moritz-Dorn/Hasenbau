@@ -469,7 +469,10 @@ func TestWerkzeugFreigabeIstEinschlussliste(t *testing.T) {
 		}
 	}
 	tpl := &Template{Name: "archivar", Prompt: "Du bist der Archivar."}
-	imBau := Optionen{Tools: []string{"exif_lesen", "zeilen_zaehlen"}}
+	imBau := Optionen{
+		Tools:       []string{"exif_lesen", "zeilen_zaehlen"},
+		ToolsBereit: []string{"exif_lesen", "zeilen_zaehlen"},
+	}
 
 	// Genannt: kein Verbot. Nicht genannt: Verbot.
 	roh, err := Generiere(basis([]string{"zeilen_zaehlen"}), tpl, imBau)
@@ -513,5 +516,39 @@ func TestWerkzeugFreigabeIstEinschlussliste(t *testing.T) {
 	}
 	if strings.Contains(string(roh), ": deny\n  : deny") {
 		t.Errorf("leerer Verbots-Eintrag im Agenten:\n%s", roh)
+	}
+}
+
+// TestNurEinsatzbereiteWerkzeugeWerdenFreigegeben: ein Auftrag kann ein
+// Werkzeug nennen, das niemand gelesen hat oder das seit dem Review
+// geaendert wurde. Genannt ist nicht gelesen — es bleibt verboten
+// (ValIntent: nur `actual` ist einsatzbereit, Hasenbau-9w6).
+//
+// Ohne diese Regel waere die ganze Hash-Bindung wirkungslos: wer nach
+// dem Review eine Zeile aendert, bekaeme das Werkzeug weiterhin, weil
+// sein Name ja im Auftrag steht.
+func TestNurEinsatzbereiteWerkzeugeWerdenFreigegeben(t *testing.T) {
+	a := &auftrag.Auftrag{
+		Name: "einlagern", Hase: "archivar",
+		Trigger: auftrag.Trigger{Manual: true},
+		Raeume:  map[string]string{"work": "raeume/werkstatt/"},
+		Tools:   []string{"geprueft", "geaendert"},
+		Body:    "Tu was.",
+	}
+	tpl := &Template{Name: "archivar", Prompt: "Du bist der Archivar."}
+
+	roh, err := Generiere(a, tpl, Optionen{
+		Tools:       []string{"geprueft", "geaendert"},
+		ToolsBereit: []string{"geprueft"}, // `geaendert` ist outdated
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := string(roh)
+	if strings.Contains(agent, "geprueft: deny") {
+		t.Errorf("das einsatzbereite Werkzeug wird verboten:\n%s", agent)
+	}
+	if !strings.Contains(agent, "geaendert: deny") {
+		t.Errorf("ein Werkzeug ohne gueltiges Review wird trotz Nennung freigegeben:\n%s", agent)
 	}
 }

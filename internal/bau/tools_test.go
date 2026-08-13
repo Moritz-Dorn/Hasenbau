@@ -47,12 +47,17 @@ func TestLadeToolsTrenntEntwurfVonFreigegeben(t *testing.T) {
 		t.Errorf("Reihenfolge/Entwurf falsch: %+v", alle)
 	}
 
-	namen, err := FreigegebeneToolNamen(root)
+	namen, bereit, err := ToolNamen(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(namen) != 1 || namen[0] != "zaehlen" {
-		t.Errorf("freigegeben = %v, erwartet genau [zaehlen] — ein Entwurf zaehlt nicht mit", namen)
+		t.Errorf("namen = %v, erwartet genau [zaehlen] — ein Entwurf zaehlt nicht mit", namen)
+	}
+	// Ungelesen heisst nicht einsatzbereit: das Skript traegt keinen
+	// Review-Block, ist also `generated`.
+	if len(bereit) != 0 {
+		t.Errorf("bereit = %v, erwartet keines — niemand hat es gelesen", bereit)
 	}
 }
 

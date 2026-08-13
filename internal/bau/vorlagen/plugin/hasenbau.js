@@ -24,6 +24,7 @@
 // müsste man sie nachbauen. Aus demselben Grund erfindet es an den
 // Manifesten nichts: was ein Werkzeug ist, entscheidet der Hasenbau.
 import { readFileSync, readdirSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { tool } from "@opencode-ai/plugin"
 
@@ -53,6 +54,43 @@ function binaryPfad(bau) {
 // `hasenbau` liest dieselben Manifeste beim Generieren der Agenten und
 // verweigert dort den Start (internal/bau/tools.go). Diese Datei ist
 // die nachsichtige Hälfte eines Paares, dessen andere Hälfte streng ist.
+// reviewPruefung trennt den Review-Block vom Body und vergleicht den
+// Hash. Der Block ist die Zusage eines Menschen, GENAU DIESEN Inhalt
+// gelesen zu haben; passt der Hash nicht, wurde danach geändert und die
+// Zusage gilt nicht mehr (ValIntent `outdated`).
+//
+// Das ist die Stelle, an der die Bindung wirksam wird: ein Werkzeug,
+// dessen Skript nach dem Review getauscht wurde, kommt hier nicht durch
+// und wird keinem Hasen angeboten.
+function reviewPruefung(quelle) {
+  const zeilen = quelle.split("\n")
+  let start = -1
+  let ende = -1
+  for (let i = 0; i < zeilen.length; i++) {
+    const t = zeilen[i].trim()
+    if (!t.startsWith("#")) {
+      if (start >= 0 && ende < 0) ende = i
+      continue
+    }
+    const feld = t.replace(/^#/, "").trim()
+    if (start < 0 && feld.startsWith("hasenbau-review:")) start = i
+  }
+  if (start < 0) return { ok: false, grund: "kein Review — ungelesen" }
+  if (ende < 0) ende = zeilen.length
+
+  const block = zeilen.slice(start, ende).join("\n")
+  const body = zeilen.slice(0, start).concat(zeilen.slice(ende)).join("\n")
+  const soll = /^#\s*body-sha256:\s*([0-9a-f]{64})\s*$/m.exec(block)?.[1]
+  if (!soll) return { ok: false, grund: "Review ohne body-sha256" }
+
+  const ist = createHash("sha256").update(body).digest("hex")
+  if (ist !== soll) return { ok: false, grund: "seit dem Review geaendert (outdated)" }
+  if (!/^#\s*verified-exit:\s*0\s*$/m.test(block)) {
+    return { ok: false, grund: "kein bestandener Probelauf (hypothetical)" }
+  }
+  return { ok: true }
+}
+
 function ladeWerkzeuge(bau, $) {
   const dir = join(bau, "tools")
   let dateien = []
@@ -68,6 +106,13 @@ function ladeWerkzeuge(bau, $) {
     try {
       const m = JSON.parse(readFileSync(join(dir, datei), "utf8"))
       if (!m?.description || !m?.script) throw new Error("description oder script fehlt")
+
+      // Vor allem anderen: hat ein Mensch genau diesen Inhalt gelesen?
+      const pruefung = reviewPruefung(readFileSync(join(dir, m.script), "utf8"))
+      if (!pruefung.ok) {
+        console.error(`hasenbau: Werkzeug ${name} NICHT registriert — ${pruefung.grund}`)
+        continue
+      }
 
       // Argumente aus dem Manifest. Die drei Typen sind dieselben, die
       // die Go-Seite zulässt; alles andere hat sie schon abgelehnt.
