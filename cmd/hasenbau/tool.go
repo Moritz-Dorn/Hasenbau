@@ -699,6 +699,15 @@ func describeTool(root, name string, out, errw io.Writer) int {
 	ab := newSection(out)
 	ab.field("Werkzeug", "%s", t.Name)
 	ab.field("Zustand", "%s — %s", t.Zustand, t.Zustand.Erklaerung())
+	// Die Abweichung ist selbst ein Befund, und zwar der wichtigste:
+	// `valintent:` in der Datei kann nur so frisch sein wie der letzte
+	// Schreibvorgang, und `outdated` steht dort nie. Wer bloß die Datei
+	// öffnet, liest also womöglich „actual" über einem Werkzeug, das
+	// niemandem mehr zur Verfügung steht.
+	if t.Review.ValIntent != "" && bau.Zustand(t.Review.ValIntent) != t.Zustand {
+		ab.field("", "im Block steht %q — die Datei wurde seit dem letzten", t.Review.ValIntent)
+		ab.field("", "Schreiben geändert; gilt der abgeleitete Wert oben")
+	}
 	ort := bau.ToolsDir + "/ (freigegeben)"
 	if t.Entwurf {
 		ort = bau.ToolsEntwurfDir + "/ (nicht freigegeben)"

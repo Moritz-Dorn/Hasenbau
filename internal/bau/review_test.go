@@ -218,3 +218,37 @@ func TestBestandenerProbelaufBleibtHypothetical(t *testing.T) {
 		t.Errorf("Zustand nach Fehlschlag = %q, erwartet invalid", z)
 	}
 }
+
+// TestOutdatedStehtNieInDerDatei haelt eine unangenehme Eigenschaft des
+// `valintent:`-Eintrags fest, damit sie niemanden ueberrascht.
+//
+// Geschrieben wird der Block bei review, test und release — und in
+// jedem dieser Momente passt der Hash. `outdated` entsteht erst danach,
+// durch eine fremde Aenderung, und die schreibt nichts. Die Zeile ist
+// damit ausgerechnet im gefaehrlichen Fall am falschesten: sie sagt
+// "actual", waehrend das Werkzeug niemandem mehr zur Verfuegung steht.
+//
+// Deshalb gilt ueberall der abgeleitete Wert, und `describe tool` nennt
+// die Abweichung ausdruecklich.
+func TestOutdatedStehtNieInDerDatei(t *testing.T) {
+	rev := beispielReview()
+	null := 0
+	rev.VerifiedAt = "2026-08-13T08:05:00Z"
+	rev.VerifiedExit = &null
+	rev.ReleasedBy = "Moritz Dorn"
+	rev.ReleasedAt = "2026-08-13T08:06:00Z"
+	mitBlock := SchreibeReviewBlock(rev, skriptOhneReview)
+	if !strings.Contains(mitBlock, "valintent: actual") {
+		t.Fatalf("erwartet actual im frisch geschriebenen Block:\n%s", mitBlock)
+	}
+
+	geaendert := strings.Replace(mitBlock, `print("hallo")`, "import os\nprint(\"hallo\")", 1)
+	r, body := LiesReview([]byte(geaendert))
+	if z := LeiteZustandAb(r, body); z != Outdated {
+		t.Fatalf("abgeleitet = %q, erwartet outdated", z)
+	}
+	if r.ValIntent != string(Actual) {
+		t.Errorf("im Block steht %q — erwartet den veralteten Wert actual, "+
+			"denn niemand schreibt outdated hinein", r.ValIntent)
+	}
+}

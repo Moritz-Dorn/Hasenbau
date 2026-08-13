@@ -117,9 +117,19 @@ type Review struct {
 	// Er ist AUSKUNFT, nicht Wahrheit. Maßgeblich bleibt der abgeleitete
 	// Zustand: sonst könnte man sich `actual` in die Datei schreiben,
 	// und genau das schließt die Intentionssemantik aus — klassifiziert
-	// wird durch Verifikation, nicht durch Setzen. `outdated` liesse
-	// sich ohnehin nie eintragen, weil es erst durch eine spätere
-	// Änderung entsteht.
+	// wird durch Verifikation, nicht durch Setzen.
+	//
+	// ER KANN NUR SO FRISCH SEIN WIE DER LETZTE SCHREIBVORGANG, und
+	// daraus folgt eine unangenehme Eigenschaft: `outdated` steht hier
+	// NIE. Geschrieben wird der Block bei review, test und release — und
+	// in jedem dieser Momente passt der Hash. `outdated` entsteht erst
+	// später, durch eine fremde Änderung, und die schreibt nichts.
+	//
+	// Die Zeile ist damit ausgerechnet im gefährlichen Fall am
+	// falschesten: sie sagt „actual", während das Werkzeug längst
+	// niemandem mehr zur Verfügung steht. Wer sie anzeigt, muss den
+	// abgeleiteten Wert daneben stellen; `describe tool` nennt die
+	// Abweichung ausdrücklich.
 	ValIntent string
 
 	// Kommentar ist das Zeichen, mit dem der Block geschrieben war
