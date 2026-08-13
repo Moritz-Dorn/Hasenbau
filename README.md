@@ -68,9 +68,10 @@ go build -o ~/bin/hasenbau ./cmd/hasenbau
 hasenbau init ~/meinbau
 ```
 
-Das legt das Layout an, schreibt den Baumeister (Auftrag und Hase)
-sowie den Sandbox-Wächter hinein, macht den Bau zu einem Git-Repo mit
-Root-Commit und trägt den Rückkanal in die Bau-Config ein. Den Root-Commit braucht
+Das legt das Layout an, schreibt die beiden Sonder-Hasen — Baumeister
+und Schmied, je als Auftrag und Hase — sowie den Sandbox-Wächter
+hinein, macht den Bau zu einem Git-Repo mit Root-Commit und trägt den
+Rückkanal in die Bau-Config ein. Den Root-Commit braucht
 opencode: ohne ihn bekommt der Bau keine eigene Projekt-ID, und die
 Raum-Permissions der Hasen greifen nicht.
 
@@ -221,7 +222,7 @@ hasenbau status                           # was liegt hier, was ist passiert
 Alle Befehle im Überblick:
 
 ```bash
-hasenbau init <bau>        # Bau anlegen (Git-Repo, isolierte Config, Rückkanal, Baumeister)
+hasenbau init <bau>        # Bau anlegen (Git-Repo, isolierte Config, Rückkanal, Sonder-Hasen)
 hasenbau fix               # ergänzen, was einem bestehenden Bau fehlt
 hasenbau new hase <name>   # Template-Gerüst anlegen, kommentiert
 hasenbau new auftrag <name> -hase <hase>   # Auftrags-Gerüst anlegen
