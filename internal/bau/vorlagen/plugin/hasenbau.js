@@ -63,16 +63,25 @@ function binaryPfad(bau) {
 // dessen Skript nach dem Review getauscht wurde, kommt hier nicht durch
 // und wird keinem Hasen angeboten.
 function reviewPruefung(quelle) {
+  // `#` fuer Python und Bash, `//` fuer TypeScript — der Block gehoert
+  // an den Code, nicht an eine Sprache.
+  const kommentar = (z) => {
+    const t = z.trim()
+    for (const zeichen of ["//", "#"]) {
+      if (t.startsWith(zeichen)) return t.slice(zeichen.length).trim()
+    }
+    return null
+  }
+
   const zeilen = quelle.split("\n")
   let start = -1
   let ende = -1
   for (let i = 0; i < zeilen.length; i++) {
-    const t = zeilen[i].trim()
-    if (!t.startsWith("#")) {
+    const feld = kommentar(zeilen[i])
+    if (feld === null) {
       if (start >= 0 && ende < 0) ende = i
       continue
     }
-    const feld = t.replace(/^#/, "").trim()
     if (start < 0 && feld.startsWith("hasenbau-review:")) start = i
   }
   if (start < 0) return { ok: false, grund: "kein Review — ungelesen" }
@@ -80,12 +89,12 @@ function reviewPruefung(quelle) {
 
   const block = zeilen.slice(start, ende).join("\n")
   const body = zeilen.slice(0, start).concat(zeilen.slice(ende)).join("\n")
-  const soll = /^#\s*body-sha256:\s*([0-9a-f]{64})\s*$/m.exec(block)?.[1]
+  const soll = /^\s*(?:#|\/\/)\s*body-sha256:\s*([0-9a-f]{64})\s*$/m.exec(block)?.[1]
   if (!soll) return { ok: false, grund: "Review ohne body-sha256" }
 
   const ist = createHash("sha256").update(body).digest("hex")
   if (ist !== soll) return { ok: false, grund: "seit dem Review geaendert (outdated)" }
-  if (!/^#\s*verified-exit:\s*0\s*$/m.test(block)) {
+  if (!/^\s*(?:#|\/\/)\s*verified-exit:\s*0\s*$/m.test(block)) {
     return { ok: false, grund: "kein bestandener Probelauf (hypothetical)" }
   }
   return { ok: true }

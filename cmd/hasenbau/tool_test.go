@@ -211,3 +211,37 @@ func TestToolTestPrueftGegenDasManifest(t *testing.T) {
 		})
 	}
 }
+
+// TestNurGelesenesDarfGetestetWerden: testbar sind ausschliesslich
+// `hypothetical` und `actual`. Ein widerlegter Anspruch (`invalid`) wird
+// nicht durch Wiederholen wahr — wer erneut zeigen will, liest erst
+// wieder.
+func TestNurGelesenesDarfGetestetWerden(t *testing.T) {
+	root := bauMitWerkzeug(t, "kaputt", skriptKaputt, true)
+
+	// Erster Probelauf scheitert -> invalid.
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "x"}, &out, &errw); code == 0 {
+		t.Fatalf("abstuerzendes Werkzeug galt als in Ordnung:\n%s", out.String())
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Invalid {
+		t.Fatalf("Zustand = %q, erwartet invalid", werkzeuge[0].Zustand)
+	}
+
+	// Zweiter Versuch: gesperrt, obwohl sich nichts geaendert hat.
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "x"}, &out, &errw); code == 0 {
+		t.Errorf("ein widerlegtes Werkzeug liess sich erneut testen:\n%s", out.String())
+	}
+	if !strings.Contains(errw.String(), string(bau.Invalid)) {
+		t.Errorf("die Ablehnung nennt invalid nicht:\n%s", errw.String())
+	}
+	if !strings.Contains(errw.String(), "review") {
+		t.Errorf("die Ablehnung nennt den naechsten Schritt nicht:\n%s", errw.String())
+	}
+}

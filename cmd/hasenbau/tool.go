@@ -127,22 +127,32 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	// Das Gate: ohne Review kein Probelauf. Der Befehl führt aus, und
-	// wer ausführt, ohne gelesen zu haben, hat die einzige Prüfung
-	// übersprungen, die es gibt.
-	if gefunden.Zustand == bau.Generated {
-		fmt.Fprintf(errw, "hasenbau tool test: %s ist ungelesen (%s).\n", name, bau.Generated)
-		if gefunden.Review.Fehler != "" {
-			fmt.Fprintf(errw, "Es liegt zwar ein Review-Block vor, aber er ist unbrauchbar: %s\n", gefunden.Review.Fehler)
-			fmt.Fprintln(errw, "Ein Block, den niemand gesetzt hat, kommt vom Schmied — das ist ein Befund.")
+	// Das Gate: getestet werden darf NUR, was ein gültiges Review trägt
+	// — `hypothetical` (gelesen, noch nicht gezeigt) und `actual`
+	// (gelesen und gezeigt). Alles andere wird abgewiesen, und zwar mit
+	// dem Grund, denn jeder der drei Fälle braucht einen anderen
+	// nächsten Schritt.
+	if gefunden.Zustand != bau.Hypothetical && gefunden.Zustand != bau.Actual {
+		fmt.Fprintf(errw, "hasenbau tool test: %s ist %s — %s\n",
+			name, gefunden.Zustand, gefunden.Zustand.Erklaerung())
+		switch gefunden.Zustand {
+		case bau.Outdated:
+			fmt.Fprintf(errw, "Das Review von %s gilt für einen anderen Inhalt als den, der jetzt dasteht.\n", gefunden.Review.By)
+		case bau.Invalid:
+			// Ein widerlegter Anspruch wird nicht durch Wiederholen
+			// wahr. Wer erneut testen will, soll erst wieder lesen —
+			// und wer das Skript repariert, kommt ohnehin über
+			// `outdated` hierher zurück.
+			fmt.Fprintln(errw, "Ein Probelauf hat die Behauptung bereits widerlegt.")
+			fmt.Fprintln(errw, "Nochmal laufen lassen macht sie nicht wahr: erst lesen, dann zeigen.")
+		default:
+			if gefunden.Review.Fehler != "" {
+				fmt.Fprintf(errw, "Es liegt zwar ein Review-Block vor, aber er ist unbrauchbar: %s\n", gefunden.Review.Fehler)
+				fmt.Fprintln(errw, "Ein Block, den niemand gesetzt hat, kommt vom Schmied — das ist ein Befund.")
+			}
+			fmt.Fprintln(errw, "Dieser Befehl FÜHRT DAS SKRIPT AUS. Lies es zuerst.")
 		}
-		fmt.Fprintf(errw, "\nDieser Befehl FÜHRT DAS SKRIPT AUS. Lies es zuerst:\n  hasenbau tool review %s\n", name)
-		return 1
-	}
-	if gefunden.Zustand == bau.Outdated {
-		fmt.Fprintf(errw, "hasenbau tool test: %s wurde seit dem Review geändert (%s).\n", name, bau.Outdated)
-		fmt.Fprintf(errw, "Das Review von %s gilt für einen anderen Inhalt als den, der jetzt dasteht.\n", gefunden.Review.By)
-		fmt.Fprintf(errw, "\n  hasenbau tool review %s   — noch einmal lesen\n", name)
+		fmt.Fprintf(errw, "\n  hasenbau tool review %s\n", name)
 		return 1
 	}
 

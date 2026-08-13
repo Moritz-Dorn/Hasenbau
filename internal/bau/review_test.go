@@ -144,3 +144,50 @@ func TestGefaelschterBlockNuetztNichts(t *testing.T) {
 		t.Errorf("Zustand = %q, erwartet outdated (Hash passt nicht zum Body)", z)
 	}
 }
+
+// TestAbgeleiteterZustandSchlaegtEingetragenen: `valintent:` im Block
+// ist AUSKUNFT, nicht Wahrheit. Wer sich `actual` hineinschreibt, hat
+// nichts gezeigt — und genau das schliesst die Intentionssemantik aus:
+// klassifiziert wird durch Verifikation, nicht durch Setzen.
+func TestAbgeleiteterZustandSchlaegtEingetragenen(t *testing.T) {
+	mitBlock := SchreibeReviewBlock(beispielReview(), skriptOhneReview)
+	if !strings.Contains(mitBlock, "valintent: hypothetical") {
+		t.Fatalf("der geschriebene Block traegt den Zustand nicht:\n%s", mitBlock)
+	}
+
+	// Von Hand auf actual gedreht, sonst nichts geaendert.
+	gelogen := strings.Replace(mitBlock, "valintent: hypothetical", "valintent: actual", 1)
+	r, body := LiesReview([]byte(gelogen))
+	if r.ValIntent != "actual" {
+		t.Fatalf("der eingetragene Wert wurde nicht gelesen: %q", r.ValIntent)
+	}
+	if z := LeiteZustandAb(r, body); z != Hypothetical {
+		t.Errorf("abgeleiteter Zustand = %q, erwartet hypothetical — der Eintrag darf nicht zaehlen", z)
+	}
+}
+
+// TestReviewBlockInSlashKommentaren: der Block gehoert an den Code, nicht
+// an eine Sprache. Python und Bash schreiben `#`, TypeScript `//`.
+func TestReviewBlockInSlashKommentaren(t *testing.T) {
+	ts := "function tu(x: string) {\n  return x\n}\n"
+	rev := beispielReview()
+	rev.Kommentar = "//"
+	mitBlock := SchreibeReviewBlock(rev, ts)
+	if !strings.Contains(mitBlock, "// hasenbau-review: 1") {
+		t.Fatalf("Block nicht in //-Kommentaren:\n%s", mitBlock)
+	}
+
+	r, body := LiesReview([]byte(mitBlock))
+	if r.Fehler != "" {
+		t.Fatalf("//-Block unbrauchbar: %s", r.Fehler)
+	}
+	if body != ts {
+		t.Errorf("Body veraendert:\n%q\nerwartet\n%q", body, ts)
+	}
+	if z := LeiteZustandAb(r, body); z != Hypothetical {
+		t.Errorf("Zustand = %q", z)
+	}
+	if r.Kommentar != "//" {
+		t.Errorf("Kommentarzeichen = %q, erwartet //", r.Kommentar)
+	}
+}

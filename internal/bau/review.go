@@ -88,7 +88,28 @@ type Review struct {
 	VerifiedAt   string
 	VerifiedWith string
 	VerifiedExit *int
+
+	// ValIntent ist der Zustand, wie er beim Schreiben des Blocks
+	// galt — für Menschen und fremde Werkzeuge, die die Datei lesen,
+	// ohne zu rechnen.
+	//
+	// Er ist AUSKUNFT, nicht Wahrheit. Maßgeblich bleibt der abgeleitete
+	// Zustand: sonst könnte man sich `actual` in die Datei schreiben,
+	// und genau das schließt die Intentionssemantik aus — klassifiziert
+	// wird durch Verifikation, nicht durch Setzen. `outdated` liesse
+	// sich ohnehin nie eintragen, weil es erst durch eine spätere
+	// Änderung entsteht.
+	ValIntent string
+
+	// Kommentar ist das Zeichen, mit dem der Block geschrieben war
+	// ("#" oder "//"). Leer heißt: es gab keinen Block.
+	Kommentar string
 }
+
+// KommentarZeichen sind die Formen, in denen ein Review-Block stehen
+// darf. Python und Bash nutzen `#`, TypeScript und JavaScript `//` —
+// der Block gehört an den Code, nicht an eine Sprache.
+var KommentarZeichen = []string{"#", "//"}
 
 // ReviewFelder sind die Pflichtfelder. Fehlt eines, ist der Block
 // unbrauchbar — und das Werkzeug gilt als ungelesen.
@@ -104,9 +125,10 @@ var ReviewFelder = []string{"reviewed-by", "reviewed-at", "body-sha256", "does",
 func LiesReview(skript []byte) (Review, string) {
 	zeilen := strings.Split(string(skript), "\n")
 	start, ende := -1, -1
+	zeichen := ""
 	for i, z := range zeilen {
-		t := strings.TrimSpace(z)
-		if !strings.HasPrefix(t, "#") {
+		inhalt, ist := kommentarInhalt(z)
+		if !ist {
 			// Der Block steht zusammenhängend im Kopf. Nach der ersten
 			// Nicht-Kommentarzeile hinter dem Start ist er zu Ende.
 			if start >= 0 && ende < 0 {
@@ -114,9 +136,9 @@ func LiesReview(skript []byte) (Review, string) {
 			}
 			continue
 		}
-		feld := strings.TrimSpace(strings.TrimPrefix(t, "#"))
-		if start < 0 && strings.HasPrefix(feld, ReviewMarke+":") {
+		if start < 0 && strings.HasPrefix(inhalt, ReviewMarke+":") {
 			start = i
+			zeichen = kommentarZeichen(z)
 		}
 	}
 	if start < 0 {
@@ -131,7 +153,31 @@ func LiesReview(skript []byte) (Review, string) {
 	body := append(append([]string{}, zeilen[:start]...), zeilen[ende:]...)
 
 	r := parseReviewBlock(zeilen[start:ende])
+	r.Kommentar = zeichen
 	return r, strings.Join(body, "\n")
+}
+
+// kommentarInhalt liefert den Text hinter dem Kommentarzeichen.
+func kommentarInhalt(zeile string) (string, bool) {
+	t := strings.TrimSpace(zeile)
+	for _, z := range KommentarZeichen {
+		if strings.HasPrefix(t, z) {
+			return strings.TrimSpace(strings.TrimPrefix(t, z)), true
+		}
+	}
+	return "", false
+}
+
+func kommentarZeichen(zeile string) string {
+	t := strings.TrimSpace(zeile)
+	// Längere Zeichen zuerst prüfen, sonst schluckt "#" nie und "//"
+	// würde bei einem Präfix-Vergleich verloren gehen.
+	for _, z := range []string{"//", "#"} {
+		if strings.HasPrefix(t, z) {
+			return z
+		}
+	}
+	return "#"
 }
 
 func parseReviewBlock(block []string) Review {
@@ -139,13 +185,13 @@ func parseReviewBlock(block []string) Review {
 	var reihenfolge []string
 	letztes := ""
 	for _, z := range block {
-		t := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(z), "#"))
+		t, _ := kommentarInhalt(z)
 		if t == "" {
 			continue
 		}
 		name, wert, ok := strings.Cut(t, ":")
 		// Fortsetzungszeile: eingerückt und ohne eigenen Schlüssel.
-		if !ok || strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(z), "#"), "  ") {
+		if !ok || eingerueckt(z) {
 			if letztes != "" {
 				werte[letztes] = strings.TrimSpace(werte[letztes] + " " + t)
 				continue
@@ -168,6 +214,7 @@ func parseReviewBlock(block []string) Review {
 		Safe:         werte["safe-because"],
 		VerifiedAt:   werte["verified-at"],
 		VerifiedWith: werte["verified-with"],
+		ValIntent:    werte["valintent"],
 	}
 	if v, da := werte["verified-exit"]; da {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -221,6 +268,10 @@ func LeiteZustandAb(r Review, body string) Zustand {
 // nie aus einem Entwurf übernommen: lernte der Schmied, dass ein Block
 // ein Werkzeug freigabefähig macht, schriebe er einen.
 func SchreibeReviewBlock(r Review, body string) string {
+	k := r.Kommentar
+	if k == "" {
+		k = "#"
+	}
 	var b strings.Builder
 	// Der Shebang muss die erste Zeile bleiben, sonst startet das
 	// Skript nicht.
@@ -231,36 +282,46 @@ func SchreibeReviewBlock(r Review, body string) string {
 		shebang, rest = zeile+"\n", danach
 	}
 	b.WriteString(shebang)
-	fmt.Fprintf(&b, "# %s: %s\n", ReviewMarke, ReviewVersion)
-	fmt.Fprintf(&b, "# reviewed-by: %s\n", einzeilig(r.By))
-	fmt.Fprintf(&b, "# reviewed-at: %s\n", einzeilig(r.At))
-	fmt.Fprintf(&b, "# body-sha256: %s\n", BodyHash(body))
-	schreibeFeld(&b, "does", r.Does)
-	schreibeFeld(&b, "safe-because", r.Safe)
+	fmt.Fprintf(&b, "%s %s: %s\n", k, ReviewMarke, ReviewVersion)
+	fmt.Fprintf(&b, "%s reviewed-by: %s\n", k, einzeilig(r.By))
+	fmt.Fprintf(&b, "%s reviewed-at: %s\n", k, einzeilig(r.At))
+	fmt.Fprintf(&b, "%s body-sha256: %s\n", k, BodyHash(body))
+	schreibeFeld(&b, k, "does", r.Does)
+	schreibeFeld(&b, k, "safe-because", r.Safe)
 	if r.VerifiedAt != "" {
-		fmt.Fprintf(&b, "# verified-at: %s\n", einzeilig(r.VerifiedAt))
-		fmt.Fprintf(&b, "# verified-with: %s\n", einzeilig(r.VerifiedWith))
+		fmt.Fprintf(&b, "%s verified-at: %s\n", k, einzeilig(r.VerifiedAt))
+		fmt.Fprintf(&b, "%s verified-with: %s\n", k, einzeilig(r.VerifiedWith))
 		if r.VerifiedExit != nil {
-			fmt.Fprintf(&b, "# verified-exit: %d\n", *r.VerifiedExit)
+			fmt.Fprintf(&b, "%s verified-exit: %d\n", k, *r.VerifiedExit)
 		}
 	}
+	// Zuletzt der Zustand, der sich aus allem darüber ergibt. Er steht
+	// bewusst am Ende: er ist die Zusammenfassung der Belege, nicht ihr
+	// Ersatz, und wer ihn liest, hat sie vorher gesehen.
+	//
+	// Gerechnet wird über den frisch gesetzten Hash, nicht über den, der
+	// in r stand — sonst stünde hier immer `generated`.
+	geschrieben := r
+	geschrieben.Hash = BodyHash(body)
+	geschrieben.Fehler = ""
+	fmt.Fprintf(&b, "%s valintent: %s\n", k, LeiteZustandAb(geschrieben, body))
 	b.WriteString(rest)
 	return b.String()
 }
 
 // schreibeFeld bricht langen Freitext um und rückt Fortsetzungen ein —
 // ein Review, das man nicht lesen kann, ist keines.
-func schreibeFeld(b *strings.Builder, name, wert string) {
+func schreibeFeld(b *strings.Builder, k, name, wert string) {
 	worte := strings.Fields(wert)
 	if len(worte) == 0 {
-		fmt.Fprintf(b, "# %s:\n", name)
+		fmt.Fprintf(b, "%s %s:\n", k, name)
 		return
 	}
-	zeile := "# " + name + ":"
+	zeile := k + " " + name + ":"
 	for _, w := range worte {
 		if len(zeile)+1+len(w) > 72 {
 			b.WriteString(zeile + "\n")
-			zeile = "#   "
+			zeile = k + "   "
 		}
 		zeile += " " + w
 	}
@@ -275,4 +336,16 @@ func einzeilig(s string) string {
 // zwei Rechner dasselbe schreiben.
 func JetztStempel() string {
 	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// eingerueckt erkennt eine Fortsetzungszeile: hinter dem
+// Kommentarzeichen stehen Leerzeichen, bevor Text kommt.
+func eingerueckt(zeile string) bool {
+	t := strings.TrimSpace(zeile)
+	for _, z := range []string{"//", "#"} {
+		if strings.HasPrefix(t, z) {
+			return strings.HasPrefix(strings.TrimPrefix(t, z), "  ")
+		}
+	}
+	return false
 }
