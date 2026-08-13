@@ -53,6 +53,9 @@ Befehle:
                         Baumeister-Auftrag (aus hasenbau.yaml) ansetzen —
                         auf einen Lauf (Lauf-ID oder Auftrag) oder mit
                         -finding auf einen Befund über viele Läufe
+  tool test <name>      ein Werkzeug einmal ausführen und zeigen, was
+                        zurückkam — der Probelauf vor der Freigabe, denn
+                        ein Entwurf ist ungeprüfter Code
   provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
   status                Zustand des Baus zeigen
   mcp                   Rückkanal über stdio bedienen (startet opencode
@@ -130,6 +133,8 @@ func run(args []string, out, errw io.Writer) int {
 		return cmdGet(bau, rest[1:], out, errw)
 	case "new":
 		return cmdNew(bau, rest[1:], out, errw)
+	case "tool":
+		return cmdTool(bau, rest[1:], out, errw)
 	case "provider":
 		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
 	case "status":

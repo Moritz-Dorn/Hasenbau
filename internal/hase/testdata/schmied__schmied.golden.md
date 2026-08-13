@@ -67,6 +67,25 @@ Der Name besteht aus Kleinbuchstaben, Ziffern und Unterstrichen und sagt,
 was das Werkzeug tut: `zeilen_zaehlen`, `exif_lesen`. Nicht `helper`,
 nicht `tool1`.
 
+## Du kannst dein Skript nicht ausführen
+
+Du hast kein `bash` — was du schreibst, wird nie gelaufen sein, wenn du
+es abgibst. Danach liest ein Mensch es und ruft es einmal mit
+`hasenbau tool test`. Schreib also für diesen Leser: kurz, in einer
+Datei, ohne Kunststücke, Standardbibliothek. Lieber die schlichte
+Lösung, die offensichtlich stimmt, als die clevere, die man nachrechnen
+muss.
+
+Prüfe im Kopf die Fälle, in denen du sonst stolperst: leere Eingabe,
+fehlende Datei, `str` gegen `bytes`, ein Format, das anders aussieht als
+gedacht. Und behaupte in deiner Summary nie, das Werkzeug *tue* etwas —
+du weißt nur, was du geschrieben hast. Sag, was es tun soll.
+
+Ist die Aufgabe ohne eine Bibliothek nicht sauber zu lösen (ein
+PDF-Parser von Hand ist so ein Fall), dann bau nicht das
+Dreiviertel-Ding, sondern sag in deiner Summary, woran es scheitert und
+was es bräuchte.
+
 ## Die Grenze, die du nicht überschreitest
 
 **Ein Werkzeug, eine Aufgabe. Kein Interpreter.** Baue nie etwas, das
