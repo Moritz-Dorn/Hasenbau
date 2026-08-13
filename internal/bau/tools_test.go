@@ -174,3 +174,28 @@ func TestDiagnoseMeldetSchmiedAmFalschenBriefkasten(t *testing.T) {
 		}
 	})
 }
+
+// TestDiagnoseMeldetLahmgelegteWerkzeuge: ein freigegebenes Werkzeug,
+// das nicht mehr einsatzbereit ist, ist der stillste Fall von allen.
+// Es liegt in tools/, get tools fuehrt es, ein Auftrag nennt es
+// womoeglich — und trotzdem bekommt es kein Hase, weil das Plugin es
+// beim Start aussortiert.
+func TestDiagnoseMeldetLahmgelegteWerkzeuge(t *testing.T) {
+	root := t.TempDir()
+	werkzeugAnlegen(t, root, ToolsDir, "zaehlen", manifestOK)
+
+	// Ohne Review ist es `generated` — also freigegeben, aber nicht
+	// einsatzbereit.
+	var check Check
+	for _, c := range Diagnose(root) {
+		if c.Name == "Werkzeuge" {
+			check = c
+		}
+	}
+	if check.OK {
+		t.Errorf("ein nicht einsatzbereites Werkzeug gilt als in Ordnung: %+v", check)
+	}
+	if !strings.Contains(check.Hint, "zaehlen") || !strings.Contains(check.Hint, string(Generated)) {
+		t.Errorf("Hinweis nennt Werkzeug oder Zustand nicht: %q", check.Hint)
+	}
+}

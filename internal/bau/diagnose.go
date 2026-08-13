@@ -67,14 +67,29 @@ func checkWerkzeuge(root string) Check {
 			Hint: "solange das Manifest kaputt ist, generiert `hasenbau daemon` keine Agenten"}
 	}
 	var frei, entwuerfe int
+	var lahm []string
 	for _, t := range alle {
 		if t.Entwurf {
 			entwuerfe++
 			continue
 		}
 		frei++
+		if !t.Einsatzbereit() {
+			lahm = append(lahm, fmt.Sprintf("%s (%s)", t.Name, t.Zustand))
+		}
 	}
 	detail := fmt.Sprintf("%d freigegeben, %d im Entwurf", frei, entwuerfe)
+
+	// Ein freigegebenes Werkzeug, das nicht mehr einsatzbereit ist, ist
+	// der stillste Fall von allen: es liegt in tools/, `get tools`
+	// führt es, ein Auftrag nennt es womöglich — und trotzdem bekommt
+	// es kein Hase, weil das Plugin es beim Start aussortiert. Wer das
+	// nicht sucht, findet es nie.
+	if len(lahm) > 0 {
+		return Check{Name: name, Detail: detail,
+			Hint: "freigegeben, aber nicht einsatzbereit: " + strings.Join(lahm, ", ") + "\n" +
+				"                       Das Plugin registriert sie nicht. `hasenbau tool review <name>`, dann erneut testen"}
+	}
 
 	// Die Kopplung: der Schmied beobachtet einen input-Raum, die Hasen
 	// werfen in den `requests:`-Raum ein. Nichts hält die beiden
