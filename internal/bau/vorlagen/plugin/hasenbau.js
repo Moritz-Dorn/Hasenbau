@@ -104,8 +104,8 @@ function reviewPruefung(quelle) {
       abgeschlossen = true
     }
   }
-  if (!abgeschlossen) return { ok: false, grund: "Review ohne Schlusszeile" }
   if (start < 0) return { ok: false, grund: "kein Review — ungelesen" }
+  if (!abgeschlossen) return { ok: false, grund: "Review ohne Schlusszeile" }
   if (ende < 0) ende = zeilen.length
 
   const block = zeilen.slice(start, ende).join("\n")
@@ -115,8 +115,19 @@ function reviewPruefung(quelle) {
 
   const ist = createHash("sha256").update(body).digest("hex")
   if (ist !== soll) return { ok: false, grund: "seit dem Review geaendert (outdated)" }
-  if (!/^\s*(?:#|\/\/)\s*verified-exit:\s*0\s*$/m.test(block)) {
-    return { ok: false, grund: "kein bestandener Probelauf (hypothetical)" }
+
+  // Ab hier dieselbe Ableitung wie LeiteZustandAb auf der Go-Seite
+  // (internal/bau/review.go) — beide Stellen muessen denselben Zustand
+  // ausrechnen, sonst registriert das Plugin, was der Generator verbietet.
+  const exit = /^\s*(?:#|\/\/)\s*verified-exit:\s*(-?\d+)\s*$/m.exec(block)?.[1]
+  if (exit !== undefined && exit !== "0") {
+    return { ok: false, grund: `Probelauf gescheitert, exit ${exit} (invalid)` }
+  }
+  // Ein bestandener Probelauf reicht NICHT: Exit 0 heisst „es lief", nicht
+  // „es stimmt". Registriert wird nur, was ein Mensch bei `tool release`
+  // fuer richtig befunden hat — `released-by` ist dessen Spur (actual).
+  if (!/^\s*(?:#|\/\/)\s*released-by:\s*\S/m.test(block)) {
+    return { ok: false, grund: "nicht freigegeben — niemand hat die Ausgabe bestaetigt (hypothetical)" }
   }
   return { ok: true }
 }
