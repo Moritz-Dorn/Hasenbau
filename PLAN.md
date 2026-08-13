@@ -389,8 +389,8 @@ es hier geht:
 | Zustand | heißt hier |
 |---|---|
 | `generated` | der Schmied hat geschrieben, niemand hat gelesen |
-| `hypothetical` | ein Mensch behauptet, was es tut und warum es unbedenklich ist — behauptet, nicht gezeigt |
-| `actual` | ein Probelauf hat das Verhalten gezeigt |
+| `hypothetical` | ein Mensch behauptet, was es tut und warum es unbedenklich ist — behauptet, nicht bestätigt |
+| `actual` | ein Mensch hat die Ausgabe gesehen und für richtig befunden |
 | `invalid` | der Probelauf hat die Behauptung widerlegt |
 | `outdated` | war geprüft, dann hat jemand die Datei geändert |
 
@@ -400,13 +400,86 @@ Setzen.** Man kann sich `actual` nicht geben. Die erste Fassung dieses
 Features war genau daran vorbeigelaufen — sie setzte „geprüft", indem
 jemand einen Befehl tippte.
 
+Die zweite lief dichter daran vorbei und deshalb gefährlicher: sie
+setzte `actual`, sobald der Probelauf mit Exit 0 endete. Das verwechselt
+**Beleg und Urteil**. Exit 0 heißt „es lief", nicht „es stimmt" — ob 24
+die richtige Zeilenzahl war, sieht kein Exit-Code, sondern nur ein
+Mensch. Daraus die Asymmetrie, die den Ablauf trägt:
+
+- Ein **fehlgeschlagener** Probelauf widerlegt die Behauptung des
+  Reviewers. Das kann eine Maschine feststellen → `invalid`.
+- Ein **bestandener** bestätigt sie nicht. Das Werkzeug bleibt
+  `hypothetical`; der Lauf ist ein Beleg, den ein Mensch beurteilt.
+
+`actual` entsteht erst bei `hasenbau tool release`: der Befehl zeigt die
+Ausgabe des Probelaufs und fragt, ob sie richtig war. Wer bejaht, steht
+mit Namen als `released-by` im Block. Deshalb ist `release` auch nicht
+bloß ein `mv` nach `tools/` — die Frage ist der eigentliche Vorgang, das
+Verschieben die Folge.
+
 **Das Review ist ein Artefakt, kein Befehl.** `hasenbau tool review`
-schreibt einen Kommentarblock in den Kopf des Skripts (`reviewed-by`,
-`reviewed-at`, `body-sha256`, `does`, `safe-because`, nach dem Probelauf
-`verified-*`). Das Format ist dokumentiert und von Hand oder mit einer
-GUI herstellbar; der Hasenbau prüft überall nur die *Eigenschaft* —
-Block vollständig, Hash passt —, nie die Herkunft. So bleibt der Weg
-zum Ergebnis austauschbar und das Ergebnis eindeutig.
+schreibt einen Kommentarblock in den Kopf des Skripts. Das Format ist
+dokumentiert und von Hand oder mit einer GUI herstellbar; der Hasenbau
+prüft überall nur die *Eigenschaft* — Block vollständig, Hash passt —,
+nie die Herkunft. So bleibt der Weg zum Ergebnis austauschbar und das
+Ergebnis eindeutig:
+
+```python
+#!/usr/bin/env python3
+# hasenbau-review: 1
+# reviewed-by: Moritz Dorn
+# reviewed-at: 2026-08-13T14:02:11+02:00
+# body-sha256: 9f2c…
+# does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
+# safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
+# verified-at: 2026-08-13T14:05:30+02:00
+# verified-with: --pfad eingang/probe.txt
+# verified-exit: 0
+# released-by: Moritz Dorn
+# released-at: 2026-08-13T14:06:02+02:00
+# valintent: actual
+# hasenbau-review-end
+import argparse
+```
+
+Pflicht sind die fünf Felder bis `safe-because`; fehlt eines, ist der
+Block unbrauchbar. `verified-*` trägt der Probelauf ein, `released-*`
+die Freigabe. Der Shebang bleibt die erste Zeile — ein Block darüber
+machte das Skript unstartbar.
+
+Als Kommentarzeichen gilt `#` (Python, Bash) ebenso wie `//`
+(JavaScript, TypeScript): der Block gehört an den Code, nicht an eine
+Sprache. Welches von beiden, entscheidet die Markenzeile.
+
+**Der Block ist homogen und ausdrücklich begrenzt.** Beides ist mit
+Schaden bezahlt, und beides gehört deshalb hierher.
+
+*Homogen* heißt: nur Zeilen mit demselben Kommentarzeichen wie die
+Markenzeile gehören dazu; eine `//`-Zeile in einem `#`-Block beendet ihn
+und fällt unter den Hash. Ohne diese Regel war eine **Code-Injektion**
+möglich (2026-08-13, gemessen). Der Parser hielt `#` und `//`
+gleichermaßen für Kommentare — unabhängig von der Datei. In einem
+Bash-Skript ist
+
+```bash
+//bin/sh -c 'echo INJIZIERT >&2'
+```
+
+aber kein Kommentar, sondern ein ausführbarer Pfad. Direkt unter dem
+Block stehend lag die Zeile im ausgenommenen Bereich: ungehasht, das
+Review blieb gültig, und `tool test` führte sie aus. Verallgemeinert:
+was im ungehashten Bereich liegt, muss in der *Zielsprache* nachweislich
+wirkungslos sein.
+
+*Begrenzt* heißt: `# hasenbau-review-end` schließt den Block ab; fehlt
+die Zeile, gilt er als unbrauchbar. Die Alternative wäre gewesen, das
+Ende zu raten — „bis zur ersten Nicht-Kommentarzeile" —, und daran ging
+ein zweiter Fehler auf, der beim Nachstellen des ersten auffiel: ein
+Skript, dessen erste Body-Zeile ein Kommentar ist (`# TODO: später
+refactorn`), machte sein eigenes Review **sofort** ungültig. Der
+Kommentar wanderte in den Block, fehlte damit im Body, der Hash passte
+nicht. Wo eine Grenze zwischen gehashtem und ungehashtem Bereich läuft,
+darf sie nie geraten werden.
 
 Der Hash läuft über das Skript **ohne** den Block. Damit ist das Review
 an genau den Inhalt gebunden, den jemand gelesen hat: eine Zeile
@@ -418,11 +491,56 @@ Wirksam wird das an drei Stellen, und keine davon verlässt sich auf
 Disziplin:
 
 - **Das Plugin** prüft beim Server-Start und registriert nur, was
-  gelesen, unverändert und im Probelauf gezeigt ist. Ein nach dem
-  Review getauschtes Skript kommt dort nicht durch.
+  `actual` ist — gelesen, unverändert und von einem Menschen für richtig
+  befunden. Ein nach dem Review getauschtes Skript kommt dort nicht
+  durch.
 - **Der Generator** verbietet, was ein Auftrag nicht nennt *oder* was
   nicht einsatzbereit ist. Genannt ist nicht gelesen.
 - **`tool test`** verlangt ein Review, bevor er ausführt.
+
+Die Ableitung steht damit zweimal da: in Go (`LeiteZustandAb`) und in
+JavaScript im Bau-Plugin, das im opencode-Prozess läuft und den Hasenbau
+nicht rufen kann. Zwei Fassungen derselben Regel driften — und sie taten
+es: bis zum 2026-08-13 registrierte das Plugin schon, was den Probelauf
+bestanden hatte, während die Go-Seite längst die Freigabe verlangte. Der
+Generator hätte es einem Hasen trotzdem verboten, aber die zweite Grenze
+war offen. Wer eine Stelle ändert, muss die andere mitziehen.
+
+Der Zustand wird dabei **abgeleitet, nicht gespeichert** — aus Block,
+Hash und vermerktem Probelauf. So kann ihn jedes Werkzeug ausrechnen,
+eine GUI ebenso wie dieser Code, und niemand muss ihn pflegen. Die Zeile
+`valintent:` im Block ist deshalb **Auskunft, nicht Wahrheit**: sie
+steht dort für Menschen und fremde Werkzeuge, die die Datei lesen, ohne
+zu rechnen. Maßgeblich bleibt der abgeleitete Wert — sonst könnte man
+sich `actual` in die Datei schreiben, und genau das schließt die
+Intentionssemantik aus.
+
+Sie kann nur so frisch sein wie der letzte Schreibvorgang, und daraus
+folgt eine unangenehme Eigenschaft: **`outdated` steht dort nie von
+selbst.** Geschrieben wird der Block bei `review`, `test` und `release`,
+und in jedem dieser Momente passt der Hash; `outdated` entsteht später,
+durch eine fremde Änderung, und die schreibt nichts. Die Zeile ist damit
+ausgerechnet im gefährlichen Fall am falschesten — sie sagt „actual",
+während das Werkzeug längst niemandem mehr zur Verfügung steht.
+
+Zwei Antworten darauf, beide gebaut. `describe tool` stellt den
+abgeleiteten Wert daneben und benennt die Abweichung ausdrücklich. Und
+der Daemon zieht die Zeile beim Start nach, wo sie veraltet ist. Das
+Nachziehen fasst **ausschließlich die `valintent`-Zeile** an: der Hash
+bleibt, wie er ist. Ihn neu zu berechnen hieße, die fremde Änderung
+nachträglich zu segnen — deshalb gibt es dafür `SetzeValIntent` und
+nicht `SchreibeReviewBlock`. In eine Datei zu schreiben, die ohnehin
+gerade verändert wurde, nimmt niemandem etwas weg.
+
+**Was die Bindung nicht leistet: sie beweist kein Review.** Ein Block
+mit korrekt berechnetem Hash kommt durch, auch mit `reviewed-by:
+niemand` — gemessen am 2026-08-13. Wer den Hash ausrechnen kann, kann
+sich das Review ausstellen, und ein Modell kann das. Was sie leistet,
+ist zweierlei und nicht mehr: sie verhindert **stilles Abdriften** (der
+gelesene Inhalt und der laufende sind derselbe, sonst gilt nichts) und
+sie **erzwingt einen Namen** an der Stelle, an der jemand die Verantwortung
+übernimmt. Mehr ginge nur mit Signaturen, und die brauchen eine
+Schlüsselverwaltung, die dieser Bau nicht hat.
 
 Ein kaputter Review-Block ist dabei **kein Ladefehler**, sondern zählt
 wie kein Block. Den Block schreibt im Zweifel ein Modell, und ein Modell

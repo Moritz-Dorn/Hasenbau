@@ -235,7 +235,7 @@ hasenbau get tools             # freigegebene Werkzeuge und wer sie rufen darf
 hasenbau get tools -entwuerfe  # was auf Review wartet
 hasenbau tool review --next    # den nächsten Entwurf lesen und verantworten
 hasenbau tool test <name> --<arg> <wert>   # ausführen und zeigen, was kommt
-hasenbau tool release <name>   # freigeben (verlangt actual)
+hasenbau tool release <name>   # Ausgabe bestätigen und freigeben (macht actual)
 hasenbau get laeufe        # Historie
 hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
@@ -348,28 +348,72 @@ voraus:
 ```bash
 hasenbau tool review --next        # lesen und verantworten
 hasenbau tool test <name> --…      # ausführen und zeigen, was kommt
-hasenbau tool release <name>       # nach tools/ verschieben
+hasenbau tool release <name>       # Ausgabe bestätigen, nach tools/ verschieben
 ```
 
 Der Zustand dazwischen heißt nach der Intentionssemantik des IRS
 ([ValIntent](https://github.com/KIT-IRS/Intent-Semantics)):
 `generated` (geschrieben, ungelesen) → `hypothetical` (behauptet, nicht
-gezeigt) → `actual` (gezeigt). Ein gescheiterter Probelauf macht
-`invalid`, eine Änderung nach dem Review `outdated`. Klassifiziert wird
-durch Verifikation, nicht durch Setzen — man kann sich `actual` nicht
-geben, man muss es zeigen.
+bestätigt) → `actual` (ein Mensch hat die Ausgabe für richtig befunden).
+Ein gescheiterter Probelauf macht `invalid`, eine Änderung nach dem
+Review `outdated`. Klassifiziert wird durch Verifikation, nicht durch
+Setzen — man kann sich `actual` nicht geben.
+
+Dabei zählt der Probelauf **in nur eine Richtung**: scheitert er,
+widerlegt er das Review (`invalid`); besteht er, bestätigt er es nicht.
+Exit 0 heißt „es lief", nicht „es stimmt" — ob 24 die richtige
+Zeilenzahl war, sieht kein Exit-Code. Deshalb bleibt ein bestandener
+Probelauf `hypothetical`, und `release` fragt, bevor es verschiebt: *War
+die Ausgabe richtig?* Wer bejaht, steht mit Namen in der Datei.
 
 `review` schreibt einen Block in den Kopf des Skripts: wer gelesen hat,
 was er glaubt, dass es tut, warum er es für unbedenklich hält — und
-einen Hash über das Skript **ohne** diesen Block. Damit ist das Review
-an genau den Inhalt gebunden, der gelesen wurde: eine Zeile geändert,
-und es gilt nicht mehr, auch dem Reviewer selbst gegenüber. Das Plugin
-prüft den Hash bei jedem Server-Start und registriert nur, was
-durchgeht.
+einen Hash über das Skript **ohne** diesen Block. Probelauf und Freigabe
+tragen ihre Zeilen nach:
+
+```python
+#!/usr/bin/env python3
+# hasenbau-review: 1
+# reviewed-by: Moritz Dorn
+# reviewed-at: 2026-08-13T14:02:11+02:00
+# body-sha256: 9f2c…
+# does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
+# safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
+# verified-at: 2026-08-13T14:05:30+02:00
+# verified-with: --pfad eingang/probe.txt
+# verified-exit: 0
+# released-by: Moritz Dorn
+# released-at: 2026-08-13T14:06:02+02:00
+# valintent: actual
+# hasenbau-review-end
+import argparse
+```
+
+Damit ist das Review an genau den Inhalt gebunden, der gelesen wurde:
+eine Zeile geändert, und es gilt nicht mehr, auch dem Reviewer selbst
+gegenüber. Das Plugin prüft den Hash bei jedem Server-Start und
+registriert nur, was durchgeht.
+
+`#` und `//` sind beide erlaubt, aber innerhalb eines Blocks nur
+**eines** — gemischt wird nicht, und `hasenbau-review-end` muss ihn
+abschließen. Beide Regeln haben einen Grund, den man einmal gesehen
+haben muss: eine `//`-Zeile in einem Bash-Skript ist kein Kommentar,
+sondern ein ausführbarer Pfad, und ohne Schlusszeile schluckt der Block
+den ersten Kommentar des Skripts und macht sein eigenes Review sofort
+ungültig.
+
+Die Zeile `valintent:` ist **Auskunft, nicht Wahrheit**: der Zustand
+wird jedes Mal neu ausgerechnet. Wer eine freigegebene Datei ändert,
+hinterlässt darin ein `actual`, das nicht mehr stimmt; `describe tool`
+nennt die Abweichung, und der Daemon zieht die Zeile beim Start nach —
+nur diese eine, der Hash bleibt unangetastet.
 
 Der Block ist ein Format, kein Befehl — er lässt sich von Hand oder mit
 einer GUI erzeugen; der Hasenbau prüft nur die Eigenschaft, nie die
-Herkunft.
+Herkunft. Das heißt auch: **er beweist kein Review.** Ein Block mit
+richtig gerechnetem Hash kommt durch, auch mit `reviewed-by: niemand`.
+Was er verhindert, ist stilles Abdriften, und was er erzwingt, ist ein
+Name — mehr nicht.
 
 `test` ist dabei **keine Sicherheitsprüfung**: er führt das Skript mit
 deinen Rechten und ohne Sandkasten aus, ist gegen bösartigen Code also
