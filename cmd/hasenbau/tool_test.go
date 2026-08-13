@@ -10,14 +10,25 @@ import (
 )
 
 // bauMitWerkzeug legt einen Bau mit einem Werkzeug im Entwurfs-Raum an.
-func bauMitWerkzeug(t *testing.T, name, skript string) string {
+// Ist gelesen gesetzt, traegt das Skript einen gueltigen Review-Block —
+// so, wie ihn ein Mensch (oder eine GUI, oder `tool review`) hinterlaesst.
+func bauMitWerkzeug(t *testing.T, name, skript string, gelesen bool) string {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, bau.ToolsEntwurfDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name+".py"), []byte(skript), 0o755); err != nil {
+	inhalt := skript
+	if gelesen {
+		inhalt = bau.SchreibeReviewBlock(bau.Review{
+			By:   "Testerin",
+			At:   "2026-08-13T08:00:00Z",
+			Does: "Tut, was der Test braucht.",
+			Safe: "Liest nichts, schreibt nichts, kein Netz.",
+		}, skript)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".py"), []byte(inhalt), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := `{"description": "Ein Testwerkzeug.", "script": "` + name + `.py",
@@ -28,26 +39,47 @@ func bauMitWerkzeug(t *testing.T, name, skript string) string {
 	return root
 }
 
-// TestToolTestFaengtWasSonstDurchrutscht ist der Test zu Hasenbau-kf5.
-// Der erste echte Schmied-Lauf lieferte ein Werkzeug mit gueltigem
-// Manifest, das zur Laufzeit abstuerzte — py_compile lief durch,
-// `get tools` fuehrte es klaglos, die Diagnose meldete "1 im Entwurf".
-// Erst der Aufruf zeigte es. Genau diesen Fall haelt der Test fest,
-// samt der Zeile, an der es im Original scheiterte.
-func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
-	// Syntaktisch einwandfrei, stuerzt erst beim Ausfuehren: str gegen
-	// bytes, wie im echten Entwurf.
-	kaputt := "#!/usr/bin/env python3\n" +
-		"import argparse, re\n" +
-		"p = argparse.ArgumentParser(); p.add_argument('--datei', required=True)\n" +
-		"a = p.parse_args()\n" +
-		"re.search(rb'/' + re.escape('Type'), b'egal')\n"
-	root := bauMitWerkzeug(t, "kaputt", kaputt)
+const skriptKaputt = "#!/usr/bin/env python3\n" +
+	"import argparse, re\n" +
+	"p = argparse.ArgumentParser(); p.add_argument('--datei', required=True)\n" +
+	"a = p.parse_args()\n" +
+	"re.search(rb'/' + re.escape('Type'), b'egal')\n"
 
-	// Vorbedingung: der bisherige Weg meldet nichts. Waere das anders,
-	// wuerde dieser Test etwas anderes sichern, als er behauptet.
+const skriptHeil = "#!/usr/bin/env python3\n" +
+	"import argparse\n" +
+	"p = argparse.ArgumentParser(); p.add_argument('--datei', required=True)\n" +
+	"a = p.parse_args()\n" +
+	"print('ANTWORT:', a.datei)\n"
+
+// TestToolTestVerlangtEinReview ist das Gate aus Hasenbau-9w6: der
+// Probelauf FUEHRT AUS, und wer ausfuehrt, ohne gelesen zu haben, hat
+// die einzige Pruefung uebersprungen, die es gibt.
+func TestToolTestVerlangtEinReview(t *testing.T) {
+	root := bauMitWerkzeug(t, "ungelesen", skriptHeil, false)
+
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "get", "tools"}, &out, &errw); code != 0 {
+	code := run([]string{"-bau", root, "tool", "test", "ungelesen", "--datei", "x"}, &out, &errw)
+	if code == 0 {
+		t.Errorf("ungelesenes Werkzeug wurde ausgefuehrt:\n%s", out.String())
+	}
+	if !strings.Contains(errw.String(), "ungelesen") || !strings.Contains(errw.String(), "review") {
+		t.Errorf("die Ablehnung nennt weder Zustand noch den naechsten Schritt:\n%s", errw.String())
+	}
+	// Und das Skript darf dabei nicht gelaufen sein.
+	if strings.Contains(out.String(), "ANTWORT:") {
+		t.Errorf("das Skript wurde trotz Ablehnung ausgefuehrt:\n%s", out.String())
+	}
+}
+
+// TestToolTestFaengtWasSonstDurchrutscht: der Fall aus dem ersten echten
+// Schmied-Lauf — gueltiges Manifest, syntaktisch einwandfreies Python,
+// Absturz beim ersten Aufruf.
+func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
+	root := bauMitWerkzeug(t, "kaputt", skriptKaputt, true)
+
+	// Vorbedingung: der bisherige Weg meldet nichts.
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "get", "tools", "-entwuerfe"}, &out, &errw); code != 0 {
 		t.Fatalf("get tools: exit %d — %s", code, errw.String())
 	}
 	if !strings.Contains(out.String(), "kaputt") {
@@ -56,52 +88,110 @@ func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
 
 	out.Reset()
 	errw.Reset()
-	code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "egal.txt"}, &out, &errw)
-	if code == 0 {
+	if code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "egal.txt"}, &out, &errw); code == 0 {
 		t.Errorf("ein abstuerzendes Werkzeug gilt als in Ordnung:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "TypeError") {
 		t.Errorf("der Fehlertext des Skripts fehlt in der Ausgabe:\n%s", out.String())
 	}
-	// Der Text aus stderr ist das, was ein Hase spaeter zu sehen
-	// bekaeme — der Befehl muss ihn zeigen, nicht nur den Exit-Code.
-	if !strings.Contains(out.String(), "stderr") {
-		t.Errorf("stderr wird nicht ausgewiesen:\n%s", out.String())
+	// Der Probelauf KLASSIFIZIERT: gescheitert heisst invalid, und das
+	// steht danach im Skript.
+	if !strings.Contains(out.String(), string(bau.Invalid)) {
+		t.Errorf("der Zustand invalid wird nicht gemeldet:\n%s", out.String())
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Invalid {
+		t.Errorf("Zustand nach gescheitertem Probelauf = %q, erwartet invalid", werkzeuge[0].Zustand)
 	}
 }
 
-// TestToolTestZeigtDasErgebnisUndUrteiltNicht: bei Exit 0 sagt der
-// Befehl, was zurueckkam — aber nicht, dass es stimmt. Ein Test, der
-// nur "stuerzt es ab?" fragt, haette den zweiten Fehler des echten
-// Entwurfs (ein Parser, der reale PDFs nicht liest) gruen gemeldet.
-func TestToolTestZeigtDasErgebnisUndUrteiltNicht(t *testing.T) {
-	heil := "#!/usr/bin/env python3\n" +
-		"import argparse\n" +
-		"p = argparse.ArgumentParser(); p.add_argument('--datei', required=True)\n" +
-		"a = p.parse_args()\n" +
-		"print('ANTWORT:', a.datei)\n"
-	root := bauMitWerkzeug(t, "heil", heil)
+// TestProbelaufMachtActualUndErlaubtRelease haelt die Reihenfolge fest:
+// gelesen -> gezeigt -> verschoben. Vorher geht release nicht.
+func TestProbelaufMachtActualUndErlaubtRelease(t *testing.T) {
+	root := bauMitWerkzeug(t, "heil", skriptHeil, true)
 
+	// release vor dem Probelauf: abgelehnt, denn gelesen ist nicht
+	// gezeigt.
 	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code == 0 {
+		t.Errorf("release ohne Probelauf ging durch:\n%s", out.String())
+	}
+	if !strings.Contains(errw.String(), string(bau.Hypothetical)) {
+		t.Errorf("die Ablehnung nennt den Zustand nicht:\n%s", errw.String())
+	}
+
+	out.Reset()
+	errw.Reset()
 	if code := run([]string{"-bau", root, "tool", "test", "heil", "--datei", "x.txt"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d — %s\n%s", code, errw.String(), out.String())
 	}
 	if !strings.Contains(out.String(), "ANTWORT: x.txt") {
 		t.Errorf("stdout des Werkzeugs fehlt:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "Entwurf") {
-		t.Errorf("dass es ein ungeprueter Entwurf ist, steht nicht da:\n%s", out.String())
+	if !strings.Contains(out.String(), string(bau.Actual)) {
+		t.Errorf("der Zustand actual wird nicht gemeldet:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "STIMMT") {
-		t.Errorf("der Befehl verschweigt, dass er die Richtigkeit nicht prueft:\n%s", out.String())
+
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code != 0 {
+		t.Fatalf("release nach dem Probelauf: exit %d — %s", code, errw.String())
+	}
+	for _, rel := range []string{"tools/heil.py", "tools/heil.json"} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Errorf("%s fehlt nach release: %v", rel, err)
+		}
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !werkzeuge[0].Einsatzbereit() {
+		t.Errorf("nach release nicht einsatzbereit: %+v", werkzeuge[0].Zustand)
+	}
+}
+
+// TestGeaendertesSkriptFaelltAusDerReihe: wer nach dem Review eine Zeile
+// aendert, faengt von vorn an — auch nach bestandenem Probelauf.
+func TestGeaendertesSkriptFaelltAusDerReihe(t *testing.T) {
+	root := bauMitWerkzeug(t, "heil", skriptHeil, true)
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "heil", "--datei", "x"}, &out, &errw); code != 0 {
+		t.Fatalf("Probelauf: exit %d — %s", code, errw.String())
+	}
+
+	pfad := filepath.Join(root, bau.ToolsEntwurfDir, "heil.py")
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	geaendert := strings.Replace(string(roh), "import argparse", "import argparse, os", 1)
+	if err := os.WriteFile(pfad, []byte(geaendert), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code == 0 {
+		t.Errorf("ein nach dem Review geaendertes Werkzeug wurde freigegeben:\n%s", out.String())
+	}
+	if !strings.Contains(errw.String(), string(bau.Outdated)) {
+		t.Errorf("die Ablehnung nennt outdated nicht:\n%s", errw.String())
+	}
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "test", "heil", "--datei", "x"}, &out, &errw); code == 0 {
+		t.Errorf("ein geaendertes Werkzeug wurde ohne neues Review ausgefuehrt:\n%s", out.String())
 	}
 }
 
 // TestToolTestPrueftGegenDasManifest: ein Argument, das ein Hase nie
-// schicken koennte, darf auch im Test nicht durchgehen — sonst prueft
-// man das Werkzeug mit einer Eingabe, die es im Ernstfall nicht gibt.
+// schicken koennte, darf auch im Test nicht durchgehen.
 func TestToolTestPrueftGegenDasManifest(t *testing.T) {
-	root := bauMitWerkzeug(t, "w", "#!/usr/bin/env python3\nprint('x')\n")
+	root := bauMitWerkzeug(t, "w", skriptHeil, true)
 
 	faelle := map[string][]string{
 		"Pflichtargument fehlt": {"tool", "test", "w"},

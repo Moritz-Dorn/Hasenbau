@@ -377,10 +377,63 @@ nur fragt „stürzt es ab?", hätte im Fall oben nach der ersten Korrektur
 grün gemeldet; die Erwartung ist das Urteil des Lesers und lässt sich
 nicht ins Manifest schreiben. Die Freigabe bleibt eine Code-Review.
 
+### Die drei Stufen und ihre Zustände
+
+Ein Werkzeug geht durch `review`, `test`, `release`, und jede Stufe
+setzt die vorige voraus. Die Zustände dazwischen tragen die Namen der
+**Intentionssemantik des IRS** (ValIntent,
+`irs.kit.edu/concept-store/IntentionSemantics`) — nicht aus Zierde,
+sondern weil deren Definitionen genau die Unterscheidung treffen, um die
+es hier geht:
+
+| Zustand | heißt hier |
+|---|---|
+| `generated` | der Schmied hat geschrieben, niemand hat gelesen |
+| `hypothetical` | ein Mensch behauptet, was es tut und warum es unbedenklich ist — behauptet, nicht gezeigt |
+| `actual` | ein Probelauf hat das Verhalten gezeigt |
+| `invalid` | der Probelauf hat die Behauptung widerlegt |
+| `outdated` | war geprüft, dann hat jemand die Datei geändert |
+
+Der Satz, auf den es ankommt, steht in der ValIntent-Definition von
+`hypothetical`: **klassifiziert wird durch Verifikation, nicht durch
+Setzen.** Man kann sich `actual` nicht geben. Die erste Fassung dieses
+Features war genau daran vorbeigelaufen — sie setzte „geprüft", indem
+jemand einen Befehl tippte.
+
+**Das Review ist ein Artefakt, kein Befehl.** `hasenbau tool review`
+schreibt einen Kommentarblock in den Kopf des Skripts (`reviewed-by`,
+`reviewed-at`, `body-sha256`, `does`, `safe-because`, nach dem Probelauf
+`verified-*`). Das Format ist dokumentiert und von Hand oder mit einer
+GUI herstellbar; der Hasenbau prüft überall nur die *Eigenschaft* —
+Block vollständig, Hash passt —, nie die Herkunft. So bleibt der Weg
+zum Ergebnis austauschbar und das Ergebnis eindeutig.
+
+Der Hash läuft über das Skript **ohne** den Block. Damit ist das Review
+an genau den Inhalt gebunden, den jemand gelesen hat: eine Zeile
+geändert, und es gilt nicht mehr — auch dem Reviewer selbst gegenüber.
+Dass `outdated` mit dieser Bindung zusammenfällt, ist kein Zufall; die
+Definition lautet „war actual, Re-Verifikation fehlgeschlagen".
+
+Wirksam wird das an drei Stellen, und keine davon verlässt sich auf
+Disziplin:
+
+- **Das Plugin** prüft beim Server-Start und registriert nur, was
+  gelesen, unverändert und im Probelauf gezeigt ist. Ein nach dem
+  Review getauschtes Skript kommt dort nicht durch.
+- **Der Generator** verbietet, was ein Auftrag nicht nennt *oder* was
+  nicht einsatzbereit ist. Genannt ist nicht gelesen.
+- **`tool test`** verlangt ein Review, bevor er ausführt.
+
+Ein kaputter Review-Block ist dabei **kein Ladefehler**, sondern zählt
+wie kein Block. Den Block schreibt im Zweifel ein Modell, und ein Modell
+darf den Bau nicht lahmlegen können; die sichere Richtung ist „gilt als
+ungelesen". Ein selbstgeschriebener Block nützt ohnehin nichts, weil der
+Hash nicht passt.
+
 **Und der Probelauf ist keine Sicherheitsprüfung.** Er führt das Skript
 aus — unsandboxed, mit den Rechten dessen, der ihn tippt. Gegen
 bösartigen Code hilft er nicht: er wäre die Ausführung. Er findet
-Fehler, keine Absichten.
+Fehler, keine Absichten. Genau deshalb steht das Review davor.
 
 Der Weg dorthin ist real und gehört benannt: ein Hase liest fremdes
 Material (eine PDF, eine Notiz), darin stehen eingeschleuste

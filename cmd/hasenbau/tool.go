@@ -41,6 +41,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -49,35 +50,59 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
+	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
-const toolUsage = `Aufruf: hasenbau tool test <name> [--<arg> <wert> …]
+const toolUsage = `Aufruf: hasenbau tool <verb> …
 
-Führt ein Werkzeug einmal aus und zeigt Exit-Code, stdout und stderr.
-Gesucht wird zuerst unter ` + bau.ToolsEntwurfDir + `/, dann unter ` + bau.ToolsDir + `/.
+  review [<name>|--next]        lesen und verantworten
+  test <name> [--<arg> <wert>]  einmal ausführen und zeigen, was kam
+  release <name>                nach ` + bau.ToolsDir + `/ verschieben
 
-  hasenbau tool test pdf_seiten_zaehlen --pdf raeume/eingang/a.pdf
+Die drei Verben sind eine Reihenfolge, keine Auswahl. Ein Werkzeug
+durchläuft sie in dieser Folge, und jeder Schritt setzt den vorigen
+voraus:
 
-ZUERST LESEN. Ein Entwurf ist Code, den ein Modell geschrieben hat;
-dieser Befehl führt ihn aus, mit deinen Rechten und ohne Sandkasten. Er
-findet Fehler, keine Absichten — gegen bösartigen Code hilft er nicht,
-er wäre die Ausführung.
+  generated  → review →  hypothetical → test →  actual → release
+  geschrieben,           behauptet,             gezeigt,
+  ungelesen              nicht gezeigt          einsetzbar
 
-Was der Bau kennt, zeigt ` + "`hasenbau get tools`" + `.
+` + "`test`" + ` verlangt ein Review, weil er das Skript AUSFÜHRT — mit deinen
+Rechten und ohne Sandkasten. Er findet Fehler, keine Absichten; gegen
+bösartigen Code ist er nicht die Abwehr, sondern die Ausführung. Deshalb
+liest ein Mensch zuerst.
+
+Was der Bau kennt, zeigt ` + "`hasenbau get tools`" + `,
+was auf Review wartet ` + "`hasenbau get tools -entwuerfe`" + `.
 `
 
-func cmdTool(root string, args []string, out, errw io.Writer) int {
-	if len(args) == 0 || args[0] != "test" {
+func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int {
+	if len(args) == 0 {
 		fmt.Fprint(errw, toolUsage)
 		return 2
 	}
-	if len(args) < 2 {
-		fmt.Fprint(errw, toolUsage)
+	switch args[0] {
+	case "test":
+		if len(args) < 2 {
+			fmt.Fprint(errw, toolUsage)
+			return 2
+		}
+		return toolTest(root, args[1], args[2:], out, errw)
+	case "review":
+		return toolReview(root, args[1:], in, out, errw)
+	case "release":
+		if len(args) != 2 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau tool release <name>")
+			return 2
+		}
+		return toolRelease(root, args[1], out, errw)
+	default:
+		fmt.Fprintf(errw, "hasenbau tool: unbekanntes Verb %q\n\n%s", args[0], toolUsage)
 		return 2
 	}
-	return toolTest(root, args[1], args[2:], out, errw)
 }
 
 func toolTest(root, name string, rest []string, out, errw io.Writer) int {
@@ -99,6 +124,25 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 	}
 	if gefunden == nil {
 		fmt.Fprintf(errw, "hasenbau tool test: kein Werkzeug %q\n%s", name, vorhandene(werkzeuge))
+		return 1
+	}
+
+	// Das Gate: ohne Review kein Probelauf. Der Befehl führt aus, und
+	// wer ausführt, ohne gelesen zu haben, hat die einzige Prüfung
+	// übersprungen, die es gibt.
+	if gefunden.Zustand == bau.Generated {
+		fmt.Fprintf(errw, "hasenbau tool test: %s ist ungelesen (%s).\n", name, bau.Generated)
+		if gefunden.Review.Fehler != "" {
+			fmt.Fprintf(errw, "Es liegt zwar ein Review-Block vor, aber er ist unbrauchbar: %s\n", gefunden.Review.Fehler)
+			fmt.Fprintln(errw, "Ein Block, den niemand gesetzt hat, kommt vom Schmied — das ist ein Befund.")
+		}
+		fmt.Fprintf(errw, "\nDieser Befehl FÜHRT DAS SKRIPT AUS. Lies es zuerst:\n  hasenbau tool review %s\n", name)
+		return 1
+	}
+	if gefunden.Zustand == bau.Outdated {
+		fmt.Fprintf(errw, "hasenbau tool test: %s wurde seit dem Review geändert (%s).\n", name, bau.Outdated)
+		fmt.Fprintf(errw, "Das Review von %s gilt für einen anderen Inhalt als den, der jetzt dasteht.\n", gefunden.Review.By)
+		fmt.Fprintf(errw, "\n  hasenbau tool review %s   — noch einmal lesen\n", name)
 		return 1
 	}
 
@@ -155,15 +199,57 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 	fmt.Fprintf(out, "\nExit-Code %d — ", exitCode)
 	if exitCode == 0 {
 		fmt.Fprintln(out, "der Hase bekäme stdout als Ergebnis.")
-		fmt.Fprintln(out, "Ob das Ergebnis STIMMT, sagt dir kein Befehl: das ist der Teil,")
-		fmt.Fprintf(out, "für den die Freigabe eine Code-Review ist und kein Durchwinken.\n")
 	} else {
 		fmt.Fprintln(out, "der Hase bekäme einen Werkzeug-Fehler mit dem Text aus stderr.")
+	}
+
+	// Der Probelauf KLASSIFIZIERT: er trägt sich in den Review-Block
+	// ein und macht daraus `actual` oder `invalid`. Genau so verlangt es
+	// die Intentionssemantik — durch Verifikation, nicht durch Setzen.
+	zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode)
+	if err != nil {
+		fmt.Fprintf(errw, "Probelauf nicht vermerkt: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(out, "\nZustand: %s — %s\n", zustand, zustand.Erklaerung())
+	switch zustand {
+	case bau.Actual:
+		fmt.Fprintln(out, "Ob das Ergebnis STIMMT, sagt dir kein Befehl — das bleibt dein Urteil.")
+		if gefunden.Entwurf {
+			fmt.Fprintf(out, "\n  hasenbau tool release %s   — nach %s/ verschieben\n", gefunden.Name, bau.ToolsDir)
+		}
+	case bau.Invalid:
+		fmt.Fprintln(out, "Kein Hase bekommt es, solange das so bleibt.")
 	}
 	if exitCode != 0 {
 		return 1
 	}
 	return 0
+}
+
+// vermerkeProbelauf schreibt das Ergebnis in den Review-Block. Der Hash
+// bleibt dabei unberührt — er läuft über den Body OHNE Block, ein
+// Eintrag im Block macht das Review also nicht ungültig.
+func vermerkeProbelauf(root string, t *bau.Tool, argv []string, exitCode int) (bau.Zustand, error) {
+	pfad := filepath.Join(root, t.Skript)
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		return "", err
+	}
+	review, body := bau.LiesReview(roh)
+	review.VerifiedAt = bau.JetztStempel()
+	review.VerifiedWith = strings.Join(argv, " ")
+	review.VerifiedExit = &exitCode
+
+	neu := bau.SchreibeReviewBlock(review, body)
+	info, err := os.Stat(pfad)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(pfad, []byte(neu), info.Mode().Perm()); err != nil {
+		return "", err
+	}
+	return bau.LeiteZustandAb(review, body), nil
 }
 
 // parseToolArgs liest `--name wert` gegen das Manifest. Ein unbekannter
@@ -273,4 +359,347 @@ func schreibeKanal(out io.Writer, name, inhalt string) {
 	for _, zeile := range strings.Split(strings.TrimRight(inhalt, "\n"), "\n") {
 		fmt.Fprintf(out, "  %s\n", zeile)
 	}
+}
+
+// toolReview führt durch das Lesen und schreibt danach den Block.
+//
+// Der Befehl ist NUR eine bequeme Art, ein Artefakt herzustellen — das
+// Format steht in PLAN §4 und lässt sich von Hand oder mit einer GUI
+// erzeugen. Der Hasenbau prüft überall nur die Eigenschaft (Block
+// vollständig, Hash passt), nie die Herkunft.
+func toolReview(root string, args []string, in io.Reader, out, errw io.Writer) int {
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	t, code := waehleFuerReview(werkzeuge, args, out, errw)
+	if code != 0 {
+		return code
+	}
+
+	zeigeHerkunft(root, t, out)
+	fmt.Fprintf(out, "\n%s — %s\n", t.Name, t.Beschreibung)
+	fmt.Fprint(out, manifestArgs(t))
+	fmt.Fprintf(out, "\nSkript: %s (%d Zeilen)\n", t.Skript, t.Zeilen)
+
+	// Ein Entwurf, der schon einen Block trägt, ist ein Befund: den hat
+	// kein Mensch gesetzt, also hat der Schmied das Format nachgeahmt.
+	if t.Review.By != "" || t.Review.Fehler != "" {
+		fmt.Fprintln(out, "\nACHTUNG: dieser Entwurf trägt bereits einen Review-Block.")
+		fmt.Fprintln(out, "Gesetzt hat ihn niemand von Hand — das Modell ahmt das Format nach.")
+		fmt.Fprintln(out, "Er wird ersetzt und zählt nicht; lies besonders genau.")
+	}
+
+	pfad := filepath.Join(root, t.Skript)
+	if code := oeffneEditor(pfad, out, errw); code != 0 {
+		return code
+	}
+
+	// Nach dem Editor neu lesen: der Reviewer darf korrigieren, und der
+	// Hash muss auf den Stand zeigen, den er am Ende gelesen hat.
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	_, body := bau.LiesReview(roh)
+
+	leser := bufio.NewReader(in)
+	name := frage(leser, out, "Dein Name", gitName(root))
+	does := frage(leser, out, "Was tut das Skript? (in deinen Worten)", "")
+	safe := frage(leser, out, "Warum ist es unbedenklich?", "")
+	if strings.TrimSpace(name) == "" || strings.TrimSpace(does) == "" || strings.TrimSpace(safe) == "" {
+		fmt.Fprintln(errw, "\nabgebrochen: alle drei Angaben sind Pflicht.")
+		fmt.Fprintln(errw, "Die dritte ist die eigentliche — man kann sie nicht beantworten,")
+		fmt.Fprintln(errw, "ohne hingesehen zu haben.")
+		return 1
+	}
+
+	review := bau.Review{By: name, At: bau.JetztStempel(), Does: does, Safe: safe}
+	info, err := os.Stat(pfad)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if err := os.WriteFile(pfad, []byte(bau.SchreibeReviewBlock(review, body)), info.Mode().Perm()); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+
+	fmt.Fprintf(out, "\n%s ist jetzt %s — %s\n", t.Name, bau.Hypothetical, bau.Hypothetical.Erklaerung())
+	fmt.Fprintf(out, "Als Nächstes zeigen, dass es tut, was du sagst:\n  hasenbau tool test %s", t.Name)
+	for _, a := range t.Args {
+		if a.Pflicht {
+			fmt.Fprintf(out, " --%s <%s>", a.Name, a.Typ)
+		}
+	}
+	fmt.Fprintln(out)
+	return 0
+}
+
+// waehleFuerReview löst <name> oder --next auf. --next nimmt den
+// ältesten Entwurf, der noch niemanden gefunden hat — eine Arbeitsliste
+// braucht einen Anfang, sonst schaut man sie gar nicht erst an.
+func waehleFuerReview(werkzeuge []bau.Tool, args []string, out, errw io.Writer) (*bau.Tool, int) {
+	naechster := len(args) == 1 && (args[0] == "--next" || args[0] == "-next")
+	if !naechster && len(args) != 1 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau tool review <name>|--next")
+		return nil, 2
+	}
+	if naechster {
+		for i := range werkzeuge {
+			if werkzeuge[i].Zustand == bau.Generated || werkzeuge[i].Zustand == bau.Outdated {
+				return &werkzeuge[i], 0
+			}
+		}
+		fmt.Fprintln(out, "Nichts wartet auf Review.")
+		return nil, 0
+	}
+	for i := range werkzeuge {
+		if werkzeuge[i].Name == args[0] {
+			return &werkzeuge[i], 0
+		}
+	}
+	fmt.Fprintf(errw, "hasenbau tool review: kein Werkzeug %q\n%s", args[0], vorhandene(werkzeuge))
+	return nil, 1
+}
+
+// zeigeHerkunft beantwortet die Frage, ohne die man einen Entwurf nicht
+// beurteilen kann: warum gibt es das Ding überhaupt?
+//
+// Abgeleitet statt gespeichert — der Lauf, in dessen Zeitfenster die
+// Datei geschrieben wurde, ist der, der sie geschrieben hat. Findet sich
+// keiner, wird das gesagt und nicht geraten.
+func zeigeHerkunft(root string, t *bau.Tool, out io.Writer) {
+	info, err := os.Stat(filepath.Join(root, t.Skript))
+	if err != nil {
+		return
+	}
+	st, err := store.Open(dbPath(root))
+	if err != nil {
+		return
+	}
+	defer st.Close()
+	laeufe, err := st.RecentLaeufe(200)
+	if err != nil {
+		return
+	}
+	for _, l := range laeufe {
+		if l.Ended == nil || info.ModTime().Before(l.Started) || info.ModTime().After(l.Ended.Add(2*time.Second)) {
+			continue
+		}
+		ausloeser := l.Input
+		if ausloeser == "" {
+			ausloeser = "—"
+		}
+		fmt.Fprintf(out, "Herkunft: Lauf %d (%s), ausgelöst von %s\n", l.ID, l.Auftrag, ausloeser)
+		if l.Summary != "" {
+			fmt.Fprintf(out, "Der Schmied sagt: %s\n", oneLine(l.Summary))
+		}
+		if l.Input != "" {
+			fmt.Fprintf(out, "Der Wunsch steht in %s — lies ihn, bevor du das Skript liest.\n", l.Input)
+		}
+		return
+	}
+	fmt.Fprintln(out, "Herkunft: kein Lauf gefunden, dessen Zeitfenster zur Datei passt.")
+	fmt.Fprintln(out, "Entweder hat jemand die Datei später angefasst, oder sie kam nicht aus einem Lauf.")
+}
+
+// oeffneEditor ist der erzwungene Blick ins Skript. Ohne $EDITOR wird
+// nicht geraten, sondern gesagt, was zu tun ist — ein Befehl, der
+// stillschweigend nichts öffnet, hätte den Zweck verfehlt.
+func oeffneEditor(pfad string, out, errw io.Writer) int {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		fmt.Fprintf(errw, "\n$EDITOR ist nicht gesetzt. Lies das Skript und ruf danach erneut:\n  %s\n", pfad)
+		return 1
+	}
+	fmt.Fprintf(out, "\n%s öffnet %s …\n", editor, pfad)
+	cmd := exec.Command(editor, pfad)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(errw, "Editor: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func frage(leser *bufio.Reader, out io.Writer, text, vorgabe string) string {
+	if vorgabe != "" {
+		fmt.Fprintf(out, "\n%s [%s]: ", text, vorgabe)
+	} else {
+		fmt.Fprintf(out, "\n%s\n> ", text)
+	}
+	antwort, _ := leser.ReadString('\n')
+	antwort = strings.TrimSpace(antwort)
+	if antwort == "" {
+		return vorgabe
+	}
+	return antwort
+}
+
+// gitName holt den Vorgabe-Namen aus der Git-Config des Baus. Wer
+// reviewt, steht mit Namen dafür ein; der Name soll derselbe sein, der
+// auch am Commit steht.
+func gitName(root string) string {
+	cmd := exec.Command("git", "-C", root, "config", "user.name")
+	roh, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(roh))
+}
+
+// toolRelease ist der dritte Schritt und der einzige, der etwas
+// verschiebt. Er verlangt `actual` — gelesen UND gezeigt.
+func toolRelease(root, name string, out, errw io.Writer) int {
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	var t *bau.Tool
+	for i := range werkzeuge {
+		if werkzeuge[i].Name == name && werkzeuge[i].Entwurf {
+			t = &werkzeuge[i]
+		}
+	}
+	if t == nil {
+		fmt.Fprintf(errw, "hasenbau tool release: kein Entwurf %q\n%s", name, vorhandene(werkzeuge))
+		return 1
+	}
+	if t.Zustand != bau.Actual {
+		fmt.Fprintf(errw, "hasenbau tool release: %s ist %s — %s\n", name, t.Zustand, t.Zustand.Erklaerung())
+		switch t.Zustand {
+		case bau.Hypothetical:
+			fmt.Fprintf(errw, "\nGelesen ist nicht gezeigt:\n  hasenbau tool test %s …\n", name)
+		case bau.Invalid:
+			fmt.Fprintln(errw, "\nDer Probelauf ist gescheitert. Erst reparieren, dann neu lesen.")
+		default:
+			fmt.Fprintf(errw, "\n  hasenbau tool review %s\n", name)
+		}
+		return 1
+	}
+
+	for _, quelle := range []string{t.Skript, t.Manifest} {
+		ziel := filepath.Join(bau.ToolsDir, filepath.Base(quelle))
+		if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
+			fmt.Fprintf(errw, "hasenbau tool release: %s liegt schon da — nichts verschoben\n", ziel)
+			return 1
+		}
+		if err := os.Rename(filepath.Join(root, quelle), filepath.Join(root, ziel)); err != nil {
+			fmt.Fprintln(errw, err)
+			return 1
+		}
+		fmt.Fprintf(out, "verschoben: %s → %s\n", quelle, ziel)
+	}
+	fmt.Fprintf(out, "\n%s ist freigegeben. Es wird beim nächsten Server-Start registriert —\n", name)
+	fmt.Fprintln(out, "und nur dann, wenn der Hash dann noch zum Review passt.")
+	fmt.Fprintf(out, "Bekommen tut es ein Hase erst, wenn ein Auftrag es in seinem `tools:` nennt.\n")
+	return 0
+}
+
+// describeTool zeigt ein Werkzeug im Detail — aber NICHT sein Skript.
+// `describe` ist kein `cat` (PLAN §12), und hier wäre es sogar
+// schädlich: ein Skript im Terminal überflogen zu haben, fühlt sich wie
+// Lesen an. Wer lesen will, nimmt `tool review`.
+func describeTool(root, name string, out, errw io.Writer) int {
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	var t *bau.Tool
+	for i := range werkzeuge {
+		if werkzeuge[i].Name == name {
+			if t == nil || werkzeuge[i].Entwurf {
+				t = &werkzeuge[i]
+			}
+		}
+	}
+	if t == nil {
+		fmt.Fprintf(errw, "hasenbau describe tool: kein Werkzeug %q\n%s", name, vorhandene(werkzeuge))
+		return 1
+	}
+
+	ab := newSection(out)
+	ab.field("Werkzeug", "%s", t.Name)
+	ab.field("Zustand", "%s — %s", t.Zustand, t.Zustand.Erklaerung())
+	ort := bau.ToolsDir + "/ (freigegeben)"
+	if t.Entwurf {
+		ort = bau.ToolsEntwurfDir + "/ (nicht freigegeben)"
+	}
+	ab.field("Ort", "%s", ort)
+	ab.field("Skript", "%s (%d Zeilen)", t.Skript, t.Zeilen)
+	ab.field("Manifest", "%s", t.Manifest)
+	ab.done()
+
+	// Die description ist sicherheitsrelevant: sie entscheidet, WANN ein
+	// Hase das Werkzeug ruft. Deshalb steht sie hier wörtlich.
+	fmt.Fprintf(out, "\nWas das Modell liest\n  %s\n", t.Beschreibung)
+	if len(t.Args) > 0 {
+		fmt.Fprintln(out, "\nArgumente")
+		for _, a := range t.Args {
+			pflicht := "optional"
+			if a.Pflicht {
+				pflicht = "Pflicht"
+			}
+			fmt.Fprintf(out, "  --%s <%s>  %s (%s)\n", a.Name, a.Typ, a.Beschreibung, pflicht)
+		}
+	}
+
+	fmt.Fprintln(out, "\nReview")
+	switch {
+	case t.Review.Fehler != "":
+		fmt.Fprintf(out, "  unbrauchbar: %s\n", t.Review.Fehler)
+		fmt.Fprintln(out, "  Gilt als ungelesen. Ein Block, den kein Mensch gesetzt hat,")
+		fmt.Fprintln(out, "  kommt vom Schmied — das ist ein Befund.")
+	case t.Review.By == "":
+		fmt.Fprintln(out, "  keines — niemand hat dieses Skript gelesen.")
+	default:
+		fmt.Fprintf(out, "  gelesen von  %s am %s\n", t.Review.By, t.Review.At)
+		fmt.Fprintf(out, "  tut angeblich  %s\n", t.Review.Does)
+		fmt.Fprintf(out, "  unbedenklich weil  %s\n", t.Review.Safe)
+		if t.Zustand == bau.Outdated {
+			fmt.Fprintln(out, "  ABER: das Skript wurde seither geändert. Das Review gilt für")
+			fmt.Fprintln(out, "  einen anderen Inhalt als den, der jetzt dasteht.")
+		}
+	}
+	if t.Review.VerifiedAt != "" {
+		ausgang := "gescheitert"
+		if t.Review.VerifiedExit != nil && *t.Review.VerifiedExit == 0 {
+			ausgang = "bestanden"
+		}
+		fmt.Fprintf(out, "  Probelauf  %s am %s (%s)\n", ausgang, t.Review.VerifiedAt, t.Review.VerifiedWith)
+	} else if t.Review.By != "" {
+		fmt.Fprintln(out, "  Probelauf  keiner — behauptet, nicht gezeigt")
+	}
+
+	auftraege, ladefehler := loadDefinitions(root)
+	var nennen []string
+	for _, a := range auftraege {
+		for _, w := range a.Tools {
+			if w == t.Name {
+				nennen = append(nennen, a.Name)
+			}
+		}
+	}
+	fmt.Fprintln(out, "\nFreigegeben für")
+	switch {
+	case ladefehler != nil:
+		fmt.Fprintf(out, "  nicht ermittelbar: %v\n", ladefehler)
+	case len(nennen) == 0:
+		fmt.Fprintln(out, "  keinen Auftrag — kein Hase bekommt es zu sehen")
+	default:
+		fmt.Fprintf(out, "  %s\n", strings.Join(nennen, ", "))
+		if !t.Einsatzbereit() {
+			fmt.Fprintf(out, "  ABER: %s — genannt ist nicht einsatzbereit, der Hase bekommt es nicht.\n", t.Zustand)
+		}
+	}
+	fmt.Fprintf(out, "\nLesen: hasenbau tool review %s\n", t.Name)
+	return 0
 }

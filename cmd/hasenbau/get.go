@@ -405,8 +405,14 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 // genommen hat und die zweite nicht, sieht kein Hase; ohne diese Spalte
 // merkt man das erst an einem Lauf.
 func getTools(root string, args []string, out, errw io.Writer) int {
-	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get tools")
+	fs := flag.NewFlagSet("get tools", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	entwuerfe := fs.Bool("entwuerfe", false, "die Review-Queue statt der freigegebenen Werkzeuge")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(errw, "Aufruf: hasenbau get tools [-entwuerfe]")
 		return 2
 	}
 	werkzeuge, err := bau.LadeTools(root)
@@ -414,10 +420,16 @@ func getTools(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	if len(werkzeuge) == 0 {
-		fmt.Fprintf(out, "keine Werkzeuge unter %s/\n", bau.ToolsDir)
-		return 0
+	if *entwuerfe {
+		return getToolEntwuerfe(werkzeuge, out)
 	}
+	return getToolFreigegeben(root, werkzeuge, out)
+}
+
+// getToolFreigegeben beantwortet die Betriebsfrage: was dürfen meine
+// Hasen benutzen? Entwürfe stehen hier bewusst nicht — die sind eine
+// Arbeitsliste für einen Menschen und keine Systemeigenschaft.
+func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 	auftraege, ladefehler := loadDefinitions(root)
 	nutzer := map[string][]string{}
 	for _, a := range auftraege {
@@ -426,33 +438,76 @@ func getTools(root string, args []string, out, errw io.Writer) int {
 		}
 	}
 
+	var offen int
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tARGUMENTE\tFREIGEGEBEN FÜR")
+	fmt.Fprintln(w, "NAME\tZUSTAND\tARGUMENTE\tFREIGEGEBEN FÜR")
 	for _, t := range werkzeuge {
-		var args []string
-		for _, a := range t.Args {
-			if a.Pflicht {
-				args = append(args, a.Name)
-				continue
-			}
-			args = append(args, "["+a.Name+"]")
-		}
-		argSpalte := strings.Join(args, " ")
-		if argSpalte == "" {
-			argSpalte = "—"
+		if t.Entwurf {
+			offen++
+			continue
 		}
 		frei := strings.Join(nutzer[t.Name], ", ")
 		switch {
-		case t.Entwurf:
-			frei = "—  (Entwurf, nicht freigegeben)"
+		case !t.Einsatzbereit():
+			// Ein Auftrag darf es nennen — bekommen tut es der Hase
+			// trotzdem nicht. Das gehört in dieselbe Zeile, sonst sucht
+			// man den Fehler im Modell.
+			frei = "—  (" + t.Zustand.Erklaerung() + ")"
 		case frei == "":
 			frei = "—  (kein Auftrag nennt es)"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", t.Name, argSpalte, frei)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", t.Name, t.Zustand, argSpalte(t), frei)
 	}
 	w.Flush()
 	if ladefehler != nil {
 		fmt.Fprintf(out, "\nSpalte FREIGEGEBEN FÜR unvollständig: %v\n", ladefehler)
 	}
+	if offen > 0 {
+		fmt.Fprintf(out, "\n%d Entwurf/Entwürfe warten auf Review: hasenbau get tools -entwuerfe\n", offen)
+	}
 	return 0
+}
+
+// getToolEntwuerfe ist die Arbeitsliste: was hat der Schmied
+// geschrieben, das noch niemand gelesen hat?
+func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
+	var zeilen int
+	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tZUSTAND\tZEILEN\tGELESEN VON")
+	for _, t := range werkzeuge {
+		if !t.Entwurf {
+			continue
+		}
+		zeilen++
+		von := t.Review.By
+		if von == "" {
+			von = "—  (" + t.Zustand.Erklaerung() + ")"
+		} else if t.Zustand != bau.Actual {
+			von = von + "  (" + t.Zustand.Erklaerung() + ")"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", t.Name, t.Zustand, t.Zeilen, von)
+	}
+	w.Flush()
+	if zeilen == 0 {
+		fmt.Fprintln(out, "Nichts wartet auf Review.")
+		return 0
+	}
+	fmt.Fprintln(out, "\nEin Entwurf ist Code, den ein Modell geschrieben und niemand gelesen hat.")
+	fmt.Fprintln(out, "  hasenbau tool review --next")
+	return 0
+}
+
+func argSpalte(t bau.Tool) string {
+	var args []string
+	for _, a := range t.Args {
+		if a.Pflicht {
+			args = append(args, a.Name)
+			continue
+		}
+		args = append(args, "["+a.Name+"]")
+	}
+	if len(args) == 0 {
+		return "—"
+	}
+	return strings.Join(args, " ")
 }

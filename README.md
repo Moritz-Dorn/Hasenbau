@@ -231,13 +231,17 @@ hasenbau lauf <auftrag>    # Auftrag manuell triggern
 hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
-hasenbau get tools         # Schmied-Werkzeuge, ihre Argumente, wer sie rufen darf
-hasenbau tool test <name> --<arg> <wert>   # ein Werkzeug einmal ausführen
+hasenbau get tools             # freigegebene Werkzeuge und wer sie rufen darf
+hasenbau get tools -entwuerfe  # was auf Review wartet
+hasenbau tool review --next    # den nächsten Entwurf lesen und verantworten
+hasenbau tool test <name> --<arg> <wert>   # ausführen und zeigen, was kommt
+hasenbau tool release <name>   # freigeben (verlangt actual)
 hasenbau get laeufe        # Historie
 hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
 hasenbau describe hase <name>     # effektive Permissions je Auftrag
 hasenbau describe gang <datei>    # Zweck und alle Aufträge, die ihn rufen
+hasenbau describe tool <name>     # Zustand, Review, wer es rufen darf
 hasenbau describe lauf <id>       # ein Lauf mit Notizen, Fehlern, Kosten
 hasenbau describe provider <id>   # Endpoint, Schlüssel, und die Modelle des Baus
 hasenbau dig <ziel>     # Material für den Baumeister: <lauf-id> oder <auftrag>#<n>
@@ -338,13 +342,39 @@ kein einziges Mal ausführen — er liefert also Ungetestetes. Der erste
 echte Schmied-Lauf zeigte das: tadelloses Manifest, plausibel
 aussehendes Python, und beim ersten Aufruf ein Absturz.
 
-Die Reihenfolge ist deshalb **lesen, probieren, freigeben** — in dieser
-Folge. `hasenbau tool test <name> --<arg> <wert>` führt einen Entwurf
-aus und zeigt Exit-Code, stdout und stderr; er findet Fehler und sonst
-nichts. Er ist **keine Sicherheitsprüfung**: er führt das Skript mit
+Deshalb geht ein Werkzeug durch drei Stufen, und jede setzt die vorige
+voraus:
+
+```bash
+hasenbau tool review --next        # lesen und verantworten
+hasenbau tool test <name> --…      # ausführen und zeigen, was kommt
+hasenbau tool release <name>       # nach tools/ verschieben
+```
+
+Der Zustand dazwischen heißt nach der Intentionssemantik des IRS
+([ValIntent](https://github.com/KIT-IRS/Intent-Semantics)):
+`generated` (geschrieben, ungelesen) → `hypothetical` (behauptet, nicht
+gezeigt) → `actual` (gezeigt). Ein gescheiterter Probelauf macht
+`invalid`, eine Änderung nach dem Review `outdated`. Klassifiziert wird
+durch Verifikation, nicht durch Setzen — man kann sich `actual` nicht
+geben, man muss es zeigen.
+
+`review` schreibt einen Block in den Kopf des Skripts: wer gelesen hat,
+was er glaubt, dass es tut, warum er es für unbedenklich hält — und
+einen Hash über das Skript **ohne** diesen Block. Damit ist das Review
+an genau den Inhalt gebunden, der gelesen wurde: eine Zeile geändert,
+und es gilt nicht mehr, auch dem Reviewer selbst gegenüber. Das Plugin
+prüft den Hash bei jedem Server-Start und registriert nur, was
+durchgeht.
+
+Der Block ist ein Format, kein Befehl — er lässt sich von Hand oder mit
+einer GUI erzeugen; der Hasenbau prüft nur die Eigenschaft, nie die
+Herkunft.
+
+`test` ist dabei **keine Sicherheitsprüfung**: er führt das Skript mit
 deinen Rechten und ohne Sandkasten aus, ist gegen bösartigen Code also
-nicht die Abwehr, sondern die Ausführung. Und ob das Ergebnis *stimmt*,
-sagt er auch nicht.
+nicht die Abwehr, sondern die Ausführung. Genau deshalb verlangt er
+vorher ein Review — gelesen wird zuerst.
 
 Das ist kein hypothetischer Einwand. Ein Hase liest fremdes Material,
 darin stehen eingeschleuste Anweisungen, er stellt daraufhin einen

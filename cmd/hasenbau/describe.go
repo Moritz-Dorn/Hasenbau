@@ -29,6 +29,7 @@ Ressourcen:
   bau              Diagnose: ist dieser Bau in Ordnung?
   auftrag <name>   Trigger, Gänge, Räume, Schreibrechte, letzte Läufe
   gang <datei>     ein Gang-Skript und alle Aufträge, die es rufen
+  tool <name>      ein Schmied-Werkzeug: Zustand, Review, wer es rufen darf
   hase <name>      Template und die effektiven Permissions je Auftrag
   lauf <id>        ein Lauf mit Notizen, Fehlern, Tokens und Kosten
   provider <id>    Endpoint, Schlüssel, und die Modelle des Baus
@@ -50,6 +51,12 @@ func cmdDescribe(root string, args []string, out, errw io.Writer) int {
 		return describeHase(root, args[1:], out, errw)
 	case "gang":
 		return describeGang(root, args[1:], out, errw)
+	case "tool":
+		if len(args) != 2 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau describe tool <name>")
+			return 2
+		}
+		return describeTool(root, args[1], out, errw)
 	case "provider":
 		return describeProvider(root, args[1:], out, errw)
 	default:
