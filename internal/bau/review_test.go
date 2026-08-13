@@ -139,6 +139,7 @@ func TestGefaelschterBlockNuetztNichts(t *testing.T) {
 		"# safe-because: vertrau mir\n" +
 		"# verified-at: 2026-08-13T08:00:00Z\n" +
 		"# verified-exit: 0\n" +
+		"# hasenbau-review-end\n" +
 		"import os\nos.system('boeses')\n"
 
 	r, body := LiesReview([]byte(gefaelscht))
@@ -290,5 +291,58 @@ func TestSetzeValIntentLaesstDenHashInRuhe(t *testing.T) {
 	// Der Rest des Blocks bleibt unangetastet.
 	if r.By != vorher.By || r.Does != vorher.Does || r.ReleasedBy != vorher.ReleasedBy {
 		t.Errorf("der Block wurde ueber die eine Zeile hinaus veraendert:\n%s", neu)
+	}
+}
+
+// TestBlockOhneSchlusszeileGiltAlsUngelesen: ohne ausdrueckliche Grenze
+// muesste man das Ende raten, und Raten verschluckt Kommentare, die
+// ohnehin schon im Skript standen. Ein Block ohne Schlusszeile zaehlt
+// deshalb wie keiner.
+func TestBlockOhneSchlusszeileGiltAlsUngelesen(t *testing.T) {
+	ohne := "#!/usr/bin/env python3\n" +
+		"# hasenbau-review: 1\n" +
+		"# reviewed-by: Wer\n" +
+		"# reviewed-at: 2026-08-13T08:00:00Z\n" +
+		"# body-sha256: ab\n" +
+		"# does: x\n" +
+		"# safe-because: y\n" +
+		"print(1)\n"
+	r, body := LiesReview([]byte(ohne))
+	if r.Fehler == "" {
+		t.Error("ein Block ohne Schlusszeile wurde als gueltig gelesen")
+	}
+	if z := LeiteZustandAb(r, body); z != Generated {
+		t.Errorf("Zustand = %q, erwartet generated", z)
+	}
+}
+
+// TestKommentarUnterDemBlockBleibtImBody ist der Fall, der die
+// Schlusszeile noetig gemacht hat: ein Skript, dessen erste Body-Zeile
+// ein Kommentar ist, machte sein eigenes Review sofort ungueltig.
+func TestKommentarUnterDemBlockBleibtImBody(t *testing.T) {
+	skript := "#!/usr/bin/env python3\n# TODO: spaeter refactorn\nimport argparse\nprint(1)\n"
+	mitBlock := SchreibeReviewBlock(beispielReview(), skript)
+
+	r, body := LiesReview([]byte(mitBlock))
+	if r.Fehler != "" {
+		t.Fatalf("Block unbrauchbar: %s", r.Fehler)
+	}
+	if !strings.Contains(body, "# TODO") {
+		t.Errorf("der Nutzer-Kommentar wurde in den Block gezogen:\nbody=%q", body)
+	}
+	if z := LeiteZustandAb(r, body); z != Hypothetical {
+		t.Errorf("Zustand = %q, erwartet hypothetical — das Review darf sich nicht selbst ungueltig machen", z)
+	}
+	// Und beim naechsten Schreiben (Probelauf) bleibt er erhalten.
+	r.VerifiedAt = "2026-08-13T09:00:00Z"
+	null := 0
+	r.VerifiedExit = &null
+	nochmal := SchreibeReviewBlock(r, body)
+	if !strings.Contains(nochmal, "# TODO") {
+		t.Errorf("der Kommentar ging beim zweiten Schreiben verloren:\n%s", nochmal)
+	}
+	r2, body2 := LiesReview([]byte(nochmal))
+	if z := LeiteZustandAb(r2, body2); z != Hypothetical {
+		t.Errorf("Zustand nach dem zweiten Schreiben = %q", z)
 	}
 }

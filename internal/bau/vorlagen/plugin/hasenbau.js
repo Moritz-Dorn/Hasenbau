@@ -73,17 +73,38 @@ function reviewPruefung(quelle) {
     return null
   }
 
+  // Der Block ist HOMOGEN: nur Zeilen mit demselben Kommentarzeichen
+  // wie die Markenzeile gehoeren dazu. Ohne das liesse sich Code am
+  // Hash vorbeischmuggeln — in einem Bash-Skript ist `//bin/sh -c …`
+  // kein Kommentar, sondern ein ausfuehrbarer Pfad (gemessen
+  // 2026-08-13, Hasenbau-9w6).
   const zeilen = quelle.split("\n")
   let start = -1
   let ende = -1
+  let zeichen = ""
+  let abgeschlossen = false
   for (let i = 0; i < zeilen.length; i++) {
-    const feld = kommentar(zeilen[i])
-    if (feld === null) {
-      if (start >= 0 && ende < 0) ende = i
+    if (start < 0) {
+      const feld = kommentar(zeilen[i])
+      if (feld !== null && feld.startsWith("hasenbau-review:")) {
+        start = i
+        zeichen = zeilen[i].trim().startsWith("//") ? "//" : "#"
+      }
       continue
     }
-    if (start < 0 && feld.startsWith("hasenbau-review:")) start = i
+    if (ende >= 0) continue
+    if (!zeilen[i].trim().startsWith(zeichen)) {
+      ende = i
+      continue
+    }
+    // Ausdrueckliche Grenze: ohne sie muesste man das Ende raten, und
+    // das verschluckt Kommentare, die ohnehin schon im Skript standen.
+    if (kommentar(zeilen[i]).startsWith("hasenbau-review-end")) {
+      ende = i + 1
+      abgeschlossen = true
+    }
   }
+  if (!abgeschlossen) return { ok: false, grund: "Review ohne Schlusszeile" }
   if (start < 0) return { ok: false, grund: "kein Review — ungelesen" }
   if (ende < 0) ende = zeilen.length
 

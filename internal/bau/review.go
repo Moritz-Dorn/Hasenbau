@@ -75,8 +75,28 @@ func (z Zustand) Erklaerung() string {
 }
 
 // ReviewMarke ist die erste Zeile des Blocks und zugleich sein
-// Erkennungszeichen.
-const ReviewMarke = "hasenbau-review"
+// Erkennungszeichen. ReviewEnde schließt ihn ab.
+//
+// Die Schlusszeile ist nicht Zierde, sondern nötig. Ohne sie müsste man
+// das Ende raten — „bis zur ersten Nicht-Kommentarzeile" —, und das
+// verschluckt einen Kommentar, der ohnehin schon im Skript stand:
+//
+//	#!/usr/bin/env python3
+//	# hasenbau-review: 1
+//	# … Felder …
+//	# TODO: spaeter refactorn     <- stand vorher da, gehoert zum Body
+//	import argparse
+//
+// Diese Zeile fiele in den Block, damit aus dem Body, und das Skript
+// waere unmittelbar nach seinem eigenen Review `outdated` — ohne dass
+// jemand etwas geändert hätte. Gemessen am 2026-08-13.
+//
+// Mit ausdrücklicher Grenze ist der Block eindeutig, und zwar auch für
+// den, der ihn von Hand oder mit einer GUI schreibt.
+const (
+	ReviewMarke = "hasenbau-review"
+	ReviewEnde  = "hasenbau-review-end"
+)
 
 // ReviewVersion ist die Formatversion. Sie steht im Block, damit ein
 // späteres Format alte Blöcke nicht still falsch liest.
@@ -157,19 +177,30 @@ func LiesReview(skript []byte) (Review, string) {
 	zeilen := strings.Split(string(skript), "\n")
 	start, ende := -1, -1
 	zeichen := ""
+	abgeschlossen := false
 	for i, z := range zeilen {
-		inhalt, ist := kommentarInhalt(z)
-		if !ist {
-			// Der Block steht zusammenhängend im Kopf. Nach der ersten
-			// Nicht-Kommentarzeile hinter dem Start ist er zu Ende.
-			if start >= 0 && ende < 0 {
-				ende = i
+		if start < 0 {
+			inhalt, ist := kommentarInhalt(z)
+			if ist && strings.HasPrefix(inhalt, ReviewMarke+":") {
+				start = i
+				zeichen = kommentarZeichen(z)
 			}
 			continue
 		}
-		if start < 0 && strings.HasPrefix(inhalt, ReviewMarke+":") {
-			start = i
-			zeichen = kommentarZeichen(z)
+		if ende >= 0 {
+			continue
+		}
+		// Der Block ist HOMOGEN (nur Zeilen mit demselben
+		// Kommentarzeichen) und AUSDRÜCKLICH BEGRENZT. Fehlt die
+		// Schlusszeile, bricht er an der ersten fremden Zeile ab und
+		// gilt als unbrauchbar — raten wäre hier gefährlich.
+		if !istKommentarMit(z, zeichen) {
+			ende = i
+			continue
+		}
+		if inhalt, _ := kommentarInhalt(z); strings.HasPrefix(inhalt, ReviewEnde) {
+			ende = i + 1
+			abgeschlossen = true
 		}
 	}
 	if start < 0 {
@@ -185,6 +216,9 @@ func LiesReview(skript []byte) (Review, string) {
 
 	r := parseReviewBlock(zeilen[start:ende])
 	r.Kommentar = zeichen
+	if !abgeschlossen && r.Fehler == "" {
+		r.Fehler = "die Schlusszeile " + zeichen + " " + ReviewEnde + " fehlt — ohne sie ist nicht zu erkennen, wo der Block aufhört"
+	}
 	return r, strings.Join(body, "\n")
 }
 
@@ -218,6 +252,11 @@ func parseReviewBlock(block []string) Review {
 	for _, z := range block {
 		t, _ := kommentarInhalt(z)
 		if t == "" {
+			continue
+		}
+		// Die Schlusszeile trägt keinen Wert; ohne diese Ausnahme
+		// hinge sie als Fortsetzung am letzten Feld.
+		if strings.HasPrefix(t, ReviewEnde) {
 			continue
 		}
 		name, wert, ok := strings.Cut(t, ":")
@@ -349,6 +388,7 @@ func SchreibeReviewBlock(r Review, body string) string {
 	geschrieben.Hash = BodyHash(body)
 	geschrieben.Fehler = ""
 	fmt.Fprintf(&b, "%s valintent: %s\n", k, LeiteZustandAb(geschrieben, body))
+	fmt.Fprintf(&b, "%s %s\n", k, ReviewEnde)
 	b.WriteString(rest)
 	return b.String()
 }
@@ -407,16 +447,18 @@ func eingerueckt(zeile string) bool {
 func SetzeValIntent(skript []byte, z Zustand) ([]byte, bool) {
 	zeilen := strings.Split(string(skript), "\n")
 	start, ende := -1, -1
+	zeichen := ""
 	for i, zeile := range zeilen {
-		inhalt, ist := kommentarInhalt(zeile)
-		if !ist {
-			if start >= 0 && ende < 0 {
-				ende = i
+		if start < 0 {
+			inhalt, ist := kommentarInhalt(zeile)
+			if ist && strings.HasPrefix(inhalt, ReviewMarke+":") {
+				start = i
+				zeichen = kommentarZeichen(zeile)
 			}
 			continue
 		}
-		if start < 0 && strings.HasPrefix(inhalt, ReviewMarke+":") {
-			start = i
+		if ende < 0 && !istKommentarMit(zeile, zeichen) {
+			ende = i
 		}
 	}
 	if start < 0 {
@@ -425,7 +467,7 @@ func SetzeValIntent(skript []byte, z Zustand) ([]byte, bool) {
 	if ende < 0 {
 		ende = len(zeilen)
 	}
-	k := kommentarZeichen(zeilen[start])
+	k := zeichen
 	neu := fmt.Sprintf("%s valintent: %s", k, z)
 
 	for i := start; i < ende; i++ {
@@ -443,4 +485,30 @@ func SetzeValIntent(skript []byte, z Zustand) ([]byte, bool) {
 	// des Blocks, wo ihn SchreibeReviewBlock auch hinsetzt.
 	zeilen = append(zeilen[:ende], append([]string{neu}, zeilen[ende:]...)...)
 	return []byte(strings.Join(zeilen, "\n")), true
+}
+
+// istKommentarMit prüft, ob eine Zeile ein Kommentar mit GENAU diesem
+// Zeichen ist. Das ist die Absicherung gegen eine Code-Injektion über
+// den Header, gefunden von Moritz am 2026-08-13.
+//
+// Der Block ist vom Hash ausgenommen — das muss er sein, sonst könnte er
+// seinen eigenen Hash nicht enthalten. Damit hängt alles daran, dass im
+// ausgenommenen Bereich AUSSCHLIESSLICH Kommentare stehen. Ein Parser,
+// der `#` und `//` gleichermaßen für Kommentare hält, verletzt das:
+//
+//	#!/usr/bin/env bash
+//	# hasenbau-review: 1
+//	# … Felder …
+//	//bin/sh -c 'boeses'      <- fuer den Parser ein Kommentar,
+//	echo harmlos                 fuer bash ein ausfuehrbarer Pfad
+//
+// Diese Zeile lag im ausgenommenen Bereich, blieb also ungehasht — das
+// Review galt weiter, und der Probelauf führte sie aus (gemessen).
+// Homogenität schließt das: in einem `#`-Block beendet eine `//`-Zeile
+// den Block, landet im Body und fällt damit unter den Hash.
+func istKommentarMit(zeile, zeichen string) bool {
+	if zeichen == "" {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(zeile), zeichen)
 }
