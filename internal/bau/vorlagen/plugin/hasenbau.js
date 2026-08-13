@@ -30,6 +30,79 @@ import { tool } from "@opencode-ai/plugin"
 
 const VERDAECHTIG = new Set(["task", "bash", "webfetch", "websearch"])
 
+// Der Sandkasten um ein Werkzeug im BETRIEB (Hasenbau-9w6, Stufe 2).
+//
+// Ein Schmied-Werkzeug laeuft hier im Server-Prozess und damit
+// ausserhalb jeder Hasen-Sandbox. Ohne Grenze waere es der bequemste Weg
+// aus den Raum-Rechten heraus: der Hase darf raeume/eingang nicht
+// schreiben, sein Werkzeug schon. Deshalb gilt EIN WERKZEUG DARF NIE
+// MEHR ALS DER HASE, DER ES RUFT — und die Grenze kommt aus derselben
+// Quelle wie dessen Permissions, den Raeumen seines Auftrags.
+//
+// Ausgerechnet hat sie der Hasenbau (internal/hase/grenze.go) und in
+// hasenbau-raeume.json neben die generierten Agenten gelegt. Hier steht
+// nur die Anwendung.
+const GRENZEN_DATEI = ".opencode-home/opencode/hasenbau-raeume.json"
+const WERKZEUG_ZEITLIMIT = "60s"
+
+function ladeGrenzen(bau) {
+  try {
+    const roh = JSON.parse(readFileSync(join(bau, GRENZEN_DATEI), "utf8"))
+    const nach = {}
+    for (const g of roh) nach[g.agent] = g
+    return nach
+  } catch {
+    // Keine Datei heisst: keine Grenze bekannt. Das ist NICHT dasselbe
+    // wie "keine noetig" — der Aufrufer weist dann ab.
+    return null
+  }
+}
+
+// SYSTEM sind die Verzeichnisse, ohne die kein Interpreter startet. Der
+// Sandkasten baut von NICHTS aus auf und blendet nur diese ein — anders
+// als der Probelauf (cmd/hasenbau/probelauf.go), der das Dateisystem
+// lesend stehen laesst.
+//
+// Der Unterschied ist Absicht und folgt daraus, WER laeuft: beim
+// Probelauf ein Mensch auf seiner eigenen Maschine, hier ein Werkzeug im
+// Namen eines Hasen — und der hat `external_directory: deny`, sieht also
+// nichts ausserhalb seines Baus. Ein `--ro-bind / /` gaebe seinem
+// Werkzeug den Rest der Platte zu lesen, und damit mehr als ihm selbst.
+//
+// -try, weil nicht jede Maschine jedes davon hat (auf NixOS traegt
+// /nix/store fast alles).
+const SYSTEM = ["/nix", "/usr", "/bin", "/lib", "/lib64", "/etc"]
+
+// sandkastenArgv sperrt einen Werkzeug-Aufruf auf die Raeume des
+// rufenden Hasen ein.
+//
+// Die Reihenfolge traegt die Bedeutung: bwrap wendet Mounts von links
+// nach rechts an, ein spaeterer ueberdeckt einen frueheren. Die
+// Schreib-Bindungen kommen deshalb ZULETZT — ein Raum, der in beiden
+// Listen steht, ist am Ende schreibbar.
+function sandkastenArgv(bau, grenze, skript, argv) {
+  const flags = []
+  for (const dir of SYSTEM) flags.push("--ro-bind-try", dir, dir)
+  flags.push("--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp")
+  // Das Skript selbst: ohne tools/ gaebe es nichts auszufuehren. Lesend
+  // — ein Werkzeug, das sich selbst umschreibt, waere ein Weg an der
+  // Freigabe vorbei.
+  flags.push("--ro-bind", join(bau, "tools"), join(bau, "tools"))
+  for (const raum of grenze.read ?? []) flags.push("--ro-bind-try", join(bau, raum), join(bau, raum))
+  for (const raum of grenze.write ?? []) flags.push("--bind-try", join(bau, raum), join(bau, raum))
+  flags.push(
+    "--unshare-all",
+    "--die-with-parent",
+    "--new-session",
+    "--setenv", "HOME", "/tmp",
+    "--chdir", bau,
+    "--",
+    skript,
+    ...argv,
+  )
+  return flags
+}
+
 // Den Binary-Pfad aus der Bau-Config lesen statt auf den PATH zu
 // hoffen: `hasenbau mcp` ist eine Selbstreferenz auf genau das Binary,
 // das diesen Bau fährt, und EnsureMCP hält den Eintrag bei jedem Start
@@ -132,13 +205,46 @@ function reviewPruefung(quelle) {
   return { ok: true }
 }
 
-function ladeWerkzeuge(bau, $) {
+async function ladeWerkzeuge(bau, $) {
   const dir = join(bau, "tools")
   let dateien = []
   try {
     dateien = readdirSync(dir).filter((f) => f.endsWith(".json")).sort()
   } catch {
     return {} // kein tools/ — der Bau hat schlicht keine Werkzeuge
+  }
+  if (dateien.length === 0) return {}
+
+  // FAIL-CLOSED, und hier anders als beim Probelauf: dort steht ein
+  // Mensch am Terminal und liest eine Warnung, im Betrieb liest sie
+  // niemand. Ohne bwrap oder ohne bekannte Grenzen wird deshalb GAR NICHT
+  // registriert — ein fehlendes Werkzeug faellt auf, eine fehlende
+  // Grenze nicht.
+  const hatBwrap = (await $`bwrap --version`.quiet().nothrow()).exitCode === 0
+  if (!hatBwrap) {
+    console.error(
+      `hasenbau: KEIN Schmied-Werkzeug registriert (${dateien.length} vorhanden) — bwrap fehlt.\n` +
+        "  Ein Werkzeug laeuft im Server-Prozess; ohne Sandkasten haette es mehr Rechte als der Hase, der es ruft.",
+    )
+    return {}
+  }
+  // Das Zeitlimit haengt an `timeout` (coreutils) und wird ANDERS
+  // behandelt als der Sandkasten: fehlt es, laeuft das Werkzeug trotzdem,
+  // nur ohne Deckel. Es schuetzt gegen Haenger, nicht gegen Absichten —
+  // und ein Haenger faellt spaetestens am Zeitlimit des Auftrags auf.
+  const hatTimeout = (await $`timeout --version`.quiet().nothrow()).exitCode === 0
+  const vorspann = hatTimeout ? ["timeout", WERKZEUG_ZEITLIMIT, "bwrap"] : ["bwrap"]
+  if (!hatTimeout) {
+    console.error("hasenbau: Werkzeuge laufen ohne Zeitlimit — timeout (coreutils) fehlt.")
+  }
+
+  const grenzen = ladeGrenzen(bau)
+  if (grenzen === null) {
+    console.error(
+      `hasenbau: KEIN Schmied-Werkzeug registriert (${dateien.length} vorhanden) — ${GRENZEN_DATEI} fehlt oder ist unlesbar.\n` +
+        "  Sie entsteht beim Laden der Auftraege; ohne sie ist unbekannt, welche Raeume ein Werkzeug sehen darf.",
+    )
+    return {}
   }
 
   const werkzeuge = {}
@@ -168,7 +274,7 @@ function ladeWerkzeuge(bau, $) {
       werkzeuge[name] = tool({
         description: m.description,
         args,
-        async execute(eingabe) {
+        async execute(eingabe, ctx) {
           // argv statt `sh -c`: die Werte kommen aus einem Modell, und
           // eine Shell dazwischen wäre genau die Lücke, die der Wächter
           // nebenan zumacht. Skripte liegen neben ihrem Manifest.
@@ -179,7 +285,22 @@ function ladeWerkzeuge(bau, $) {
             argv.push("--" + a.name, String(wert))
           }
           const skript = join(dir, m.script)
-          const r = await $`${skript} ${argv}`.cwd(bau).quiet().nothrow()
+
+          // Wer ruft, entscheidet, was das Werkzeug sehen darf. Ist der
+          // Agent unbekannt — ein Subagent, ein handgeschriebener Agent,
+          // ein Aufruf ausserhalb eines Auftrags —, gibt es keine
+          // Grenze, die man ableiten koennte. Dann wird abgewiesen, und
+          // der Text geht an das Modell (er kommt dort an, gemessen
+          // 2026-08-12).
+          const grenze = grenzen[ctx?.agent]
+          if (!grenze) {
+            throw new Error(
+              `${name} nicht ausgefuehrt: fuer den Agenten ${ctx?.agent ?? "?"} ist keine Raum-Grenze hinterlegt. ` +
+                "Ein Werkzeug darf nie mehr als der Hase, der es ruft — ohne bekannte Raeume laeuft es nicht.",
+            )
+          }
+          const befehl = [...vorspann, ...sandkastenArgv(bau, grenze, skript, argv)]
+          const r = await $`${befehl[0]} ${befehl.slice(1)}`.cwd(bau).quiet().nothrow()
           const aus = r.stdout.toString().trim()
           if (r.exitCode !== 0) {
             // Der Fehlertext kommt beim Modell an und ist dort
@@ -202,7 +323,7 @@ export const SandboxWaechter = async ({ $, directory }) => {
   const hasenbau = binaryPfad(directory)
 
   return {
-    tool: ladeWerkzeuge(directory, $),
+    tool: await ladeWerkzeuge(directory, $),
 
     "tool.execute.before": async (input, output) => {
       if (!VERDAECHTIG.has(input.tool)) return

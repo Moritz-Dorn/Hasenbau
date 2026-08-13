@@ -91,6 +91,20 @@ func checkWerkzeuge(root string) Check {
 				"                       Das Plugin registriert sie nicht. `hasenbau tool review <name>`, dann erneut testen"}
 	}
 
+	// Ohne bwrap registriert das Plugin gar kein Werkzeug (Hasenbau-9w6):
+	// im Betrieb läuft ein Werkzeug im Server-Prozess, und ohne
+	// Sandkasten hätte es mehr Rechte als der Hase, der es ruft. Das ist
+	// fail-closed und deshalb richtig — aber es steht nur im Server-Log,
+	// und dort sucht niemand, der sich wundert, wo sein Werkzeug ist.
+	if frei > 0 {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			return Check{Name: name, Detail: detail,
+				Hint: "bwrap fehlt — das Plugin registriert deshalb KEIN Werkzeug.\n" +
+					"                       Ein Werkzeug läuft im Server-Prozess; ohne Sandkasten dürfte es mehr\n" +
+					"                       als der Hase, der es ruft. Installieren (bubblewrap) oder ohne Werkzeuge fahren"}
+		}
+	}
+
 	// Die Kopplung: der Schmied beobachtet einen input-Raum, die Hasen
 	// werfen in den `requests:`-Raum ein. Nichts hält die beiden
 	// synchron, und ein Schmied, der am falschen Briefkasten wartet,

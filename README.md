@@ -441,9 +441,17 @@ oder von dessen Grenzen. Der Befehl fragt dann: *Lag es am Werkzeug?*
 Wer bejaht, setzt `invalid`; ohne Antwort bleibt der Zustand, wie er
 war.
 
-Was der Sandkasten **nicht** leistet: das freigegebene Werkzeug läuft im
-Betrieb weiterhin ohne ihn, im opencode-Prozess. Er schützt die Probe,
-nicht den Betrieb.
+Im Betrieb gilt dann eine zweite, engere Grenze: **ein Werkzeug darf nie
+mehr als der Hase, der es ruft.** Es sieht die Räume seines Auftrags —
+lesen, was der Hase liest, schreiben, was er schreibt (`work` und
+`out`) — und sonst nichts: kein fremder Raum, nichts außerhalb des Baus,
+kein Netz. Die Grenze rechnet der Hasenbau beim Laden der Aufträge aus,
+angewendet wird sie vom Bau-Plugin.
+
+Fehlt `bwrap`, wird im Betrieb **kein** Werkzeug registriert — anders
+als beim Probelauf, wo ein Mensch die Warnung liest. Ein fehlendes
+Werkzeug fällt auf, eine fehlende Grenze nicht; `hasenbau describe bau`
+meldet den Fall.
 
 Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
 Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`

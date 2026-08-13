@@ -605,11 +605,59 @@ Zeitlimit und ein geplatzter Sandkasten (`bwrap` selbst scheitert, etwa
 ohne User-Namespaces) werden gar nicht erst gefragt — sie sagen nichts
 über das Werkzeug, sondern etwas über die Maschine.
 
-**Was der Sandkasten nicht leistet:** das freigegebene Werkzeug läuft im
-Betrieb weiterhin ungesandboxed im opencode-Prozess. Er schützt die
-Probe, nicht den Betrieb. Letzteres wäre „Schmied-Werkzeuge laufen
-grundsätzlich eingeschränkt" und damit ein Entwurf zu §3 — offen, und
-der eigentlich größere Teil der Frage.
+#### Und im Betrieb: die Grenze des Hasen
+
+Ein Sandkasten um die Probe schützt die Probe. Der größere Teil der
+Frage war der Betrieb, denn dort läuft ein Werkzeug im opencode-Prozess
+und damit außerhalb jeder Hasen-Sandbox. Ohne Grenze wäre es der
+bequemste Weg aus §6 heraus: der Hase darf `raeume/laderampe` nicht
+schreiben, sein Werkzeug schon.
+
+Der Satz, aus dem alles Übrige folgt: **ein Werkzeug darf nie mehr als
+der Hase, der es ruft.** Die Grenze ist deshalb keine eigene Erfindung,
+sondern dieselbe wie seine und aus derselben Quelle — den Räumen seines
+Auftrags. Lesen darf es, was der Hase liest; schreiben, was er schreibt
+(`work` und `out`; `done` bedient der Runner).
+
+Zuordnen lässt sich das, weil der Werkzeug-Aufruf seinen Rufer kennt:
+`ToolContext.agent` trägt den Namen des generierten Agenten, und der ist
+`<auftrag>__<hase>`. Ausgerechnet wird die Grenze trotzdem im Hasenbau
+(`internal/hase/grenze.go`) und in `hasenbau-raeume.json` neben die
+generierten Agenten gelegt; das Plugin wendet sie nur an. Das ist
+dieselbe Arbeitsteilung wie beim Sandbox-Wächter — die Regel bleibt im
+Hasenbau und überlebt einen Wechsel des Backends (§6). Die Datei wird
+bei jedem Laden der Definitionen **neu** geschrieben: ein gelöschter
+Auftrag soll keine Grenze hinterlassen, die noch jemanden hereinlässt.
+
+Der Sandkasten baut hier von **nichts** aus auf, anders als beim
+Probelauf: eingeblendet werden nur die Systemverzeichnisse, die ein
+Interpreter braucht (`/nix`, `/usr`, `/bin`, `/lib`, `/etc`), `tools/`
+für das Skript selbst — lesend, ein Werkzeug, das sich selbst
+umschreibt, wäre ein Weg an der Freigabe vorbei — und die Räume der
+Grenze. Ein `--ro-bind / /` wie beim Probelauf gäbe dem Werkzeug den
+Rest der Platte zu lesen, und damit mehr als dem Hasen, der
+`external_directory: deny` hat. Gemessen am 2026-08-13 an einem echten
+`bwrap`-Lauf: der eigene Eingang lesbar, der eigene Ausgang schreibbar,
+der Eingang **nicht** schreibbar, ein fremder Raum und alles außerhalb
+des Baus nicht einmal sichtbar (`FileNotFoundError`), kein Netz.
+
+Hier ist die Antwort auf ein fehlendes `bwrap` eine andere als beim
+Probelauf: **fail-closed**, es wird gar kein Werkzeug registriert. Der
+Unterschied liegt daran, wer danebensteht — beim Probelauf ein Mensch am
+Terminal, der eine Warnung liest, im Betrieb niemand. Ein fehlendes
+Werkzeug fällt auf, eine fehlende Grenze nicht; `describe bau` meldet
+den Fall zusätzlich, denn im Server-Log sucht ihn keiner.
+
+Vom Sandkasten getrennt ist dabei das Zeitlimit: es hängt an `timeout`
+(coreutils), und fehlt das, läuft das Werkzeug trotzdem — nur ohne
+Deckel. Es schützt gegen Hänger, nicht gegen Absichten, und ein Hänger
+fällt spätestens am Zeitlimit des Auftrags auf.
+
+**Was auch das nicht leistet:** die Grenze gilt den Dateien, nicht dem
+Prozess. Ein Werkzeug darf im Sandkasten weiterhin rechnen, forken und
+seine erlaubten Räume vollschreiben. Und sie hängt daran, dass der
+rufende Agent bekannt ist — ein Aufruf ohne hinterlegte Grenze wird
+abgewiesen, mit einem Text, der beim Modell ankommt.
 
 Dass ein Mensch LLM-geschriebenen Code freigibt, ist dabei nicht neu —
 beim Gang-Entwurf des Baumeisters ist es dieselbe Lage, und auch ein

@@ -434,6 +434,13 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 			return nil, err
 		}
 	}
+	// Die Raum-Grenzen der Werkzeuge entstehen mit den Agenten und aus
+	// derselben Quelle (Hasenbau-9w6): ein Werkzeug darf nie mehr als der
+	// Hase, der es ruft. Angewendet werden sie im Bau-Plugin, das die
+	// Datei beim Server-Start liest.
+	if err := hase.SchreibeGrenzen(root, auftraege); err != nil {
+		return nil, err
+	}
 	return auftraege, nil
 }
 
