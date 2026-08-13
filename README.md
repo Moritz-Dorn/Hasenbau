@@ -232,6 +232,7 @@ hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
 hasenbau get tools         # Schmied-Werkzeuge, ihre Argumente, wer sie rufen darf
+hasenbau tool test <name> --<arg> <wert>   # ein Werkzeug einmal ausführen
 hasenbau get laeufe        # Historie
 hasenbau describe bau             # Diagnose: ist dieser Bau in Ordnung?
 hasenbau describe auftrag <name>  # Trigger, Gänge, Räume, Schreibrechte
@@ -330,6 +331,16 @@ ist zweistufig: erst wandert die Datei aus `tools/entwurf/` nach
 bekommt ein Hase kein Werkzeug — ein neu gebautes soll nicht dadurch
 bei allen landen, dass niemand es verboten hat. `hasenbau get tools`
 zeigt, was es gibt und wer es rufen darf.
+
+**Ein Entwurf ist ungeprüfter Code.** Der Schmied hat wie jeder Hase
+kein `bash` und kann sein Skript kein einziges Mal ausführen — er
+liefert also Code, den nie jemand laufen ließ. Der erste echte
+Schmied-Lauf zeigte genau das: tadelloses Manifest, plausibel
+aussehendes Python, und beim ersten Aufruf ein Absturz.
+`hasenbau tool test <name> --<arg> <wert>` führt einen Entwurf einmal
+aus und zeigt Exit-Code, stdout und stderr. Ob das Ergebnis *stimmt*,
+sagt der Befehl nicht — das ist der Teil, für den die Freigabe eine
+Code-Review ist und kein Durchwinken.
 
 Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
 Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`

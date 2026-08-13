@@ -352,6 +352,37 @@ liegt deshalb kein generiertes TypeScript (§3, Hasenbau-hcs).
 hat ein Sonder-Hase geschrieben und noch kein Mensch angesehen. Es wird
 nicht registriert.
 
+**Und es ist ungeprüfter Code — schärfer als bei den Gängen.** Der
+Schmied hat `bash: deny` wie jeder Hase und kann sein eigenes Skript
+kein einziges Mal ausführen. Wir verlangen von ihm Code und nehmen ihm
+zugleich jede Möglichkeit, ihn zu probieren; dass dabei Ungetestetes
+herauskommt, ist eine Folge des Zuschnitts und keine Schwäche des
+Modells (Hasenbau-kf5).
+
+Der erste echte Schmied-Lauf hat das vorgeführt: gültiges Manifest,
+plausibel aussehendes Python, und beim ersten Aufruf ein `TypeError`
+(`str` gegen `bytes`). Nach dessen Behebung lief es — und las reale PDFs
+trotzdem nicht. Nichts in der Kette merkte davon etwas: `py_compile`
+läuft durch, das Manifest ist gültig, `get tools` führt es klaglos, die
+Diagnose meldet brav „1 im Entwurf".
+
+Deshalb `hasenbau tool test <name> --<arg> <wert>`: ein Probelauf an
+der Stelle, an der ohnehin ein Mensch steht. Er zeigt Exit-Code, stdout
+und stderr und ruft das Skript genauso auf wie später das Plugin (argv,
+keine Shell) — ein Testlauf, der anders aufruft als der Ernstfall,
+prüfte das Falsche.
+
+Bewusst **kein** Vergleich gegen eine erwartete Ausgabe. Ein Test, der
+nur fragt „stürzt es ab?", hätte im Fall oben nach der ersten Korrektur
+grün gemeldet; die Erwartung ist das Urteil des Lesers und lässt sich
+nicht ins Manifest schreiben. Die Freigabe bleibt eine Code-Review.
+
+Was dabei funktioniert hat und deshalb so bleibt: der Fehlerpfad. Das
+Skript endete mit Exit 1 und der Begründung auf stderr, das Plugin
+machte daraus einen Werkzeug-Fehler, dessen Text beim rufenden Hasen
+ankommt. Ein kaputtes Werkzeug liefert also kein stilles falsches
+Ergebnis — das ist der Unterschied zwischen ärgerlich und gefährlich.
+
 `hasenbau.yaml` ist bewusst dünn: `log_level` (noch ohne Konsumenten —
 der Daemon loggt levelfrei) und `baumeister`, der Auftrag, den
 `hasenbau baumeister` startet. Unbekannte Schlüssel sind ein Fehler; ein
@@ -1512,7 +1543,7 @@ ist die Regel, an der sich jeder neue misst.
 | `get <ressource> [name]` | **eine Zeile pro Objekt**, Spalten, listenfähig |
 | `describe <ressource> <name>` | **ein Objekt**, gerenderte Abschnitte, inklusive abgeleiteter Information und Querbezüge |
 | `new <ressource> <name>` | ein Objekt **anlegen** — kommentiertes Gerüst, nie überschreibend |
-| `lauf`, `baumeister`, `daemon`, `dig`, `findings`, `provider fetch`, `init` | **tun** etwas |
+| `lauf`, `baumeister`, `daemon`, `dig`, `findings`, `provider fetch`, `tool test`, `init` | **tun** etwas |
 
 **`describe` ist kein `cat`.** Es gibt nie eine Datei im Volltext aus;
 wer die will, nimmt `cat` — `describe` nennt ihm den Pfad und die
