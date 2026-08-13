@@ -21,10 +21,12 @@
 // deshalb Exit-Code, stdout und stderr und überlässt den Schluss dem
 // Menschen.
 //
-// WAS DIESER BEFEHL NICHT IST: eine Sicherheitsprüfung. Er führt das
-// Skript aus, unsandboxed, mit den Rechten dessen, der ihn tippt. Gegen
-// bösartigen Code hilft er deshalb nicht — er WÄRE die Ausführung. Er
-// findet Fehler, keine Absichten.
+// WAS DIESER BEFEHL NICHT IST: eine Sicherheitsprüfung. Er FÜHRT das
+// Skript AUS. Seit Hasenbau-9w6 tut er das im Sandkasten (probelauf.go:
+// kein Netz, Bau nur lesbar, kein $HOME, Zeitlimit), und das ist eine
+// echte Grenze — aber keine Prüfung. Er findet Fehler, keine Absichten,
+// und das freigegebene Werkzeug läuft später ungesandboxed im
+// Server-Prozess.
 //
 // Das ist keine Spitzfindigkeit, denn der Weg dorthin ist real: ein
 // Hase liest fremdes Material (eine PDF, eine Notiz), darin stehen
@@ -36,8 +38,9 @@
 // nicht umgekehrt. Ein Befehl, der das Ausführen bequem macht, verführt
 // dazu, das Lesen zu überspringen; dagegen hilft nur, es überall
 // hinzuschreiben, wo jemand vorbeikommt (hier, in `describe bau`, im
-// README und in der Ausgabe des Befehls selbst). Eine echte Grenze wäre
-// ein Sandkasten um den Probelauf — offen als Hasenbau-hiz/Nachfolger.
+// README und in der Ausgabe des Befehls selbst). Der Sandkasten nimmt
+// dem Versäumnis inzwischen die Spitze, ersetzt das Lesen aber nicht:
+// er hält den Probelauf klein, nicht den Betrieb.
 package main
 
 import (
@@ -61,6 +64,7 @@ const toolUsage = `Aufruf: hasenbau tool <verb> …
 
   review [<name>|--next]        lesen und verantworten
   test <name> [--<arg> <wert>]  einmal ausführen und zeigen, was kam
+        [-` + probeSandboxFlag + `]           ohne Sandkasten, unter Ernstfall-Bedingungen
   release <name>                nach ` + bau.ToolsDir + `/ verschieben
 
 Die drei Verben sind eine Reihenfolge, keine Auswahl. Ein Werkzeug
@@ -73,14 +77,20 @@ voraus:
                         fehlt noch                 belegt, er urteilt     für richtig
                                                    nicht                  befunden
 
-Ein FEHLGESCHLAGENER Probelauf macht invalid — der widerlegt. Ein
+Ein FEHLGESCHLAGENER Probelauf widerlegt und macht invalid. Ein
 bestandener macht NICHT actual: Exit 0 heißt „es lief", nicht „es
 stimmt". Ob die Ausgabe der Realität entspricht, sieht nur ein Mensch.
 
-` + "`test`" + ` verlangt ein Review, weil er das Skript AUSFÜHRT — mit deinen
-Rechten und ohne Sandkasten. Er findet Fehler, keine Absichten; gegen
-bösartigen Code ist er nicht die Abwehr, sondern die Ausführung. Deshalb
-liest ein Mensch zuerst.
+` + "`test`" + ` verlangt ein Review, weil er das Skript AUSFÜHRT. Er tut das im
+Sandkasten — kein Netz, Bau nur lesbar, kein $HOME —, aber er findet
+Fehler, keine Absichten: gegen bösartigen Code ist er nicht die Abwehr,
+sondern die Ausführung. Deshalb liest ein Mensch zuerst.
+
+Scheitert er IM Sandkasten, fragt der Befehl nach: der Absturz kann vom
+Werkzeug kommen oder von dessen Grenzen, und diesen Unterschied sieht
+keine Maschine. Ohne Antwort — im Skript, ohne Terminal — bleibt der
+Zustand, wie er war. Ein Urteil ohne Rückfrage gibt es nur unter
+Ernstfall-Bedingungen: ` + "`-" + probeSandboxFlag + "`" + `.
 
 Was der Bau kennt, zeigt ` + "`hasenbau get tools`" + `,
 was auf Review wartet ` + "`hasenbau get tools -entwuerfe`" + `.
@@ -97,7 +107,7 @@ func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int 
 			fmt.Fprint(errw, toolUsage)
 			return 2
 		}
-		return toolTest(root, args[1], args[2:], out, errw)
+		return toolTest(root, args[1], args[2:], in, out, errw)
 	case "review":
 		return toolReview(root, args[1:], in, out, errw)
 	case "release":
@@ -118,7 +128,7 @@ func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int 
 	}
 }
 
-func toolTest(root, name string, rest []string, out, errw io.Writer) int {
+func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Writer) int {
 	werkzeuge, err := bau.LadeTools(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
@@ -169,7 +179,27 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 		return 1
 	}
 
-	werte, code := parseToolArgs(gefunden, rest, errw)
+	// `-no-sandbox` gehört dem Befehl, nicht dem Werkzeug. Die
+	// Doppelstrich-Form wird nur geschluckt, wenn das Werkzeug nicht
+	// selbst ein Argument dieses Namens führt — sonst nähme der Befehl
+	// dem Werkzeug einen Namen weg, den dessen Manifest vergeben hat.
+	eigenes := false
+	for _, a := range gefunden.Args {
+		if a.Name == probeSandboxFlag {
+			eigenes = true
+		}
+	}
+	sandkasten := true
+	var gefiltert []string
+	for _, r := range rest {
+		if r == "-"+probeSandboxFlag || (!eigenes && r == "--"+probeSandboxFlag) {
+			sandkasten = false
+			continue
+		}
+		gefiltert = append(gefiltert, r)
+	}
+
+	werte, code := parseToolArgs(gefunden, gefiltert, errw)
 	if code != 0 {
 		return code
 	}
@@ -187,8 +217,9 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 		argv = append(argv, "--"+a.Name, wert)
 	}
 	skript := filepath.Join(root, gefunden.Skript)
-	cmd := exec.Command(skript, argv...)
-	cmd.Dir = root
+	ctx, abbruch := probeKontext(sandkasten)
+	defer abbruch()
+	cmd, kasten := probeCommand(ctx, root, skript, argv, sandkasten)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -198,8 +229,15 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 		// Der Hinweis steht VOR der Ausführung, nicht danach: wer ihn
 		// erst im Ergebnis liest, hat das Skript schon laufen lassen.
 		fmt.Fprintln(out, "Entwurf — von einem Modell geschrieben, noch nicht freigegeben.")
-		fmt.Fprintln(out, "Dieser Befehl FÜHRT IHN AUS, mit deinen Rechten und ohne Sandkasten.")
-		fmt.Fprintln(out, "Er findet Fehler, keine Absichten — lies das Skript, bevor du es probierst.")
+		fmt.Fprintln(out, "Dieser Befehl FÜHRT IHN AUS. Er findet Fehler, keine Absichten —")
+		fmt.Fprintln(out, "lies das Skript, bevor du es probierst.")
+	}
+	// Unter welchen Bedingungen gelaufen wurde, gehört ÜBER die Ausgabe
+	// und nicht darunter: es entscheidet, was sie bedeutet.
+	if kasten.active {
+		fmt.Fprintf(out, "Sandkasten: kein Netz, der Bau nur lesbar, kein $HOME, Zeitlimit %s.\n", probeTimeout)
+	} else {
+		fmt.Fprintf(out, "OHNE SANDKASTEN, mit deinen Rechten — %s.\n", kasten.reason)
 	}
 	fmt.Fprintf(out, "Aufruf: %s %s\n\n", gefunden.Skript, strings.Join(argv, " "))
 
@@ -224,6 +262,60 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 		fmt.Fprintln(out, "der Hase bekäme stdout als Ergebnis.")
 	} else {
 		fmt.Fprintln(out, "der Hase bekäme einen Werkzeug-Fehler mit dem Text aus stderr.")
+	}
+
+	// Ein Fehlschlag IM SANDKASTEN klassifiziert NICHT. `invalid` heißt
+	// „der Probelauf hat die Behauptung widerlegt" — widerlegt hat er
+	// sie aber nur unter den Bedingungen des Ernstfalls. Bei
+	// geschlossenem Netz und nur lesbarem Bau kann derselbe Exit-Code
+	// vom Sandkasten kommen, und diesen Unterschied sieht keine
+	// Maschine: das Skript scheitert in beiden Fällen mit 1.
+	//
+	// Hier falsch zu klassifizieren wäre besonders teuer, denn `invalid`
+	// sperrt auch das erneute Testen — ein Werkzeug, das nur schreiben
+	// wollte, käme ohne neues Review nicht mehr aus dem Zustand heraus.
+	// Also dasselbe Prinzip wie bei `actual`: der Lauf ist ein Beleg,
+	// das Urteil fällt woanders.
+	if kasten.active && exitCode != 0 {
+		fmt.Fprintln(out)
+		switch {
+		case ctx.Err() != nil:
+			// Zeitlimit und geplatzter Sandkasten sagen nichts über das
+			// Werkzeug — hier gibt es nichts zu fragen.
+			fmt.Fprintf(out, "Abgebrochen: das Zeitlimit von %s ist abgelaufen.\n", probeTimeout)
+		case probeSandboxHatVersagt(stderr.String()):
+			fmt.Fprintln(out, "Nicht das Skript ist gescheitert, sondern der Sandkasten selbst")
+			fmt.Fprintln(out, "(siehe die bwrap-Zeile auf stderr) — gelaufen ist das Werkzeug nicht.")
+		default:
+			// Die Frage geht an den Menschen, weil nur er sie beantworten
+			// kann: auf stderr steht, woran es lag, und ein „Permission
+			// denied" heißt hier etwas anderes als ein TypeError. Bleibt
+			// die Antwort aus — kein Terminal, ein Skript, eine
+			// Pipeline —, wird NICHT klassifiziert. Das ist die sichere
+			// Richtung: ein zu Unrecht gesetztes `invalid` sperrt auch
+			// das erneute Testen.
+			fmt.Fprintln(out, "Gescheitert ist es im Sandkasten. Das kann am Werkzeug liegen")
+			fmt.Fprintln(out, "oder an dessen Grenzen: kein Netz, kein Schreibrecht, kein $HOME.")
+			fmt.Fprintln(out, "Den Unterschied sieht keine Maschine — er steht oben auf stderr.")
+			fmt.Fprint(out, "\nLag es am Werkzeug? [j/N] ")
+			antwort, _ := bufio.NewReader(in).ReadString('\n')
+			switch strings.ToLower(strings.TrimSpace(antwort)) {
+			case "j", "ja", "y", "yes":
+				zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode)
+				if err != nil {
+					fmt.Fprintf(errw, "Probelauf nicht vermerkt: %v\n", err)
+					return 1
+				}
+				fmt.Fprintf(out, "\nZustand: %s — %s\n", zustand, zustand.Erklaerung())
+				fmt.Fprintln(out, "Kein Hase bekommt es, solange das so bleibt.")
+				return 1
+			}
+		}
+		fmt.Fprintf(out, "\nZustand: %s — unverändert.\n", gefunden.Zustand)
+		fmt.Fprintln(out, "Widerlegt ist damit nichts. Wer ein Urteil der Maschine will,")
+		fmt.Fprintln(out, "liest das Skript und läuft unter den Bedingungen des Ernstfalls:")
+		fmt.Fprintf(out, "\n  hasenbau tool test %s -%s %s\n", gefunden.Name, probeSandboxFlag, strings.Join(argv, " "))
+		return 1
 	}
 
 	// Der Probelauf KLASSIFIZIERT: er trägt sich in den Review-Block

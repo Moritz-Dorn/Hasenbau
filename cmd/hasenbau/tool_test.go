@@ -86,9 +86,13 @@ func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
 		t.Fatalf("get tools fuehrt das Werkzeug nicht:\n%s", out.String())
 	}
 
+	// Die Antwort "j" auf die Rueckfrage aus Hasenbau-9w6: seit dem
+	// Sandkasten kann ein Fehlschlag auch von dessen Grenzen kommen, und
+	// die Maschine widerlegt erst, wenn ein Mensch sagt, dass es am
+	// Werkzeug lag. Hier lag es am Werkzeug — es stuerzt mit TypeError ab.
 	out.Reset()
 	errw.Reset()
-	if code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "egal.txt"}, &out, &errw); code == 0 {
+	if code := runMitEingabe(strings.NewReader("j\n"), []string{"-bau", root, "tool", "test", "kaputt", "--datei", "egal.txt"}, &out, &errw); code == 0 {
 		t.Errorf("ein abstuerzendes Werkzeug gilt als in Ordnung:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "TypeError") {
@@ -265,9 +269,10 @@ func TestToolTestPrueftGegenDasManifest(t *testing.T) {
 func TestNurGelesenesDarfGetestetWerden(t *testing.T) {
 	root := bauMitWerkzeug(t, "kaputt", skriptKaputt, true)
 
-	// Erster Probelauf scheitert -> invalid.
+	// Erster Probelauf scheitert, und der Mensch bestaetigt auf die
+	// Rueckfrage, dass es am Werkzeug lag -> invalid.
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "tool", "test", "kaputt", "--datei", "x"}, &out, &errw); code == 0 {
+	if code := runMitEingabe(strings.NewReader("j\n"), []string{"-bau", root, "tool", "test", "kaputt", "--datei", "x"}, &out, &errw); code == 0 {
 		t.Fatalf("abstuerzendes Werkzeug galt als in Ordnung:\n%s", out.String())
 	}
 	werkzeuge, err := bau.LadeTools(root)
