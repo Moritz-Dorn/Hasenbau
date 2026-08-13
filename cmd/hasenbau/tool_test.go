@@ -108,21 +108,25 @@ func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
 	}
 }
 
-// TestProbelaufMachtActualUndErlaubtRelease haelt die Reihenfolge fest:
-// gelesen -> gezeigt -> verschoben. Vorher geht release nicht.
-func TestProbelaufMachtActualUndErlaubtRelease(t *testing.T) {
+// TestProbelaufAlleinMachtNichtActual haelt die Asymmetrie fest, auf
+// die Moritz am 2026-08-13 hingewiesen hat: ein FEHLSCHLAG widerlegt,
+// ein ERFOLG bestaetigt nicht. Exit 0 heisst "es lief", nicht "es
+// stimmt" — und `actual` heisst nach ValIntent "verifiziert und
+// entspricht der Realitaet". Ob die Ausgabe richtig war, sieht nur ein
+// Mensch, und der sagt es beim Freigeben.
+func TestProbelaufAlleinMachtNichtActual(t *testing.T) {
 	root := bauMitWerkzeug(t, "heil", skriptHeil, true)
 
-	// release vor dem Probelauf: abgelehnt, denn gelesen ist nicht
-	// gezeigt.
+	// release ohne jeden Probelauf: es gaebe nichts zu beurteilen.
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code == 0 {
+	if code := run([]string{"-bau", root, "tool", "release", "-ja", "heil"}, &out, &errw); code == 0 {
 		t.Errorf("release ohne Probelauf ging durch:\n%s", out.String())
 	}
-	if !strings.Contains(errw.String(), string(bau.Hypothetical)) {
-		t.Errorf("die Ablehnung nennt den Zustand nicht:\n%s", errw.String())
+	if !strings.Contains(errw.String(), "nie gelaufen") {
+		t.Errorf("die Ablehnung nennt den Grund nicht:\n%s", errw.String())
 	}
 
+	// Probelauf besteht — und laesst den Zustand trotzdem hypothetical.
 	out.Reset()
 	errw.Reset()
 	if code := run([]string{"-bau", root, "tool", "test", "heil", "--datei", "x.txt"}, &out, &errw); code != 0 {
@@ -131,13 +135,22 @@ func TestProbelaufMachtActualUndErlaubtRelease(t *testing.T) {
 	if !strings.Contains(out.String(), "ANTWORT: x.txt") {
 		t.Errorf("stdout des Werkzeugs fehlt:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), string(bau.Actual)) {
-		t.Errorf("der Zustand actual wird nicht gemeldet:\n%s", out.String())
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Hypothetical {
+		t.Errorf("Zustand nach bestandenem Probelauf = %q, erwartet hypothetical — "+
+			"ein Erfolg ist ein Beleg, kein Urteil", werkzeuge[0].Zustand)
+	}
+	if werkzeuge[0].Einsatzbereit() {
+		t.Error("ein blosser Probelauf hat das Werkzeug einsatzbereit gemacht")
 	}
 
+	// Erst das Urteil eines Menschen macht actual.
 	out.Reset()
 	errw.Reset()
-	if code := run([]string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code != 0 {
+	if code := run([]string{"-bau", root, "tool", "release", "-ja", "heil"}, &out, &errw); code != 0 {
 		t.Fatalf("release nach dem Probelauf: exit %d — %s", code, errw.String())
 	}
 	for _, rel := range []string{"tools/heil.py", "tools/heil.json"} {
@@ -145,12 +158,45 @@ func TestProbelaufMachtActualUndErlaubtRelease(t *testing.T) {
 			t.Errorf("%s fehlt nach release: %v", rel, err)
 		}
 	}
+	werkzeuge, err = bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Actual {
+		t.Errorf("Zustand nach der Freigabe = %q, erwartet actual", werkzeuge[0].Zustand)
+	}
+	if werkzeuge[0].Review.ReleasedBy == "" {
+		t.Error("die Freigabe steht ohne Namen im Block — dann kann sie niemand verantworten")
+	}
+}
+
+// TestReleaseFragtNachDemUrteil: ohne Bestaetigung wird nichts
+// verschoben. Die Rueckfrage IST der Verifikationsakt.
+func TestReleaseFragtNachDemUrteil(t *testing.T) {
+	root := bauMitWerkzeug(t, "heil", skriptHeil, true)
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "heil", "--datei", "x"}, &out, &errw); code != 0 {
+		t.Fatalf("Probelauf: %s", errw.String())
+	}
+
+	out.Reset()
+	errw.Reset()
+	// "n" — die Ausgabe war nicht richtig.
+	if code := runMitEingabe(strings.NewReader("n\n"), []string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(out.String(), "abgebrochen") {
+		t.Errorf("ohne Bestaetigung wurde nicht abgebrochen:\n%s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "tools", "heil.py")); err == nil {
+		t.Error("trotz Ablehnung verschoben")
+	}
 	werkzeuge, err := bau.LadeTools(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !werkzeuge[0].Einsatzbereit() {
-		t.Errorf("nach release nicht einsatzbereit: %+v", werkzeuge[0].Zustand)
+	if werkzeuge[0].Zustand != bau.Hypothetical {
+		t.Errorf("Zustand = %q, erwartet hypothetical", werkzeuge[0].Zustand)
 	}
 }
 

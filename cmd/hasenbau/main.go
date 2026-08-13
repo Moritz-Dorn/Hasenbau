@@ -74,6 +74,13 @@ func main() {
 }
 
 func run(args []string, out, errw io.Writer) int {
+	return runMitEingabe(os.Stdin, args, out, errw)
+}
+
+// runMitEingabe ist run mit austauschbarer Eingabe — die interaktiven
+// Befehle (`tool release`, `provider fetch`) sind sonst nicht prüfbar,
+// und gerade bei ihnen hängt etwas an der Rückfrage.
+func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("hasenbau", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	bauFlag := fs.String("bau", ".", "Root des Baus")
@@ -135,9 +142,9 @@ func run(args []string, out, errw io.Writer) int {
 	case "new":
 		return cmdNew(bau, rest[1:], out, errw)
 	case "tool":
-		return cmdTool(bau, rest[1:], os.Stdin, out, errw)
+		return cmdTool(bau, rest[1:], in, out, errw)
 	case "provider":
-		return cmdProvider(bau, rest[1:], os.Stdin, out, errw)
+		return cmdProvider(bau, rest[1:], in, out, errw)
 	case "status":
 		return cmdStatus(bau, out, errw)
 	case "mcp":

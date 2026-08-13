@@ -70,6 +70,10 @@ func TestGeaendertesSkriptWirdOutdated(t *testing.T) {
 	rev.VerifiedAt = "2026-08-13T08:05:00Z"
 	rev.VerifiedWith = "--datei a.txt"
 	rev.VerifiedExit = &null
+	// Erst die Freigabe durch einen Menschen macht actual — der
+	// bestandene Probelauf allein nicht.
+	rev.ReleasedBy = "Moritz Dorn"
+	rev.ReleasedAt = "2026-08-13T08:06:00Z"
 	mitBlock := SchreibeReviewBlock(rev, skriptOhneReview)
 
 	r, body := LiesReview([]byte(mitBlock))
@@ -189,5 +193,28 @@ func TestReviewBlockInSlashKommentaren(t *testing.T) {
 	}
 	if r.Kommentar != "//" {
 		t.Errorf("Kommentarzeichen = %q, erwartet //", r.Kommentar)
+	}
+}
+
+// TestBestandenerProbelaufBleibtHypothetical: die Asymmetrie, auf die
+// Moritz hingewiesen hat. Ein Fehlschlag widerlegt (das kann eine
+// Maschine feststellen), ein Erfolg bestaetigt nicht — Exit 0 heisst
+// "es lief", nicht "es stimmt".
+func TestBestandenerProbelaufBleibtHypothetical(t *testing.T) {
+	rev := beispielReview()
+	null := 0
+	rev.VerifiedAt = "2026-08-13T08:05:00Z"
+	rev.VerifiedExit = &null
+	r, body := LiesReview([]byte(SchreibeReviewBlock(rev, skriptOhneReview)))
+	if z := LeiteZustandAb(r, body); z != Hypothetical {
+		t.Errorf("Zustand = %q, erwartet hypothetical — ein Erfolg ist ein Beleg, kein Urteil", z)
+	}
+
+	// Und ein Fehlschlag widerlegt sehr wohl, auch ohne Menschen.
+	eins := 1
+	rev.VerifiedExit = &eins
+	r2, body2 := LiesReview([]byte(SchreibeReviewBlock(rev, skriptOhneReview)))
+	if z := LeiteZustandAb(r2, body2); z != Invalid {
+		t.Errorf("Zustand nach Fehlschlag = %q, erwartet invalid", z)
 	}
 }

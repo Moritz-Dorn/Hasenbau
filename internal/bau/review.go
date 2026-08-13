@@ -14,11 +14,21 @@
 //
 //	generated     Der Schmied hat geschrieben, niemand hat gelesen.
 //	hypothetical  Ein Mensch behauptet, was es tut und warum es
-//	              unbedenklich ist — behauptet, nicht gezeigt
-//	              („assumed" in der ValIntent-Liste).
-//	actual        Ein Probelauf hat das Verhalten gezeigt.
+//	              unbedenklich ist — behauptet, nicht bestätigt
+//	              („assumed" in der ValIntent-Liste). Ein bestandener
+//	              Probelauf ändert daran nichts: er ist Beleg, nicht
+//	              Urteil.
+//	actual        Ein Mensch hat die Ausgabe gesehen und für richtig
+//	              befunden — „verifiziert und entspricht der Realität".
 //	invalid       Der Probelauf hat die Behauptung widerlegt.
 //	outdated      War geprüft, dann hat jemand die Datei geändert.
+//
+// Die Asymmetrie zwischen `invalid` und `actual` ist Absicht: ein
+// Fehlschlag WIDERLEGT (das kann eine Maschine feststellen), ein Erfolg
+// BESTÄTIGT NICHT. Exit 0 heißt „es lief", nicht „es stimmt" — ob 24
+// die richtige Zeilenzahl war, sieht nur ein Mensch. Diese Fassung
+// stammt von Moritz; die vorige setzte `actual` beim Probelauf und
+// verwechselte damit Beleg und Urteil.
 //
 // `outdated` fällt mit der Hash-Bindung zusammen, und das ist kein
 // Zufall: die Definition lautet „war actual, Re-Verifikation
@@ -52,9 +62,9 @@ const (
 func (z Zustand) Erklaerung() string {
 	switch z {
 	case Actual:
-		return "gelesen und im Probelauf gezeigt"
+		return "gelesen, gelaufen, und ein Mensch hat die Ausgabe für richtig befunden"
 	case Hypothetical:
-		return "gelesen, aber nicht ausgeführt"
+		return "gelesen, aber noch nicht als richtig bestätigt"
 	case Invalid:
 		return "der Probelauf ist gescheitert"
 	case Outdated:
@@ -88,6 +98,17 @@ type Review struct {
 	VerifiedAt   string
 	VerifiedWith string
 	VerifiedExit *int
+
+	// ReleasedBy und ReleasedAt hält fest, wer die Ausgabe des
+	// Probelaufs für richtig befunden und das Werkzeug freigegeben hat.
+	//
+	// Erst das macht `actual`. Ein bestandener Probelauf allein tut es
+	// NICHT: Exit 0 heißt „es lief", nicht „es stimmt", und `actual`
+	// heißt nach der Intentionssemantik „verifiziert und entspricht der
+	// Realität". Ob 24 die richtige Zeilenzahl war, kann kein Exit-Code
+	// wissen — das sieht nur ein Mensch.
+	ReleasedBy string
+	ReleasedAt string
 
 	// ValIntent ist der Zustand, wie er beim Schreiben des Blocks
 	// galt — für Menschen und fremde Werkzeuge, die die Datei lesen,
@@ -214,6 +235,8 @@ func parseReviewBlock(block []string) Review {
 		Safe:         werte["safe-because"],
 		VerifiedAt:   werte["verified-at"],
 		VerifiedWith: werte["verified-with"],
+		ReleasedBy:   werte["released-by"],
+		ReleasedAt:   werte["released-at"],
 		ValIntent:    werte["valintent"],
 	}
 	if v, da := werte["verified-exit"]; da {
@@ -248,6 +271,13 @@ func BodyHash(body string) string {
 }
 
 // LeiteZustandAb rechnet den ValIntent-Wert aus Block und Body aus.
+// LeiteZustandAb rechnet den ValIntent-Wert aus Block und Body aus.
+//
+// Die Reihenfolge trägt die Bedeutung, und die Asymmetrie in der Mitte
+// ist der Kern: ein FEHLGESCHLAGENER Probelauf widerlegt die Behauptung
+// des Reviewers (`invalid`) — ein bestandener bestätigt sie NICHT. Exit
+// 0 heißt „es lief", nicht „es stimmt". Ob die Ausgabe der Realität
+// entspricht, sieht nur ein Mensch, und der sagt es beim Freigeben.
 func LeiteZustandAb(r Review, body string) Zustand {
 	if r.Hash == "" || r.Fehler != "" {
 		return Generated
@@ -255,13 +285,13 @@ func LeiteZustandAb(r Review, body string) Zustand {
 	if r.Hash != BodyHash(body) {
 		return Outdated
 	}
-	if r.VerifiedExit == nil {
-		return Hypothetical
-	}
-	if *r.VerifiedExit != 0 {
+	if r.VerifiedExit != nil && *r.VerifiedExit != 0 {
 		return Invalid
 	}
-	return Actual
+	if r.ReleasedBy != "" {
+		return Actual
+	}
+	return Hypothetical
 }
 
 // SchreibeReviewBlock baut den Block. Er wird IMMER hier erzeugt und
@@ -294,6 +324,10 @@ func SchreibeReviewBlock(r Review, body string) string {
 		if r.VerifiedExit != nil {
 			fmt.Fprintf(&b, "%s verified-exit: %d\n", k, *r.VerifiedExit)
 		}
+	}
+	if r.ReleasedBy != "" {
+		fmt.Fprintf(&b, "%s released-by: %s\n", k, einzeilig(r.ReleasedBy))
+		fmt.Fprintf(&b, "%s released-at: %s\n", k, einzeilig(r.ReleasedAt))
 	}
 	// Zuletzt der Zustand, der sich aus allem darüber ergibt. Er steht
 	// bewusst am Ende: er ist die Zusammenfassung der Belege, nicht ihr

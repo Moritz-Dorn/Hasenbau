@@ -43,6 +43,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -66,9 +67,15 @@ Die drei Verben sind eine Reihenfolge, keine Auswahl. Ein Werkzeug
 durchläuft sie in dieser Folge, und jeder Schritt setzt den vorigen
 voraus:
 
-  generated  → review →  hypothetical → test →  actual → release
-  geschrieben,           behauptet,             gezeigt,
-  ungelesen              nicht gezeigt          einsetzbar
+  generated → review → hypothetical → test → hypothetical → release → actual
+  geschrieben,          behauptet;                 mit Beleg;             ein Mensch
+  ungelesen             ein Probelauf              der Probelauf          hat die Ausgabe
+                        fehlt noch                 belegt, er urteilt     für richtig
+                                                   nicht                  befunden
+
+Ein FEHLGESCHLAGENER Probelauf macht invalid — der widerlegt. Ein
+bestandener macht NICHT actual: Exit 0 heißt „es lief", nicht „es
+stimmt". Ob die Ausgabe der Realität entspricht, sieht nur ein Mensch.
 
 ` + "`test`" + ` verlangt ein Review, weil er das Skript AUSFÜHRT — mit deinen
 Rechten und ohne Sandkasten. Er findet Fehler, keine Absichten; gegen
@@ -94,11 +101,17 @@ func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int 
 	case "review":
 		return toolReview(root, args[1:], in, out, errw)
 	case "release":
-		if len(args) != 2 {
-			fmt.Fprintln(errw, "Aufruf: hasenbau tool release <name>")
+		fs := flag.NewFlagSet("tool release", flag.ContinueOnError)
+		fs.SetOutput(errw)
+		ja := fs.Bool("ja", false, "die Rückfrage überspringen (für Skripte)")
+		if err := fs.Parse(args[1:]); err != nil {
 			return 2
 		}
-		return toolRelease(root, args[1], out, errw)
+		if fs.NArg() != 1 {
+			fmt.Fprintln(errw, "Aufruf: hasenbau tool release [-ja] <name>")
+			return 2
+		}
+		return toolRelease(root, fs.Arg(0), *ja, in, out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau tool: unbekanntes Verb %q\n\n%s", args[0], toolUsage)
 		return 2
@@ -223,10 +236,14 @@ func toolTest(root, name string, rest []string, out, errw io.Writer) int {
 	}
 	fmt.Fprintf(out, "\nZustand: %s — %s\n", zustand, zustand.Erklaerung())
 	switch zustand {
-	case bau.Actual:
-		fmt.Fprintln(out, "Ob das Ergebnis STIMMT, sagt dir kein Befehl — das bleibt dein Urteil.")
+	case bau.Hypothetical:
+		// Bewusst KEIN actual. Der Probelauf zeigt, dass es lief, nicht
+		// dass es stimmt — das Urteil über die Ausgabe fällt beim
+		// Freigeben, und zwar ein Mensch.
+		fmt.Fprintln(out, "Der Probelauf ist ein Beleg, kein Urteil: er zeigt, dass es lief,")
+		fmt.Fprintln(out, "nicht dass die Ausgabe oben richtig ist. Das entscheidest du.")
 		if gefunden.Entwurf {
-			fmt.Fprintf(out, "\n  hasenbau tool release %s   — nach %s/ verschieben\n", gefunden.Name, bau.ToolsDir)
+			fmt.Fprintf(out, "\n  hasenbau tool release %s   — wenn die Ausgabe stimmt\n", gefunden.Name)
 		}
 	case bau.Invalid:
 		fmt.Fprintln(out, "Kein Hase bekommt es, solange das so bleibt.")
@@ -566,7 +583,7 @@ func gitName(root string) string {
 
 // toolRelease ist der dritte Schritt und der einzige, der etwas
 // verschiebt. Er verlangt `actual` — gelesen UND gezeigt.
-func toolRelease(root, name string, out, errw io.Writer) int {
+func toolRelease(root, name string, ja bool, in io.Reader, out, errw io.Writer) int {
 	werkzeuge, err := bau.LadeTools(root)
 	if err != nil {
 		fmt.Fprintln(errw, err)
@@ -582,19 +599,61 @@ func toolRelease(root, name string, out, errw io.Writer) int {
 		fmt.Fprintf(errw, "hasenbau tool release: kein Entwurf %q\n%s", name, vorhandene(werkzeuge))
 		return 1
 	}
-	if t.Zustand != bau.Actual {
+	if t.Zustand != bau.Hypothetical {
 		fmt.Fprintf(errw, "hasenbau tool release: %s ist %s — %s\n", name, t.Zustand, t.Zustand.Erklaerung())
 		switch t.Zustand {
-		case bau.Hypothetical:
-			fmt.Fprintf(errw, "\nGelesen ist nicht gezeigt:\n  hasenbau tool test %s …\n", name)
 		case bau.Invalid:
 			fmt.Fprintln(errw, "\nDer Probelauf ist gescheitert. Erst reparieren, dann neu lesen.")
+		case bau.Actual:
+			fmt.Fprintln(errw, "\nEs ist bereits freigegeben.")
 		default:
 			fmt.Fprintf(errw, "\n  hasenbau tool review %s\n", name)
 		}
 		return 1
 	}
+	// Ein Probelauf muss stattgefunden haben — sonst gäbe es nichts, was
+	// der Mensch beurteilen könnte.
+	if t.Review.VerifiedExit == nil {
+		fmt.Fprintf(errw, "hasenbau tool release: %s ist nie gelaufen.\n", name)
+		fmt.Fprintf(errw, "Freigeben heißt zu bestätigen, dass die Ausgabe stimmt — dafür muss es eine geben.\n")
+		fmt.Fprintf(errw, "\n  hasenbau tool test %s", name)
+		for _, a := range t.Args {
+			if a.Pflicht {
+				fmt.Fprintf(errw, " --%s <%s>", a.Name, a.Typ)
+			}
+		}
+		fmt.Fprintln(errw)
+		return 1
+	}
 
+	// Der eigentliche Verifikationsakt: nicht das Verschieben, sondern
+	// das Urteil über die Ausgabe. `actual` heißt „entspricht der
+	// Realität", und das kann nur ein Mensch feststellen.
+	fmt.Fprintf(out, "%s (%s, %d Zeilen)\n", t.Name, t.Skript, t.Zeilen)
+	fmt.Fprintf(out, "gelesen von %s: %s\n", t.Review.By, t.Review.Does)
+	fmt.Fprintf(out, "Probelauf am %s mit %s, Exit 0\n", t.Review.VerifiedAt, t.Review.VerifiedWith)
+	if !ja {
+		fmt.Fprintf(out, "\nWar die Ausgabe dieses Probelaufs richtig? [j/N] ")
+		antwort, _ := bufio.NewReader(in).ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(antwort)) {
+		case "j", "ja", "y", "yes":
+		default:
+			fmt.Fprintln(out, "abgebrochen, nichts verschoben")
+			return 0
+		}
+	}
+	freigeber := gitName(root)
+	if freigeber == "" {
+		freigeber = "unbekannt"
+	}
+
+	// Erst das Urteil in die Datei, dann verschieben: bricht das
+	// Verschieben ab, steht der Freigeber wenigstens im Entwurf und
+	// niemand muss noch einmal lesen.
+	if err := vermerkeFreigabe(root, t, freigeber); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
 	for _, quelle := range []string{t.Skript, t.Manifest} {
 		ziel := filepath.Join(bau.ToolsDir, filepath.Base(quelle))
 		if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
@@ -607,7 +666,8 @@ func toolRelease(root, name string, out, errw io.Writer) int {
 		}
 		fmt.Fprintf(out, "verschoben: %s → %s\n", quelle, ziel)
 	}
-	fmt.Fprintf(out, "\n%s ist freigegeben. Es wird beim nächsten Server-Start registriert —\n", name)
+	fmt.Fprintf(out, "\n%s ist %s — %s\n", name, bau.Actual, bau.Actual.Erklaerung())
+	fmt.Fprintf(out, "Es wird beim nächsten Server-Start registriert —\n")
 	fmt.Fprintln(out, "und nur dann, wenn der Hash dann noch zum Review passt.")
 	fmt.Fprintf(out, "Bekommen tut es ein Hase erst, wenn ein Auftrag es in seinem `tools:` nennt.\n")
 	return 0
@@ -712,4 +772,23 @@ func describeTool(root, name string, out, errw io.Writer) int {
 	}
 	fmt.Fprintf(out, "\nLesen: hasenbau tool review %s\n", t.Name)
 	return 0
+}
+
+// vermerkeFreigabe trägt ein, wer die Ausgabe für richtig befunden hat.
+// Genau dieser Eintrag macht `actual` — nicht das Verschieben und nicht
+// der Exit-Code des Probelaufs.
+func vermerkeFreigabe(root string, t *bau.Tool, wer string) error {
+	pfad := filepath.Join(root, t.Skript)
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		return err
+	}
+	review, body := bau.LiesReview(roh)
+	review.ReleasedBy = wer
+	review.ReleasedAt = bau.JetztStempel()
+	info, err := os.Stat(pfad)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(pfad, []byte(bau.SchreibeReviewBlock(review, body)), info.Mode().Perm())
 }
