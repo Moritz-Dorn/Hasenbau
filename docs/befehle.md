@@ -4,7 +4,7 @@ Die vollständige Referenz. Die Kurzfassung steht im
 [README](../README.md#befehle); jeder Befehl kennt außerdem
 `hasenbau <befehl>` ohne Argumente als Hilfe.
 
-Jeder Befehl braucht den Bau: entweder `-bau ~/meinbau` **vor** dem
+Jeder Befehl braucht den Bau: entweder `-bau ~/meinbau` vor dem
 Unterbefehl oder einmal `cd ~/meinbau`, denn der Vorgabewert ist das
 aktuelle Verzeichnis.
 
@@ -28,10 +28,10 @@ hasenbau lauf <auftrag> [datei]  # Auftrag manuell triggern
 hasenbau baumeister [-finding N] <ziel>   # Baumeister ansetzen
 ```
 
-Das zweite Argument von `lauf` ist der Auslöser — bei einem
-watch-Auftrag die Datei, die sonst der Watcher gefunden hätte
-(`$TRIGGER_FILE`). Gänge laufen mit dem Bau-Root als
-Arbeitsverzeichnis, der Pfad ist deshalb Bau-relativ.
+Das zweite Argument von `lauf` ist der Auslöser, bei einem watch-Auftrag
+also die Datei, die sonst der Watcher gefunden hätte (`$TRIGGER_FILE`).
+Gänge laufen mit dem Bau-Root als Arbeitsverzeichnis, der Pfad ist
+deshalb Bau-relativ.
 
 ## Nachsehen
 
@@ -62,20 +62,19 @@ hasenbau status            # Dashboard: was liegt hier, was ist passiert
 
 ### Die Verben
 
-Die lesenden Befehle folgen dem Vorbild von `kubectl`: **`get`** zeigt
-eine Zeile pro Objekt, **`describe`** ein Objekt im Detail samt allem,
-was der Hasenbau darüber weiß — bei einem Lauf also auch die Notizen aus
-dem Rückkanal. `describe` ist dabei kein `cat`: Dateien werden nie im
-Volltext ausgegeben, wohl aber ihr Pfad genannt. `new` legt ein Objekt
-an. Die Verben zum Auslösen — `lauf`, `baumeister`, `daemon` — bleiben
-davon unberührt.
+Die lesenden Befehle folgen dem Vorbild von `kubectl`. `get` zeigt eine
+Zeile pro Objekt, `describe` ein Objekt im Detail samt allem, was der
+Hasenbau darüber weiß, bei einem Lauf also auch die Notizen aus dem
+Rückkanal. `describe` ist kein `cat`: Dateien werden nie im Volltext
+ausgegeben, wohl aber ihr Pfad genannt. `new` legt ein Objekt an. Die
+Verben zum Auslösen (`lauf`, `baumeister`, `daemon`) bleiben davon
+unberührt.
 
-Zwei Fragen, zwei Befehle: **`describe bau`** prüft (Layout, Git-Commit,
-Bau-Config, Rückkanal-Binary, generierte Agenten, liegengebliebene
-`$WORK`-Reste), **`status`** zeigt nur. Am meisten wert sind dabei die
-zwei unauffälligsten Prüfungen: der Root-Commit und der
-Rückkanal-Eintrag — zeigt der auf ein verschwundenes Binary, nimmt er
-den Hasen still ihre Werkzeuge weg.
+`describe bau` prüft: Layout, Git-Commit, Bau-Config, Rückkanal-Binary,
+generierte Agenten, liegengebliebene `$WORK`-Reste. `status` zeigt nur.
+Die beiden unauffälligen Prüfungen tragen am weitesten, der Root-Commit
+und der Rückkanal-Eintrag: zeigt der auf ein verschwundenes Binary, nimmt
+er den Hasen still ihre Werkzeuge weg.
 
 ## Verdichten
 
@@ -95,8 +94,8 @@ hasenbau tool test <name> -no-sandbox …    # dasselbe unter Ernstfall-Bedingun
 hasenbau tool release <name>               # Ausgabe bestätigen und freigeben (macht actual)
 ```
 
-Die drei Verben sind eine Reihenfolge, keine Auswahl — warum, steht in
-[Werkzeuge](werkzeuge.md).
+Die drei Verben laufen in dieser Reihenfolge, jeder Schritt setzt den
+vorigen voraus. Warum, steht in [Werkzeuge](werkzeuge.md).
 
 ## Provider
 
