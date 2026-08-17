@@ -78,7 +78,7 @@ Description=Hasenbau
 After=network.target
 
 [Service]
-ExecStart=%h/bin/hasenbau -bau %h/meinbau daemon
+ExecStart=%h/go/bin/hasenbau -bau %h/meinbau daemon
 Environment=PATH=%h/.opencode/bin:/usr/local/bin:/usr/bin:/bin
 Restart=on-failure
 

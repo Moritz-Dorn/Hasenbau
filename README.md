@@ -41,10 +41,11 @@ output in this README is verbatim.
 sandbox, `pdftotext` (poppler) for the reference Auftrag.
 
 ```bash
-git clone git@github.com:Moritz-Dorn/Hasenbau.git
-cd Hasenbau
-go build -o ~/bin/hasenbau ./cmd/hasenbau
+go install github.com/Moritz-Dorn/Hasenbau/cmd/hasenbau@latest
 ```
+
+That puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin` —
+that directory has to be in the PATH.
 
 ## Your first Bau
 

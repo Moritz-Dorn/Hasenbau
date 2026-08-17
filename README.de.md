@@ -35,10 +35,11 @@ Ende-zu-Ende. Wie die Teile zusammenstecken, steht in
 Werkzeug-Sandbox, `pdftotext` (poppler) für den Referenz-Auftrag.
 
 ```bash
-git clone git@github.com:Moritz-Dorn/Hasenbau.git
-cd Hasenbau
-go build -o ~/bin/hasenbau ./cmd/hasenbau
+go install github.com/Moritz-Dorn/Hasenbau/cmd/hasenbau@latest
 ```
+
+Die Binärdatei landet in `$(go env GOPATH)/bin`, meist `~/go/bin` —
+dieses Verzeichnis muss im PATH liegen.
 
 ## Der erste Bau
 
