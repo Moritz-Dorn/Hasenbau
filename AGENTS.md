@@ -78,6 +78,20 @@ im selben Arbeitsgang, nicht „später":
   ein Nutzer sieht) und das Gerüst in `cmd/hasenbau/new.go` (neue
   Frontmatter-Felder auskommentiert eintragen). Berührt die Änderung ein
   Feld, einen Befehl oder eine Ausgabe, sind alle drei fällig.
+- Nutzer-Doku steht doppelt: `README.md` und `docs/` sind englisch,
+  `README.de.md` und `docs/de/` sind die deutsche Übersetzung.
+  Maßgeblich ist die englische Fassung. Drei Regeln, die zusammen
+  verhindern, dass der Spiegel abdriftet:
+  - Beide Bäume tragen **dieselben, englischen Dateinamen** (`hasen.md`
+    bleibt `hasen.md`, weil Hase der Begriff ist). Damit ist der Link
+    zur anderen Fassung immer `../<gleicher-name>.md` und weder zu
+    vergessen noch zu verwechseln.
+  - Wer die eine Fassung anfasst, zieht die andere **im selben Commit**
+    mit; eine neue Seite entsteht in beiden Bäumen oder in keinem.
+  - Jede Seite trägt oben eine Sprachzeile: im README unter den Badges,
+    sonst direkt unter der H1. Die deutsche nennt zusätzlich die
+    englische Fassung als maßgeblich. Muster steht in jeder
+    vorhandenen Datei.
 - **Push weiterhin nur auf ausdrückliche Aufforderung.**
 - Eigenheit: Der Beads-pre-commit-Hook exportiert `.beads/issues.jsonl`
   *während* des Commits — bleibt die Datei danach modified, gehört sie
@@ -108,10 +122,19 @@ Domänen-Nomen** — `StartLauf`, `EndLauf`, `LaufByID`, `RecentLaeufe`,
 `RunGaenge`, `last_lauf`. Das ist keine Nachlässigkeit, sondern die
 Folge daraus, dass die Fachsprache deutsch bleibt und der Rest nicht.
 
-Ausgenommen bleibt **Prosa**: Kommentare, PLAN.md, README, die
+Ausgenommen bleibt **Prosa**: Kommentare, PLAN.md, AGENTS.md, die
 Meldungstexte der CLI und Testfunktionsnamen sind deutsch. Die
 Zustandswerte eines Laufs (`running`, `ok`, `failed`, `aborted`) sind
 Daten, keine Prosa — sie stehen englisch in der DB und in der Ausgabe.
+
+**Die Nutzer-Doku ist die Ausnahme von der Ausnahme**: `README.md`,
+`docs/` und `beispiele/README.md` sind englisch, weil GitHub `README.md`
+als Vorgabe rendert; die deutsche Fassung steht daneben (`README.de.md`,
+`docs/de/`). Das Vokabular oben bleibt auch im englischen Text deutsch:
+es ist derselbe Satz Begriffe, der im Code steht, und eine Doku, die
+`Lauf` zu `run` übersetzt, beschreibt ein anderes System als das, was
+`hasenbau get laeufe` heißt. Intern (PLAN.md, AGENTS.md, Beads) bleibt
+alles deutsch.
 
 **Auch Beads sind Prosa.** Ein deutscher Feldname in einem Bead-Titel
 ist eine Beschreibung, kein Spec — für den Formatschlüssel gilt die

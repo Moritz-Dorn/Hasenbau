@@ -1,16 +1,19 @@
-# Hasenbau 🐇: die Hasen arbeiten nachts, du liest morgens nach
+# Hasenbau 🐇: the rabbits work at night, you read up in the morning
 
 [![license](https://img.shields.io/badge/license-EUPL--1.2-blue?style=flat-square)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square&logo=go&logoColor=white)](go.mod)
-[![Plattform](https://img.shields.io/badge/Plattform-Linux-lightgrey?style=flat-square)](#install)
+[![platform](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square)](#install)
 
-Ein Daemon, der [opencode](https://opencode.ai) headless orchestriert:
-zeitgesteuerte und dateigetriggerte Agenten-Aufträge mit deterministischer
-Vorverarbeitung, lokal, ein Binary, kein Cloud-Dienst. Für wiederkehrende
-Arbeit, bei der niemand danebensitzen soll.
+**English** · [Deutsch](README.de.md)
 
-Ein Auftrag ist eine Datei. Diese hier wartet auf PDFs, wandelt sie ohne
-Modell nach Markdown und gibt erst das Ergebnis an den Hasen:
+A daemon that orchestrates [opencode](https://opencode.ai) headless:
+scheduled and file-triggered agent jobs with deterministic
+preprocessing, local, one binary, no cloud service. For recurring work
+that nobody should have to sit through.
+
+An Auftrag (job) is a file. This one waits for PDFs, converts them to
+Markdown without a model, and only hands the result to the Hase (the
+agent):
 
 ```yaml
 trigger:  {watch: "*.pdf", debounce: 5s}
@@ -21,16 +24,21 @@ context:  [{file: $WORK/extrakt.md}, {last_summaries: 3}]
 after:    [{move: $TRIGGER_FILE -> raeume/archiv/}]
 ```
 
-Ungekürzt liegt er in
-[`beispiele/`](beispiele/auftraege/pdf-einlagern.md) und läuft
-Ende-zu-Ende. Wie die Teile zusammenstecken, steht in
-[docs/architektur.md](docs/architektur.md), das Warum in
+The full version lives in
+[`beispiele/`](beispiele/auftraege/pdf-einlagern.md) and runs
+end to end. How the parts fit together is in
+[docs/architecture.md](docs/architecture.md), the reasoning in
 [`PLAN.md`](PLAN.md).
+
+The vocabulary stays German, in this document as well as in the code:
+Bau, Raum, Hase, Gang, Auftrag, Lauf. There is a glossary
+[below](#vocabulary), and the CLI speaks German too, so the sample
+output in this README is verbatim.
 
 ## Install
 
-`opencode` muss im PATH sein, `bwrap` (bubblewrap) für die
-Werkzeug-Sandbox, `pdftotext` (poppler) für den Referenz-Auftrag.
+`opencode` has to be in the PATH, `bwrap` (bubblewrap) for the tool
+sandbox, `pdftotext` (poppler) for the reference Auftrag.
 
 ```bash
 git clone git@github.com:Moritz-Dorn/Hasenbau.git
@@ -38,36 +46,36 @@ cd Hasenbau
 go build -o ~/bin/hasenbau ./cmd/hasenbau
 ```
 
-## Der erste Bau
+## Your first Bau
 
-Der Bau liegt außerhalb dieses Repos: ein Hase liest die `AGENTS.md` in
-seinem Arbeitsverzeichnis, und die hier gehört zum Bauen des Hasenbaus,
-nicht zum Einsortieren von PDFs.
+A Bau lives outside this repository: a Hase reads the `AGENTS.md` in its
+working directory, and the one here is about building Hasenbau, not
+about filing PDFs.
 
-### 1. Bau anlegen
+### 1. Create the Bau
 
 ```bash
 hasenbau init ~/meinbau
 cd ~/meinbau
 ```
 
-Das legt das Layout an, schreibt die beiden Sonder-Hasen (Baumeister und
-Schmied, je als Auftrag und Hase) sowie den Sandbox-Wächter hinein, macht
-den Bau zu einem Git-Repo mit Root-Commit und trägt den Rückkanal in die
-Bau-Config ein. Jeder weitere Befehl braucht den Bau: entweder `-bau
-~/meinbau` vor dem Unterbefehl oder einmal `cd`, denn der Vorgabewert ist
-das aktuelle Verzeichnis.
+That creates the layout, writes the two special Hasen (Baumeister and
+Schmied, each as an Auftrag and a Hase) plus the sandbox guard, turns the
+Bau into a Git repository with a root commit, and registers the back
+channel in the Bau config. Every further command needs the Bau: either
+`-bau ~/meinbau` in front of the subcommand or one `cd`, since the
+default is the current directory.
 
-### 2. Provider eintragen
+### 2. Register a provider
 
-Ein Bau bringt seine Provider selbst mit; `auth.json` teilt nur die
-Schlüssel, nicht die Definitionen. Das Gerüst gehört von Hand in den
-`provider:`-Block von `.opencode-home/opencode/opencode.json`. Vorlage
-und Begründung stehen in
-[docs/architektur.md](docs/architektur.md#provider-im-bau), die
-Modell-Liste holt danach `hasenbau provider fetch <id>`.
+A Bau brings its own providers; `auth.json` only shares the keys, not the
+definitions. The scaffold goes into the `provider:` block of
+`.opencode-home/opencode/opencode.json` by hand. Template and reasoning
+are in
+[docs/architecture.md](docs/architecture.md#providers-in-a-bau); the
+model list is then fetched by `hasenbau provider fetch <id>`.
 
-### 3. Den Referenz-Auftrag übernehmen
+### 3. Take over the reference Auftrag
 
 ```bash
 cp -f <hasenbau-repo>/beispiele/auftraege/pdf-einlagern.md auftraege/
@@ -75,31 +83,31 @@ cp -f <hasenbau-repo>/beispiele/hasen/archivar.md          hasen/
 cp -f <hasenbau-repo>/beispiele/gaenge/pdf_to_md.py        gaenge/
 ```
 
-Ein Handgriff bleibt: das `model:` in `hasen/archivar.md` muss auf ein
-Modell zeigen, das der Bau aus Schritt 2 kennt.
+One thing is left to do by hand: the `model:` in `hasen/archivar.md` has
+to point at a model the Bau knows about from step 2.
 
-### 4. Nachsehen, ob alles steht
+### 4. Check that everything stands
 
 ```bash
 hasenbau describe bau
 ```
 
-Genau ein Punkt darf hier offen sein:
+Exactly one item may be open here:
 
 ```
 PRÜFEN  Agenten        nicht generiert: pdf-einlagern__archivar
                        → der nächste Daemon- oder Lauf-Start schreibt sie
 ```
 
-Das ist die Reihenfolge: den Agenten erzeugt der Hasenbau, wenn er die
-Definitionen lädt. Layout, Git-Commit, Bau-Config und Rückkanal-Binary
-müssen `ok` sein; das sind die Dinge, die man sonst erst an einem Lauf
-merkt, der komisch aussieht.
+That is the order of things: Hasenbau generates the agents when it loads
+the definitions. Layout, Git commit, Bau config and back channel binary
+have to be `ok`; those are the things you otherwise only notice from a
+Lauf that looks odd.
 
-### 5. Der erste Lauf, von Hand
+### 5. The first Lauf, by hand
 
-Erst einen gezielten Lauf, dann die Trigger, so sieht man den Fehler am
-Auftrag und nicht am Daemon:
+A targeted Lauf first, triggers afterwards, so that you see the mistake
+in the Auftrag rather than in the daemon:
 
 ```bash
 mkdir -p raeume/laderampe/sources
@@ -107,139 +115,142 @@ cp -f ~/irgendwas.pdf raeume/laderampe/sources/
 hasenbau lauf pdf-einlagern raeume/laderampe/sources/irgendwas.pdf
 ```
 
-Das `mkdir` ist nur beim allerersten Mal nötig: `raeume/` ist nach `init`
-leer, angelegt wird beim Lauf, was der Auftrag nennt. Das zweite Argument
-ist der Auslöser, also die Datei, die sonst der Watcher gefunden hätte
-(`$TRIGGER_FILE`), Bau-relativ wie das Arbeitsverzeichnis der Gänge.
+The `mkdir` is only needed the very first time: `raeume/` is empty after
+`init`, and a Lauf creates what the Auftrag names. The second argument is
+the trigger, meaning the file the watcher would otherwise have found
+(`$TRIGGER_FILE`), relative to the Bau like the working directory of the
+Gänge.
 
-### 6. Ansehen, was passiert ist
+### 6. Look at what happened
 
 ```bash
-hasenbau get laeufe            # eine Zeile je Lauf: Status, Dauer, Kosten
-hasenbau describe lauf <id>    # Notizen aus dem Rückkanal, Fehler, Tool-Calls
+hasenbau get laeufe            # one line per Lauf: status, duration, cost
+hasenbau describe lauf <id>    # notes from the back channel, errors, tool calls
 ```
 
-Ging der Lauf schief, steht der Grund in `describe lauf`, und das
-`$WORK`-Verzeichnis bleibt absichtlich liegen, mit dem Log jedes Gangs
-darin. `describe bau` zählt solche Reste ab da als offenen Punkt: sie
-sind Nachlass zum Ansehen.
+If a Lauf went wrong, the reason is in `describe lauf`, and the `$WORK`
+directory is left behind on purpose, with the log of every Gang in it.
+From then on `describe bau` counts such leftovers as an open item: they
+are remains to look at.
 
-## Begriffe
+## Vocabulary
 
-| Begriff | Bedeutung |
+| Term | Meaning |
 |---|---|
-| Bau | Root-Verzeichnis des Systems |
-| Raum | Verzeichnis im Materialfluss (`laderampe/`, `lager/`, `archiv/`, `quarantaene/`) |
-| Gang | Deterministisches Skript, läuft vor dem Hasen. Kein LLM |
-| Hase | Template in `hasen/`; daraus generiert der Daemon pro Auftrag×Hase einen opencode-Agenten, Permissions kommen aus den Räumen des Auftrags |
+| Bau | Root directory of the system |
+| Raum | Directory in the material flow (`laderampe/`, `lager/`, `archiv/`, `quarantaene/`) |
+| Gang | Deterministic script, runs before the Hase. No LLM |
+| Hase | Template in `hasen/`; from it the daemon generates one opencode agent per Auftrag×Hase, permissions come from the Räume of the Auftrag |
 | Auftrag | Trigger + Gänge + Hase + Räume |
-| Lauf | Eine Ausführung eines Auftrags |
+| Lauf | One execution of an Auftrag |
 
-Ein „Bau" ist eine mit `hasenbau init` erzeugte Instanz, nicht dieses
-Repo.
+A "Bau" is an instance created by `hasenbau init`, not this repository.
 
-## Im Alltag
+## Day to day
 
-`hasenbau daemon` schaltet die Trigger scharf (cron + watch) und läuft im
-Vordergrund, mit dem Log auf stderr. Beendet wird er mit Ctrl-C oder
-`SIGTERM`; er meldet `sauber beendet` und geht mit 0. Ein Lauf, der dabei
-mitten in der Arbeit ist, wird als `aborted` geschlossen; sein
-`$WORK`-Verzeichnis bleibt liegen, `describe bau` erinnert später daran.
+`hasenbau daemon` arms the triggers (cron + watch) and runs in the
+foreground, with the log on stderr. It stops on Ctrl-C or `SIGTERM`,
+reports `sauber beendet` and exits with 0. A Lauf that is in the middle
+of its work is closed as `aborted`; its `$WORK` directory stays, and
+`describe bau` reminds you of it later.
 
-Definitionen liest der Daemon beim Start. Wer an `auftraege/`, `hasen/`
-oder `hasenbau.yaml` etwas ändert, startet ihn neu; Material in den
-Räumen ist davon nicht betroffen, das ist ja der Trigger.
+The daemon reads the definitions at startup. Change anything in
+`auftraege/`, `hasen/` or `hasenbau.yaml` and you restart it; material in
+the Räume is unaffected, since that is the trigger.
 
-Ein `hasenbau lauf` daneben ist erlaubt und der normale Weg, einen
-einzelnen Auftrag zu prüfen: er startet seinen eigenen opencode-Server
-auf eigenem Port, die SQLite teilen sich beide im WAL-Modus.
+A `hasenbau lauf` alongside it is allowed and the normal way to check a
+single Auftrag: it starts its own opencode server on its own port, and
+both share the SQLite database in WAL mode.
 
-Wird der Prozess hart abgeschossen (`kill -9`, Stromausfall), bleiben
-Läufe als `running` stehen. Der nächste Start räumt sie ab: lebt der
-Wirt-Prozess nicht mehr, wird die Zeile als `aborted` mit Grund
-geschlossen und steht im Log. Ein gleichzeitig laufender zweiter Hasenbau
-bleibt unangetastet.
+If the process is killed hard (`kill -9`, power loss), Läufe are left
+behind as `running`. The next start clears them out: if the host process
+is gone, the row is closed as `aborted` with a reason and shows up in the
+log. A second Hasenbau running at the same time is left alone.
 
-Dauerhaft läuft er als systemd-User-Unit, Vorlage in
-[docs/architektur.md](docs/architektur.md#als-systemd-unit). `opencode`
-muss im PATH der Unit stehen, der Daemon startet es als Kind-Prozess.
+For permanent operation it runs as a systemd user unit, template in
+[docs/architecture.md](docs/architecture.md#as-a-systemd-unit).
+`opencode` has to be in the PATH of the unit, since the daemon starts it
+as a child process.
 
 ```bash
-systemctl --user enable --now hasenbau    # starten, und beim Login mit
-journalctl --user -u hasenbau -f          # zusehen
-hasenbau status                           # was liegt hier, was ist passiert
+systemctl --user enable --now hasenbau    # start, and at login too
+journalctl --user -u hasenbau -f          # watch
+hasenbau status                           # what is here, what happened
 ```
 
-## Grenzen
+## Boundaries
 
-Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
-Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
-und `question` stehen als `deny` in seinem `permission:`-Block. Sie
-tauchen in der Werkzeugliste des Modells damit gar nicht erst auf, und
-der Hase sucht keinen Weg um sie herum.
+Every generated agent gets the same six prohibitions, regardless of the
+template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
+and `question` are `deny` in its `permission:` block. That way they never
+show up in the model's tool list in the first place, and the Hase does
+not go looking for a way around them.
 
-Was er stattdessen bekommt, ist ein Rückkanal: `hasenbau_summary` für die
-eine Zeile, was der Lauf getan hat, `hasenbau_notiz` für Beobachtungen
-unterwegs, und `hasenbau_tool_request`, mit dem er ein fehlendes Werkzeug
-anfordert, statt sich einen Weg an seinen Grenzen vorbei zu suchen
+What it gets instead is a back channel: `hasenbau_summary` for the one
+line about what the Lauf did, `hasenbau_notiz` for observations along the
+way, and `hasenbau_tool_request`, with which it asks for a missing tool
+instead of looking for a path around its boundaries
 ([docs/hasen.md](docs/hasen.md)).
 
-Aus so einem Wunsch baut der Schmied ein Werkzeug, das ein Hase während
-seines Laufs ruft. Ein Entwurf ist Code, den ein Modell geschrieben und
-niemand gelesen hat, deshalb drei Stufen, jede setzt die vorige voraus:
+Out of such a request the Schmied builds a tool that a Hase calls during
+its Lauf. A draft is code that a model wrote and nobody read, hence three
+stages, each requiring the previous one:
 
 ```bash
-hasenbau tool review --next        # lesen und verantworten
-hasenbau tool test <name> --…      # im Sandkasten ausführen und zeigen, was kommt
-hasenbau tool release <name>       # Ausgabe bestätigen und freigeben
+hasenbau tool review --next        # read it and take responsibility
+hasenbau tool test <name> --…      # run it in the sandbox and show what comes out
+hasenbau tool release <name>       # confirm the output and release it
 ```
 
-Ein gescheiterter Probelauf widerlegt, ein bestandener bestätigt nicht:
-Exit 0 heißt „es lief", nicht „es stimmt". Wie daraus `generated →
-hypothetical → actual` wird und warum ein Werkzeug im Betrieb nie mehr
-darf als der Hase, der es ruft: [docs/werkzeuge.md](docs/werkzeuge.md).
+A failed test run refutes, a passing one does not confirm: exit 0 means
+"it ran", not "it is right". How `generated → hypothetical → actual`
+comes about, and why a tool in operation never gets more than the Hase
+calling it: [docs/tools.md](docs/tools.md).
 
-## Drosseln und verdichten
+## Throttling and distilling
 
-`throttle: {max: 5, per: 1h}` deckelt einen Auftrag auf fünf Läufe je
-rollender Stunde; `between: "22:00-06:00"` verschiebt die Arbeit in die
-Nacht. Der Rückstau wartet im Dateisystem und übersteht jeden Neustart,
-der älteste Input zuerst. In `hasenbau.yaml` gilt derselbe Deckel über
-alle Aufträge zusammen ([docs/drosselung.md](docs/drosselung.md)).
+`throttle: {max: 5, per: 1h}` caps an Auftrag at five Läufe per rolling
+hour; `between: "22:00-06:00"` moves the work into the night. The backlog
+waits in the file system and survives any restart, oldest input first. In
+`hasenbau.yaml` the same cap applies across all Aufträge together
+([docs/throttling.md](docs/throttling.md)).
 
-Ein Hase, der bei jedem Lauf dieselben Tool-Calls macht, ist ein
-Interpreter, der jedes Mal neu kompiliert. `hasenbau findings <auftrag>`
-rechnet das aus den Läufen aus, ohne ein Modell zu fragen; der Baumeister
-macht daraus einen Gang-Entwurf. Aktiviert wird ein generierter Gang nie
-automatisch ([docs/verdichtung.md](docs/verdichtung.md)).
+A Hase that makes the same tool calls on every Lauf is an interpreter
+recompiling every time. `hasenbau findings <auftrag>` works that out from
+the Läufe without asking a model; the Baumeister turns it into a draft
+Gang. A generated Gang is never activated automatically
+([docs/distillation.md](docs/distillation.md)).
 
-## Befehle
+## Commands
 
 | | |
 |---|---|
-| `init`, `fix`, `new` | Bau anlegen, ergänzen, Gerüste schreiben |
-| `daemon`, `lauf`, `baumeister` | auslösen |
-| `get <ressource>` | eine Zeile pro Objekt |
-| `describe <ressource>` | ein Objekt im Detail, `describe bau` als Diagnose |
-| `status` | was liegt hier, was ist passiert |
-| `dig`, `findings` | Material und Befunde für die Verdichtung |
-| `tool review\|test\|release` | ein Werkzeug freigeben |
-| `provider fetch` | Modell-Liste beim Endpoint holen |
+| `init`, `fix`, `new` | create a Bau, complete it, write scaffolds |
+| `daemon`, `lauf`, `baumeister` | trigger |
+| `get <resource>` | one line per object |
+| `describe <resource>` | one object in detail, `describe bau` as a diagnosis |
+| `status` | what is here, what happened |
+| `dig`, `findings` | material and findings for distillation |
+| `tool review\|test\|release` | release a tool |
+| `provider fetch` | fetch the model list from the endpoint |
 
-Vollständig mit allen Ressourcen und Flags:
-[docs/befehle.md](docs/befehle.md).
+Complete, with all resources and flags:
+[docs/commands.md](docs/commands.md).
 
 ## Development
 
 ```bash
 go build ./...
 go vet ./...
-go test ./...    # Integrationstests skippen sich ohne opencode im PATH
+go test ./...    # integration tests skip themselves without opencode in the PATH
 ```
 
-Mitbauende Agents lesen [`AGENTS.md`](AGENTS.md); der Spec steht in
-[`PLAN.md`](PLAN.md), Issue-Tracking läuft über
-[beads](https://github.com/gastownhall/beads) (`bd ready`).
+Agents working on this repository read [`AGENTS.md`](AGENTS.md); the spec
+is [`PLAN.md`](PLAN.md), issue tracking runs on
+[beads](https://github.com/gastownhall/beads) (`bd ready`). Both are
+German, like the rest of the internal documentation; the German mirror of
+this README is [README.de.md](README.de.md), the German docs are in
+[docs/de/](docs/de/).
 
 ## License
 

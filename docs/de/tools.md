@@ -1,5 +1,7 @@
 # Werkzeuge: vom Entwurf zur Freigabe
 
+[English](../tools.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
+
 Neben den Gängen, die vor dem Hasen laufen, gibt es Werkzeuge, die er
 während seines Laufs ruft. Sie liegen als Skript plus Manifest unter
 `tools/` und werden vom Bau-Plugin beim Server-Start registriert;

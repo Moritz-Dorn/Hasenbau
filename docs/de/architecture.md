@@ -1,5 +1,7 @@
 # Architektur und Isolation
 
+[English](../architecture.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
+
 ## Die Idee
 
 1. Trigger statt Chat. Aufgaben starten, weil eine Datei in einem
@@ -28,7 +30,7 @@ systemd → hasenbau (ein Go-Binary)
             └── Supervisor ──spawnt──> opencode serve (127.0.0.1, Child)
 ```
 
-Der vollständige Implementierungsplan steht in [`PLAN.md`](../PLAN.md):
+Der vollständige Implementierungsplan steht in [`PLAN.md`](../../PLAN.md):
 Architektur §2, Isolation §3, Layout §4, Datenmodell §5,
 Auftragsformat §6.
 

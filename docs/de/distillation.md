@@ -1,5 +1,7 @@
 # Verdichtung: aus Läufen werden Gänge
 
+[English](../distillation.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
+
 Ein Hase, der bei jedem Lauf dieselben Tool-Calls macht, ist ein
 Interpreter, der jedes Mal neu kompiliert. Der Hasenbau loggt die
 Traces; daraus wird deterministischer Code.

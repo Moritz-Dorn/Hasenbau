@@ -1,14 +1,16 @@
-# Beispiele — der Referenz-Auftrag pdf-einlagern
+# Examples: the reference Auftrag pdf-einlagern
 
-Der Ende-zu-Ende-Beweis für Phase 1 (PLAN.md §6, §8; Hasenbau-z0u):
-PDF landet in `laderampe/sources/` → Gang `pdf_to_md.py` extrahiert
-deterministisch nach `$WORK/extrakt.md` → Hase `archivar` fasst
-zusammen, vergibt Tags und legt `YYYY-MM-DD-<slug>.md` in `lager/`
-ab → `nachher:` verschiebt das PDF nach `archiv/`. Der Hase sieht das
-PDF nie — er kriegt Markdown; das ist der Punkt.
+**English** · [Deutsch](README.de.md)
 
-In einen Bau übernehmen (der Bau liegt **außerhalb** dieses Repos,
-siehe AGENTS.md-Leckage in PLAN.md §3):
+The end-to-end proof for phase 1 (PLAN.md §6, §8; Hasenbau-z0u): a PDF
+lands in `laderampe/sources/` → the Gang `pdf_to_md.py` extracts it
+deterministically into `$WORK/extrakt.md` → the Hase `archivar`
+summarises it, assigns tags and files `YYYY-MM-DD-<slug>.md` into
+`lager/` → `nachher:` moves the PDF into `archiv/`. The Hase never sees
+the PDF, it gets Markdown, and that is the point.
+
+Taking it over into a Bau (the Bau lives outside this repository, see the
+AGENTS.md leakage section in PLAN.md §3):
 
 ```bash
 hasenbau init <bau>
@@ -17,41 +19,39 @@ cp -f beispiele/hasen/archivar.md          <bau>/hasen/
 cp -f beispiele/gaenge/pdf_to_md.py        <bau>/gaenge/
 ```
 
-`pdf_to_md.py` braucht `pdftotext` (poppler) im PATH. Das `model:` im
-Hasen-Template an die eigene Provider-Config des Baus anpassen.
+`pdf_to_md.py` needs `pdftotext` (poppler) in the PATH. Adjust the
+`model:` in the Hase template to the Bau's own provider config.
 
-## Der Baumeister
+## The Baumeister
 
-Der Baumeister liegt **nicht mehr hier**, sondern im Binary:
-`hasenbau init` schreibt Auftrag und Hase in jeden Bau, und
-`hasenbau fix` stellt sie wieder her, wenn sie fehlen. Die Quelle ist
-`internal/bau/vorlagen/`. Kopieren muss also niemand mehr:
+The Baumeister no longer lives here, it lives in the binary: `hasenbau
+init` writes the Auftrag and the Hase into every Bau, and `hasenbau fix`
+restores them when they are missing. The source is
+`internal/bau/vorlagen/`. So nobody has to copy anything any more:
 
 ```bash
-hasenbau -bau <bau> baumeister 8               # Trace von Lauf 8
-hasenbau -bau <bau> baumeister pdf-einlagern   # letzter Lauf des Auftrags
+hasenbau -bau <bau> baumeister 8               # trace of Lauf 8
+hasenbau -bau <bau> baumeister pdf-einlagern   # last Lauf of the Auftrag
 ```
 
-Er ist kein Sonderfall im Code, sondern genau so ein Auftrag — nur dass
-sein Material Läufe sind statt PDFs. Sein Gang zieht den Trace
-(`hasenbau dig`), sein Hase verdichtet ihn zu einem Gang-Entwurf in
-`gaenge/entwurf/`. Wer ihn nicht will, stellt seinen Trigger um oder
-leert den Auftrag — die Datei zu löschen hilft nicht, `fix` legt sie
-wieder an.
+It is not a special case in the code but exactly such an Auftrag, except
+that its material is Läufe instead of PDFs. Its Gang pulls the trace
+(`hasenbau dig`), its Hase distills it into a draft Gang in
+`gaenge/entwurf/`. Whoever does not want it changes its trigger or
+empties the Auftrag; deleting the file does not help, `fix` creates it
+again.
 
-Sein Schreibrecht entsteht **ausschließlich** aus `raeume: out:` —
-daraus wird das einzige erlaubte `edit`-Pattern des generierten Agenten
-(PLAN.md §6). Wer den out-Raum ändert, ändert damit, was der Baumeister
-anfassen darf; `internal/hase` hat dafür einen Golden-Test, der beide
-Wurzeln prüft — dieses Verzeichnis und `internal/bau/vorlagen/`.
-`gaenge/entwurf/` statt `gaenge/`, damit kein Lauf einen benutzten Gang
-überschreiben kann.
+Its write permission comes exclusively from `raeume: out:`, which becomes
+the only allowed `edit` pattern of the generated agent (PLAN.md §6).
+Change the out Raum and you change what the Baumeister may touch;
+`internal/hase` has a golden test for that which checks both roots, this
+directory and `internal/bau/vorlagen/`. `gaenge/entwurf/` rather than
+`gaenge/`, so that no Lauf can overwrite a Gang that is in use.
 
-Mehrere Baumeister-Varianten dürfen nebeneinander in `hasen/` liegen
-(`baumeister-streng.md`, `baumeister-python.md`) — `hasenbau.yaml`
-benennt genau einen Auftrag, und dessen `hase:` entscheidet, welche
-Variante läuft.
+Several Baumeister variants may sit next to each other in `hasen/`
+(`baumeister-streng.md`, `baumeister-python.md`); `hasenbau.yaml` names
+exactly one Auftrag, and its `hase:` decides which variant runs.
 
-Ein Entwurf ist ein Entwurf: der Hasenbau trägt nie selbst etwas in
-einen Auftrag ein (§8/§10). Lesen, prüfen, selbst eintragen — die
-vorgeschlagene `run:`-Zeile steht im Kopf des Skripts.
+A draft is a draft: Hasenbau never enters anything into an Auftrag itself
+(§8/§10). Read it, check it, enter it yourself; the suggested `run:` line
+is in the head of the script.

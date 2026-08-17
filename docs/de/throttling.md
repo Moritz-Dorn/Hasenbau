@@ -1,5 +1,7 @@
 # Drosseln: Deckel, Nachtfenster, Reihenfolge
 
+[English](../throttling.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
+
 Wer 200 PDFs auf einmal ablegt, will sie selten alle sofort verarbeitet
 haben.
 

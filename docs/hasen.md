@@ -1,58 +1,57 @@
-# Der Hase: Werkzeuge, Grenzen, Wissen
+# The Hase: tools, boundaries, knowledge
 
-Ein Hase ist ein Template in `hasen/`. Der Daemon generiert daraus pro
-Auftrag×Hase einen opencode-Agenten; die Permissions kommen aus den
-Räumen des Auftrags, nicht aus dem Template. `hasenbau describe hase
-<name>` zeigt, was für einen Hasen in einem konkreten Auftrag
-herauskommt.
+**English** · [Deutsch](de/hasen.md)
 
-Werkzeuge, die er während eines Laufs ruft, kommen vom Schmied und gehen
-durch eine dreistufige Freigabe: [Werkzeuge](werkzeuge.md).
+A Hase is a template in `hasen/`. From it the daemon generates one
+opencode agent per Auftrag×Hase; the permissions come from the Räume of
+the Auftrag, not from the template. `hasenbau describe hase <name>` shows
+what a Hase turns into within a concrete Auftrag.
 
-## Der Rückkanal
+Tools that it calls during a Lauf come from the Schmied and go through a
+three-stage release: [tools](tools.md).
 
-Jeder Hase bekommt Werkzeuge, mit denen er selbst in die Bau-Datenbank
-schreibt:
+## The back channel
 
-- `hasenbau_summary` schreibt die eine Zeile, was der Lauf getan hat.
-  Der nächste Lauf desselben Auftrags bekommt sie als Kontext.
-- `hasenbau_notiz` hält Beobachtungen unterwegs fest; sie stehen später
+Every Hase gets tools with which it writes into the Bau database itself:
+
+- `hasenbau_summary` writes the one line about what the Lauf did. The
+  next Lauf of the same Auftrag gets it as context.
+- `hasenbau_notiz` records observations along the way; they show up later
   in `hasenbau dig`.
-- `hasenbau_tool_request` gibt es nur, wenn in `hasenbau.yaml` ein
-  `requests:`-Raum gesetzt ist. Damit fordert ein Hase ein Werkzeug an,
-  das ihm für seine Aufgabe fehlt, statt sich einen Weg an seinen
-  Grenzen vorbei zu suchen. Der Wunsch landet als Datei unter
-  `<requests>/tools/`, dem künftigen Eingang des Schmieds. Ohne den
-  Eintrag bleibt das Werkzeug aus, und der Hase wird auch im Prompt
-  nicht darauf verwiesen; `hasenbau describe bau` sagt, woran der Bau
-  gerade ist.
+- `hasenbau_tool_request` only exists if a `requests:` Raum is set in
+  `hasenbau.yaml`. With it a Hase asks for a tool it is missing for its
+  task, instead of looking for a path around its boundaries. The request
+  lands as a file under `<requests>/tools/`, the future inbox of the
+  Schmied. Without the entry the tool stays out, and the Hase is not
+  pointed at it in the prompt either; `hasenbau describe bau` says where
+  the Bau currently stands.
 
-Dahinter steckt ein MCP-Server, den opencode als `hasenbau mcp` startet.
-Eingetragen wird er von `hasenbau init`, und jeder Daemon- oder
-Lauf-Start korrigiert den Eintrag auf das gerade laufende Binary und sagt
-es im Log, auch nach einem Rebuild an einen anderen Pfad.
+Behind it sits an MCP server that opencode starts as `hasenbau mcp`. It
+is registered by `hasenbau init`, and every daemon or Lauf start corrects
+the entry to the binary that is currently running and says so in the log,
+including after a rebuild to a different path.
 
-## Die sechs Verbote
+## The six prohibitions
 
-Jeder generierte Agent bekommt dieselben sechs Verbote, unabhängig vom
-Template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
-und `question` stehen als `deny` in seinem `permission:`-Block.
+Every generated agent gets the same six prohibitions, regardless of the
+template: `bash`, `webfetch`, `websearch`, `external_directory`, `task`
+and `question` are `deny` in its `permission:` block.
 
-Sie tauchen in der Werkzeugliste des Modells damit gar nicht erst auf,
-und der Hase sucht keinen Weg um sie herum. `task` wiegt am schwersten:
-ein Subagent wäre ein eigener Agent und erbte weder die Permissions noch
-die Raum-Grenzen.
+That way they never show up in the model's tool list in the first place,
+and the Hase does not go looking for a way around them. `task` weighs
+heaviest: a subagent would be an agent of its own and would inherit
+neither the permissions nor the Raum boundaries.
 
-## Wissen
+## Knowledge
 
-Ein Hasen-Template kann Hintergrundwissen anfordern:
+A Hase template can ask for background knowledge:
 
-- `knows_hasenbau: true` bindet eine mitgelieferte Einführung in den
-  Hasenbau ein: Begriffe, Ablauf, Trace-Aufbau, Grenzen.
-- `knowledge: [pfade]` bindet eigene Dateien aus dem Bau ein.
+- `knows_hasenbau: true` includes a shipped introduction to Hasenbau:
+  vocabulary, sequence, trace structure, boundaries.
+- `knowledge: [pfade]` includes files of your own from the Bau.
 
-Beides landet im generierten Agenten und gilt damit nur für diesen
-Hasen. `instructions` in der `opencode.json` gilt dagegen
-Workspace-weit für jeden Agenten. Die Einführung steckt bewusst im Binary
-statt im Bau: so passt sie immer zur installierten Version, statt als
-veraltete Kopie mitzulaufen.
+Both end up in the generated agent and therefore apply to that Hase only.
+`instructions` in the `opencode.json`, by contrast, applies workspace
+wide to every agent. The introduction sits in the binary rather than in
+the Bau on purpose: that way it always matches the installed version
+instead of trailing along as an outdated copy.

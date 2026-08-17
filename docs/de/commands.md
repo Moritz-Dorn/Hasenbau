@@ -1,7 +1,9 @@
 # Befehle
 
+[English](../commands.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
+
 Die vollständige Referenz. Die Kurzfassung steht im
-[README](../README.md#befehle); jeder Befehl kennt außerdem
+[README](../../README.de.md#befehle); jeder Befehl kennt außerdem
 `hasenbau <befehl>` ohne Argumente als Hilfe.
 
 Jeder Befehl braucht den Bau: entweder `-bau ~/meinbau` vor dem
@@ -83,7 +85,7 @@ hasenbau dig [-json] <ziel>  # Material für den Baumeister: <lauf-id> oder <auf
 hasenbau findings <auftrag>  # was sich über die Läufe rechnen lässt (kein Modell)
 ```
 
-Ausführlich in [Verdichtung](verdichtung.md).
+Ausführlich in [Verdichtung](distillation.md).
 
 ## Werkzeuge freigeben
 
@@ -95,7 +97,7 @@ hasenbau tool release <name>               # Ausgabe bestätigen und freigeben (
 ```
 
 Die drei Verben laufen in dieser Reihenfolge, jeder Schritt setzt den
-vorigen voraus. Warum, steht in [Werkzeuge](werkzeuge.md).
+vorigen voraus. Warum, steht in [Werkzeuge](tools.md).
 
 ## Provider
 
@@ -105,7 +107,7 @@ hasenbau provider fetch <id>  # Modell-Liste beim Provider-Endpoint holen
 
 Geschrieben wird nie automatisch: erst zeigt der Befehl den Diff.
 Warum ein Bau seine Provider überhaupt selbst mitbringt, steht in
-[Architektur](architektur.md#provider-im-bau).
+[Architektur](architecture.md#provider-im-bau).
 
 ## Nicht von Hand
 

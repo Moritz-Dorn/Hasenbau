@@ -25,10 +25,17 @@ deutsches Domänen-Nomen** — `StartLauf`, `EndLauf`, `LaufByID`,
 Mischformen" ist damit hinfällig; sie war nicht durchzuhalten, sobald
 ein Verb auf ein Domänen-Nomen trifft (entschieden 2026-08-10).
 
-Prosa bleibt deutsch: Kommentare, dieses Dokument, README, die
-Meldungstexte der CLI und Testfunktionsnamen. Die Zustandswerte eines
-Laufs (`running`, `ok`, `failed`, `aborted`) sind Daten, keine Prosa —
-englisch in der DB und in der Ausgabe.
+Prosa bleibt deutsch: Kommentare, dieses Dokument, die Meldungstexte der
+CLI und Testfunktionsnamen. Die Zustandswerte eines Laufs (`running`,
+`ok`, `failed`, `aborted`) sind Daten, keine Prosa — englisch in der DB
+und in der Ausgabe.
+
+Ausgenommen ist die Nutzer-Doku: `README.md` und `docs/` sind seit
+2026-08-17 englisch, weil GitHub `README.md` als Vorgabe rendert; die
+deutsche Fassung steht als Spiegel daneben (`README.de.md`, `docs/de/`,
+gleiche Dateinamen). Das Vokabular oben bleibt auch dort deutsch. Offen
+bleibt die Frage nach den Meldungstexten der CLI: sie sind deutsch, und
+ein englisches README zeigt sie als Beispielausgabe.
 
 | Begriff | Technisch |
 |---|---|
