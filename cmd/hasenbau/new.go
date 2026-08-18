@@ -234,62 +234,62 @@ func writeNew(root, rel, inhalt string, errw io.Writer) int {
 // verursacht hat.
 func auftragGeruest(name, haseName string) string {
 	return fmt.Sprintf(`---
-# Auftrag %[1]s — Trigger, Gänge, Hase, Räume (PLAN.md §6).
-# Angelegt von `+"`hasenbau new`"+`. Diese Kommentare dürfen weg.
+# Auftrag %[1]s — trigger, Gänge, Hase, Räume (PLAN.md §6).
+# Created by ` + "`hasenbau new`" + `. These comments may go.
 
-# Genau eine Trigger-Art. Die anderen beiden bleiben auskommentiert.
+# Exactly one kind of trigger. The other two stay commented out.
 trigger:
-  manual: true                     # läuft nur auf Zuruf: hasenbau lauf %[1]s
-  # watch: "*.txt"                 # NUR das Muster — der Eingang steht
-  #                                # unten als raeume: input:, beobachtet
-  #                                # wird die Summe aus beidem. Flach;
-  #                                # "**/*.txt" nimmt Unterverzeichnisse
-  #                                # dazu (null oder mehr Ebenen).
-  #                                # Ein Lauf je Datei: Begleitmaterial,
-  #                                # das der Hase nur mitlesen soll, darf
-  #                                # das Muster nicht matchen.
-  # debounce: 5s                   # nur bei watch: Ruhe vor dem Zugriff
-  # cron: "0 7 * * *"              # fünf Felder, keine Sekunden — siehe unten
+  manual: true                     # only on request: hasenbau lauf %[1]s
+  # watch: "*.txt"                 # ONLY the pattern — the input lives
+  #                                # below as raeume: input:, and what is
+  #                                # watched is the sum of the two. Flat;
+  #                                # "**/*.txt" takes subdirectories
+  #                                # along (zero or more levels).
+  #                                # One Lauf per file: material the Hase
+  #                                # is only meant to read alongside must
+  #                                # not match the pattern.
+  # debounce: 5s                   # watch only: quiet before touching it
+  # cron: "0 7 * * *"              # five fields, no seconds — see below
 
-# Cron: fünf Felder, immer in Anführungszeichen. Ein nacktes */15 ist
-# kein gültiges YAML, dort beginnt ein Alias.
+# Cron: five fields, always quoted. A bare */15 is not valid YAML —
+# an alias begins there.
 #
-#   Minute  Stunde  Tag-im-Monat  Monat          Wochentag
-#   0-59    0-23    1-31          1-12, JAN-DEC  0-6, SUN-SAT (0 = Sonntag)
+#   minute  hour    day-of-month  month          day-of-week
+#   0-59    0-23    1-31          1-12, JAN-DEC  0-6, SUN-SAT (0 = Sunday)
 #
-# Je Feld: * alles, , Liste, - Bereich, / Schrittweite.
+# Per field: * everything, , list, - range, / step.
 #
-#   cron: "0 7 * * *"          täglich 07:00
-#   cron: "*/15 * * * *"       alle 15 Minuten
-#   cron: "0 7 * * MON-FRI"    werktags 07:00
-#   cron: "0 9,17 * * *"       09:00 und 17:00
-#   cron: "30 3 1 * *"         am Ersten jeden Monats, 03:30
-#   cron: "@daily"             ebenso @hourly @weekly @monthly @yearly
-#   cron: "@every 90m"         ab Daemon-Start gezählt, nicht zur vollen Stunde
+#   cron: "0 7 * * *"          daily at 07:00
+#   cron: "*/15 * * * *"       every 15 minutes
+#   cron: "0 7 * * MON-FRI"    weekdays at 07:00
+#   cron: "0 9,17 * * *"       09:00 and 17:00
+#   cron: "30 3 1 * *"         on the first of each month, 03:30
+#   cron: "@daily"             likewise @hourly @weekly @monthly @yearly
+#   cron: "@every 90m"         counted from daemon start, not on the hour
 #
-# Es gilt die Ortszeit der Maschine; "CRON_TZ=UTC 0 2 * * *" stellt das
-# um. Sind Tag-im-Monat UND Wochentag gesetzt, feuert es an beiden — "0 7
-# 13 * FRI" heißt jeden Dreizehnten ODER jeden Freitag. Verpasste Ticks
-# holt niemand nach (anders als beim Eingang eines watch-Auftrags), und
-# läuft der Auftrag beim nächsten Tick noch, fällt dieser Tick aus.
+# The machine's local time applies; "CRON_TZ=UTC 0 2 * * *" changes that.
+# If day-of-month AND day-of-week are both set, it fires on both — "0 7
+# 13 * FRI" means every thirteenth OR every Friday. Missed ticks are not
+# caught up (unlike the input of a watch Auftrag), and if the Auftrag is
+# still running at the next tick, that tick is dropped.
 
-# Deterministische Vorverarbeitung, läuft VOR dem Hasen. Kein Modell,
-# kein Urteil. Ersetzt werden genau diese fünf Namen — jeder andere
-# $GROSS-Name ist ein harter Fehler, auch $HOME:
+# Deterministic preprocessing, runs BEFORE the Hase. No model, no
+# judgement. Exactly these five names are substituted — every other
+# $UPPERCASE name is a hard error, $HOME included:
 #
-#   $BAU           Root des Baus, also dieses Verzeichnis
-#   $TRIGGER_FILE  die auslösende Datei — NUR bei watch gebunden
-#   $TRIGGER_ARG   das Argument von: hasenbau lauf %[1]s <arg>
-#                  — NUR bei manual gebunden, freier Text, kein Pfad
-#   $WORK          Scratch dieses Laufs, frisch pro Lauf angelegt;
-#                  gebunden nur mit einem Raum der Rolle work
-#   $RAUM_<rolle>  ein Raum von unten, Rolle wörtlich wie dort
-#                  geschrieben: $RAUM_out, nicht $RAUM_OUT
-#   $HASENBAU      Pfad des laufenden Binaries, für Gänge, die den
-#                  Hasenbau selbst rufen
+#   $BAU           root of the Bau, that is this directory
+#   $TRIGGER_FILE  the triggering file — bound for watch ONLY
+#   $TRIGGER_ARG   the argument of: hasenbau lauf %[1]s <arg>
+#                  — bound for manual ONLY, free text, not a path
+#   $WORK          scratch of this Lauf, created fresh per Lauf;
+#                  bound only with a Raum of role work
+#   $RAUM_<role>   a Raum from below, role spelled exactly as written
+#                  there: $RAUM_out, not $RAUM_OUT
+#   $HASENBAU      path of the running binary, for Gänge that call
+#                  Hasenbau itself
 #
-# Ersetzt wird textuell, bevor die Shell die Zeile sieht — Pfade also
-# in Anführungszeichen setzen, sie können Leerzeichen enthalten.
+# Substitution is textual, before the shell sees the line — so quote
+# paths, they may contain spaces.
 # gaenge:
 #   - name: extrakt
 #     run: gaenge/mein_gang.py "$TRIGGER_FILE" --out "$WORK/extrakt.md"
@@ -297,78 +297,75 @@ trigger:
 
 hase: %[2]s
 
-# Zeitlimit des LLM-Schritts. Ohne Angabe gilt die Vorgabe (30m).
+# Time limit of the LLM step. Without it the default applies (30m).
 # hase_timeout: 60m
 
-# Deckel: höchstens so viele Läufe je rollendem Fenster. Gezählt wird
-# aus der Lauf-Historie, nicht aus einem Zähler — der Deckel übersteht
-# also einen Neustart. Beide Felder oder keines. `+"`hasenbau lauf`"+`
-# umgeht ihn, zählt aber mit.
+# Cap: at most this many Läufe per rolling window. Counted from the Lauf
+# history, not from a counter — so the cap survives a restart. Both
+# fields or neither. ` + "`hasenbau lauf`" + ` bypasses it but still counts.
 #
-# between begrenzt zusätzlich die Tageszeit, zu der ein Lauf STARTEN
-# darf (Ortszeit, über Mitternacht erlaubt); ein laufender wird nie
-# abgeschnitten. Allein verschiebt es nur — es deckelt nicht.
+# between additionally limits the time of day at which a Lauf may START
+# (local time, across midnight allowed); a running one is never cut off.
+# On its own it only shifts — it does not cap.
 # throttle:
 #   max: 5
 #   per: 1h
 #   between: "22:00-06:00"
 
-# Routinemäßig melden: dann stehen die Befunde dieses Auftrags in
-# `+"`hasenbau status`"+`. Das steuert nur die Meldung — erfasst wird
-# ohnehin alles, und `+"`hasenbau findings %[1]s`"+` rechnet auch ohne.
+# Report routinely: then the findings of this Auftrag appear in
+# ` + "`hasenbau status`" + `. This steers the reporting only — everything is
+# recorded anyway, and ` + "`hasenbau findings %[1]s`" + ` computes without it.
 # monitored: true
 
-# Schmied-Werkzeuge, die der Hase in DIESEM Auftrag rufen darf. Ohne
-# Eintrag bekommt er keines: die Vorgabe ist nichts, nicht alles.
-# Genannt wird der Dateiname unter tools/ ohne Endung; steht dort
-# keines, lädt der Auftrag nicht. Was es im Bau gibt, zeigt
-# `+"`hasenbau get tools`"+`.
+# Schmied tools the Hase may call in THIS Auftrag. Without an entry it
+# gets none: the default is nothing, not everything. Named is the file
+# under tools/ without its extension; if there is none, the Auftrag does
+# not load. What the Bau has is shown by ` + "`hasenbau get tools`" + `.
 # tools:
 #   - zeilen_zaehlen
 
-# Die Rollen: input ist der Eingang und bei einem watch-Trigger
-# PFLICHT — dort sucht der Watcher, und das Muster oben ist relativ
-# dazu. Bei cron und manual ist er der Suchraum, den Gänge über
-# $RAUM_input ansprechen. work ist das Scratch dieses Laufs ($WORK),
-# out das Ziel, done das Archiv des Rohmaterials, quarantine, was
-# schiefging. Schreibrecht bekommt der Hase AUSSCHLIESSLICH für work
-# und out — daraus entstehen seine Permissions, nicht aus seiner Rolle.
+# The roles: input is the entrance and MANDATORY for a watch trigger —
+# that is where the watcher looks, and the pattern above is relative to
+# it. For cron and manual it is the search space that Gänge address via
+# $RAUM_input. work is the scratch of this Lauf ($WORK), out the
+# destination, done the archive of the raw material, quarantine whatever
+# went wrong. The Hase gets write rights EXCLUSIVELY for work and out —
+# its permissions come from those, not from its role.
 raeume:
   # input: raeume/eingang/
   work: raeume/werkstatt/
   out: raeume/lager/
 
-# Was in den Prompt kommt. Dateien werden gelesen, last_summaries holt
-# die Meldungen der letzten Läufe dieses Auftrags.
+# What goes into the prompt. Files are read, last_summaries fetches the
+# reports of the most recent Läufe of this Auftrag.
 # context:
 #   - file: $WORK/extrakt.md
 #   - last_summaries: 3
 
-# Aufräumen nach einem geglückten Lauf — und nur nach einem geglückten.
-# Genau eine Aktion pro Schritt, abgearbeitet in der Reihenfolge, in der
-# sie hier stehen; der erste Fehler bricht ab.
+# Cleaning up after a successful Lauf — and only after a successful one.
+# Exactly one action per step, worked through in the order written here;
+# the first error aborts.
 #
-#   move:   VON -> NACH   verschiebt
-#   copy:   VON -> NACH   kopiert, das Original bleibt liegen
-#   delete: PFAD          löscht eine Datei, ohne Nachfrage
+#   move:   FROM -> TO   moves
+#   copy:   FROM -> TO   copies, the original stays
+#   delete: PATH         deletes a file, without asking
 #
-# Endet NACH auf einem Schrägstrich oder ist es ein vorhandenes
-# Verzeichnis, behält die Datei ihren Namen; fehlende Zielverzeichnisse
-# entstehen von selbst. Liegt dort schon eine gleichnamige Datei,
-# bekommt die neue einen Zeitstempel vorangestellt — überschrieben wird
-# nie. $BAU ist hier tabu (absolut), und $TRIGGER_ARG ist kein Pfad —
-# was in einem manual-Auftrag hier zu verschieben wäre, muss aus einem
-# Raum kommen.
+# If TO ends in a slash or is an existing directory, the file keeps its
+# name; missing target directories are created. If a file of the same
+# name is already there, the new one gets a timestamp in front — nothing
+# is ever overwritten. $BAU is off limits here (absolute), and
+# $TRIGGER_ARG is not a path — whatever a manual Auftrag moves here has
+# to come from a Raum.
 # after:
-#   - move: $TRIGGER_FILE -> raeume/archiv/     # Auslöser wegräumen
-#   - copy: $WORK/bericht.md -> raeume/lager/   # Ergebnis sichern
-#   - delete: raeume/werkstatt/zwischenstand.json  # Rest wegwerfen
+#   - move: $TRIGGER_FILE -> raeume/archiv/        # clear the trigger away
+#   - copy: $WORK/bericht.md -> raeume/lager/      # keep the result
+#   - delete: raeume/werkstatt/zwischenstand.json  # throw the rest away
 ---
 
-Hier steht, was der Hase tun soll — dieser Text ist der Prompt-Kern und
-landet unverändert im Prompt. Schreib ihn als Auftrag an eine Person,
-die den Bau kennt, aber diesen Fall nicht: was liegt vor, was soll
-daraus werden, woran erkennt sie, dass sie fertig ist.
+This is where you say what the Hase should do — this text is the prompt
+core and goes into the prompt unchanged. Write it as an instruction to a
+person who knows the Bau but not this case: what is there, what should
+become of it, how do they know they are done.
 `, name, haseName)
 }
 
@@ -378,34 +375,34 @@ daraus werden, woran erkennt sie, dass sie fertig ist.
 // beim nächsten Wortlaut-Wechsel veraltet.
 func haseGeruest(name string) string {
 	return fmt.Sprintf(`---
-# Hase %[1]s — ein Template, kein opencode-Agent (PLAN.md §6). Der
-# Hasenbau generiert daraus pro Auftrag einen eigenen Agenten.
-# Angelegt von `+"`hasenbau new`"+`. Diese Kommentare dürfen weg.
-description: %[1]s — was dieser Hase tut
+# Hase %[1]s — a template, not an opencode agent (PLAN.md §6). From it
+# Hasenbau generates one agent per Auftrag.
+# Created by ` + "`hasenbau new`" + `. These comments may go.
+description: %[1]s — what this Hase does
 
-# Provider/Modell wie in der Bau-Config. Ohne Angabe wählt opencode.
+# Provider/model as in the Bau config. Without it opencode chooses.
 # model: scc/kit.deepseek-v4-flash-0731
 # temperature: 0.2
 
-# Legt dem Prompt das mitgelieferte Wissen über den Hasenbau bei:
-# Begriffe, Ablauf eines Laufs, wie man einen Trace liest, Grenzen.
+# Attaches the shipped knowledge about Hasenbau to the prompt: the
+# vocabulary, how a Lauf proceeds, how to read a trace, the boundaries.
 knows_hasenbau: true
 
-# Eigene Texte aus dem Bau, Bau-relativ, Globs erlaubt.
+# Your own texts from the Bau, Bau-relative, globs allowed.
 # knowledge:
 #   - wissen/ablage-regeln.md
 
-# NUR Einschränkungen. allow und ask kommen aus den Räumen des
-# Auftrags; ein Template darf Rechte verengen, nie aufweiten.
+# RESTRICTIONS ONLY. allow and ask come from the Räume of the Auftrag; a
+# template may narrow rights, never widen them.
 # permission:
 #   read:
 #     "*.env": deny
 ---
 
-Du bist %[1]s. Schreib hier die Rolle: wer der Hase ist, wie er
-arbeitet, woran er sich hält und wo er lieber nichts tut als zu raten.
+You are %[1]s. Write the role here: who the Hase is, how it works, what
+it holds to, and where it would rather do nothing than guess.
 
-Der Auftrag sagt ihm, was in diesem einen Lauf zu tun ist — hier steht,
-wer er über alle Aufträge hinweg ist.
+The Auftrag tells it what to do in this one Lauf — this is who it is
+across all Aufträge.
 `, name)
 }

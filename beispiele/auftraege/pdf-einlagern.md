@@ -1,7 +1,7 @@
 ---
 trigger:
-  # Das Muster allein — der Eingang steht unten als raeume: input:,
-  # beobachtet wird die Summe aus beidem.
+  # The pattern alone — the input lives below as raeume: input:, and
+  # what gets watched is the sum of the two.
   watch: "*.pdf"
   debounce: 5s
 
@@ -12,8 +12,8 @@ gaenge:
 
 hase: archivar
 
-# Befunde dieses Auftrags stehen in `hasenbau status`. Steuert nur die
-# Meldung — `hasenbau findings pdf-einlagern` rechnet auch ohne.
+# Findings of this Auftrag appear in `hasenbau status`. This only steers
+# the reporting — `hasenbau findings pdf-einlagern` computes them anyway.
 monitored: true
 
 raeume:
@@ -31,14 +31,14 @@ after:
   - move: $TRIGGER_FILE -> raeume/archiv/
 ---
 
-Der extrahierte Text eines PDFs liegt im Kontext unten (aus
-`$WORK/extrakt.md`). Fasse ihn zusammen, vergib Tags, und lege ihn
-strukturiert in `raeume/lager/` ab.
+The extracted text of a PDF is in the context below (from
+`$WORK/extrakt.md`). Summarise it, assign tags, and file it in a
+structured form under `raeume/lager/`.
 
-Dateiname: `YYYY-MM-DD-<slug>.md` — das Datum steht als „Extrahiert
-am:" im Kopf des Extrakts.
+File name: `YYYY-MM-DD-<slug>.md` — the date is in the head of the
+extract, as "Extracted on:".
 
-Aufbau der Datei: Titelzeile, dann eine Zeile `Tags: tag1, tag2, …`,
-dann eine kurze Zusammenfassung, dann der Volltext.
+Layout of the file: a title line, then one line `Tags: tag1, tag2, …`,
+then a short summary, then the full text.
 
-Antworte am Ende mit genau einer Zeile: was du wo abgelegt hast.
+End your answer with exactly one line: what you filed and where.

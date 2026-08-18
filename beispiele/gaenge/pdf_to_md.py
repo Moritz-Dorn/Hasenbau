@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """pdf_to_md.py <input.pdf> --out <out.md>
 
-Deterministische PDF-Extraktion für den Referenz-Auftrag pdf-einlagern
-(PLAN.md §6): shellt nach pdftotext (poppler) raus, kein LLM. Exit != 0
-bei kaputtem PDF oder leerem Extrakt — der Runner bricht dann ab und
-der Input wandert nach quarantaene/ (§7), nie nach archiv/.
+Deterministic PDF extraction for the reference Auftrag pdf-einlagern
+(PLAN.md §6): shells out to pdftotext (poppler), no LLM. Exit != 0 on a
+broken PDF or an empty extract — the runner then aborts and the input
+goes to quarantaene/ (§7), never to archiv/.
 """
 
 import argparse
@@ -30,12 +30,12 @@ def main() -> None:
         sys.exit(res.returncode)
     text = res.stdout.strip()
     if not text:
-        sys.exit("pdf_to_md: kein Text extrahiert — Scan ohne OCR?")
+        sys.exit("pdf_to_md: no text extracted — a scan without OCR?")
 
     heute = datetime.date.today().isoformat()
     name = pathlib.Path(args.pdf).name
     pathlib.Path(args.out).write_text(
-        f"# Extrakt aus {name}\n\nExtrahiert am: {heute}\n\n{text}\n",
+        f"# Extract from {name}\n\nExtracted on: {heute}\n\n{text}\n",
         encoding="utf-8",
     )
 
