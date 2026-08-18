@@ -164,6 +164,13 @@ The daemon reads the definitions at startup. Change anything in
 `auftraege/`, `hasen/` or `hasenbau.yaml` and you restart it; material in
 the Räume is unaffected, since that is the trigger.
 
+A watch Auftrag fires **one Lauf per file**, and its pattern is how you
+steer that: `watch: "*.pdf"` sees the input Raum flat, `watch:
+"**/*.pdf"` takes subdirectories along as well, and material that a Hase
+is only meant to read alongside the trigger must not match the pattern —
+otherwise it gets a Lauf of its own
+([docs/architecture.md](docs/architecture.md#what-a-watch-auftrag-sees)).
+
 A `hasenbau lauf` alongside it is allowed and the normal way to check a
 single Auftrag: it starts its own opencode server on its own port, and
 both share the SQLite database in WAL mode.

@@ -33,6 +33,47 @@ The full implementation plan is in [`PLAN.md`](../PLAN.md), in German:
 architecture §2, isolation §3, layout §4, data model §5, Auftrag format
 §6.
 
+## What a watch Auftrag sees
+
+`watch:` carries the pattern alone; the directory it applies to is the
+Auftrag's `input:` Raum. Flat by default: `watch: "*.pdf"` sees the
+Räum's own files and nothing below them.
+
+A double star turns that on for subdirectories whose names nobody has to
+know in advance:
+
+```yaml
+trigger: {watch: "*.pdf"}       # the Raum itself
+trigger: {watch: "**/*.pdf"}    # the Raum and everything below it
+```
+
+The double star stands for zero or more directories, so `**/*.pdf` also
+matches a PDF lying directly in the Raum — you do not lose the flat case
+by opting in. A pattern that names its subdirectory (`scans/*.pdf`) stays
+flat and keeps costing exactly one inotify watch.
+
+**One Lauf per file.** The pattern is the control: material that a Hase
+is meant to read along with the trigger must **not** match it. With
+`watch: "*.pdf"` the JSON files next to the PDF set nothing off; write
+`watch: "*"` and every attachment gets a Lauf of its own. The
+already-seen backstop does not save you here — it knows triggers, not
+companions.
+
+A Hase **may** read what lies next to the trigger (`read`, `glob` and
+`list` are open, only `bash`, `webfetch`, `websearch` and
+`external_directory` are denied). It just does not learn of it by
+itself. If you want it read, say so in the body of the Auftrag, as prose
+without a path: "next to the PDF there are two JSON files in the input
+folder". The path is already under `raeume:` and does not belong there
+twice.
+
+Limits worth knowing before pointing `**` at a large tree: every watched
+directory costs one inotify watch (`fs.inotify.max_user_watches`),
+symlinks are not followed (a link pointing at an ancestor would be a
+loop, one pointing out of the Bau a window into foreign directories),
+and `{a,b}` is read as an alternative — a file whose name contains
+braces is no longer matched literally.
+
 ## Isolation
 
 The opencode server runs with an isolated config (`XDG_CONFIG_HOME`

@@ -1255,8 +1255,47 @@ aber ein watch-Auftrag.
 nicht — ein stiller Rückfall auf den Bau-Root hieße, den ganzen Bau zu
 beobachten. Für `cron` und `manual` ist derselbe Raum kein Trigger,
 sondern der Suchraum, den Gänge über `$RAUM_input` ansprechen.
-Platzhalter im Verzeichnis-Anteil des Musters lehnt der Parser ab,
-solange rekursives Beobachten nicht gebaut ist (Hasenbau-5xv).
+
+**Flach ist die Vorgabe, rekursiv ein Opt-in** (Hasenbau-5xv). `*.pdf`
+sieht den Raum selbst, `**/*.pdf` nimmt Unterverzeichnisse dazu, deren
+Namen niemand vorher kennen muss — der Wunsch, aus dem der Bead entstand.
+Der Doppelstern steht für NULL oder mehr Ebenen, sonst bräuchte ein
+Eingang mit beidem zwei Aufträge. Rekursiv registriert wird nur, wenn der
+Verzeichnis-Anteil ein Platzhalter-Zeichen trägt: wer `*.pdf` schreibt,
+bekommt weiterhin genau einen inotify-Watch.
+
+Gematcht wird gegen Muster und Pfad IM RAUM, nicht gegen den
+zusammengesetzten Pfad — sonst hieße `**` „irgendwo im Bau" statt „unter
+dem Eingang". Die Wurzel steht seit Hasenbau-d6d fest (der input-Raum),
+weshalb sie nicht mehr aus dem Muster gerechnet werden muss; damit ist
+auch das Verzeichnis namens `*` aus Hasenbau-h64 kein Fall mehr.
+
+Der Knackpunkt ist nicht das Matchen, sondern das Rennen: `mv ordner/
+raeume/eingang/` ist EIN Rename, der Ordner ist mit Inhalt sofort da, und
+zwischen seinem Entstehen und dem `fsnotify.Add` hört niemand ein Event.
+Deshalb wird jedes frisch registrierte Verzeichnis einmal durchgesehen —
+dieselbe Bewegung wie das Nachholen beim Start (§7), und
+Doppelmeldungen hält der Arbeiter ohnehin fern.
+
+Gematcht wird mit `doublestar` statt mit `filepath.Match` (Entscheidung
+Moritz, 2026-08-18). Nicht wegen des Doppelsterns selbst — das wären ein
+paar Dutzend Zeilen —, sondern weil die Randfälle sonst fünf eigene
+Entscheidungen samt Tests wären und weil `ValidatePattern` erlaubt, ein
+kaputtes Muster beim LADEN abzulehnen statt es im Watcher nie treffen zu
+lassen. Der Preis steht in der Nutzer-Doku: `{a,b}` ist ab jetzt eine
+Alternative, ein Dateiname mit geschweiften Klammern wird also nicht mehr
+wörtlich getroffen.
+
+**Ein Lauf je Datei, und das Muster ist die Steuerung** (Hasenbau-e1q).
+Begleitmaterial, das ein Hase mitlesen soll, darf das Muster nicht
+matchen — bei `*.pdf` lösen danebenliegende JSON nichts aus, bei `*`
+bekäme jeder Anhang einen eigenen Lauf, und der gesehen-Backstop hält das
+nicht auf: der kennt Auslöser, keine Begleiter. Das ist gewolltes
+Verhalten, kein Mangel; das System sammelt nicht und räumt nicht hinter
+fremden Dateien her. Lesen DARF ein Hase, was danebenliegt (`read`,
+`glob`, `list` sind offen) — er erfährt nur nicht von sich aus davon. Wer
+will, dass er es mitliest, schreibt es als Prosa ohne Pfad in den Body;
+der Pfad steht schon unter `raeume:`.
 
 **Die Variablen werden vor `sh -c` textuell ersetzt — und genau deshalb
 ist der Auslöser das einzige geprüfte Feld.** Textuell zu ersetzen ist

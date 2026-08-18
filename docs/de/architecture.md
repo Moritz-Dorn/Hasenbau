@@ -34,6 +34,48 @@ Der vollständige Implementierungsplan steht in [`PLAN.md`](../../PLAN.md):
 Architektur §2, Isolation §3, Layout §4, Datenmodell §5,
 Auftragsformat §6.
 
+## Was ein watch-Auftrag sieht
+
+`watch:` trägt nur das Muster; das Verzeichnis dazu ist der `input:`-Raum
+des Auftrags. Flach ist die Vorgabe: `watch: "*.pdf"` sieht die Dateien
+des Raums und nichts darunter.
+
+Ein Doppelstern schaltet Unterverzeichnisse dazu, deren Namen niemand
+vorher kennen muss:
+
+```yaml
+trigger: {watch: "*.pdf"}       # nur der Raum selbst
+trigger: {watch: "**/*.pdf"}    # der Raum samt allem darunter
+```
+
+Der Doppelstern steht für null oder mehr Verzeichnisse — `**/*.pdf`
+trifft also auch eine PDF, die direkt im Raum liegt; wer ihn schreibt,
+verliert den flachen Fall nicht. Ein Muster, das sein Unterverzeichnis
+beim Namen nennt (`scans/*.pdf`), bleibt flach und kostet weiter genau
+einen inotify-Watch.
+
+**Ein Lauf je Datei.** Das Muster ist die Steuerung: Begleitmaterial,
+das ein Hase mitlesen soll, darf es **nicht** matchen. Bei `watch:
+"*.pdf"` lösen danebenliegende JSON nichts aus; wer `watch: "*"`
+schreibt, bekommt je Anhang einen eigenen Lauf. Der gesehen-Backstop
+hält das nicht auf — er kennt Auslöser, keine Begleiter.
+
+Ein Hase **darf** lesen, was neben dem Auslöser liegt (`read`, `glob`
+und `list` sind offen, `deny` sind nur `bash`, `webfetch`, `websearch`
+und `external_directory`). Er erfährt bloß nicht von sich aus, dass es da
+ist. Wer will, dass er es mitliest, schreibt es in den Body des Auftrags,
+und zwar als Prosa ohne Pfad: „im input-Ordner liegen neben der PDF noch
+zwei JSON". Der Pfad steht schon unter `raeume:` und gehört nicht
+zweimal hin.
+
+Grenzen, die man kennen sollte, bevor man `**` auf einen großen Baum
+richtet: jedes beobachtete Verzeichnis kostet einen inotify-Watch
+(`fs.inotify.max_user_watches`), Symlinks werden nicht verfolgt (ein
+Link auf einen Vorfahren wäre eine Schleife, einer aus dem Bau heraus ein
+Fenster in fremde Verzeichnisse), und `{a,b}` liest der Matcher als
+Alternative — ein Dateiname mit geschweiften Klammern wird also nicht
+mehr wörtlich getroffen.
+
 ## Isolation
 
 Der opencode-Server läuft mit isolierter Config (`XDG_CONFIG_HOME` zeigt

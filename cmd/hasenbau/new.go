@@ -242,7 +242,12 @@ trigger:
   manual: true                     # läuft nur auf Zuruf: hasenbau lauf %[1]s
   # watch: "*.txt"                 # NUR das Muster — der Eingang steht
   #                                # unten als raeume: input:, beobachtet
-  #                                # wird die Summe aus beidem
+  #                                # wird die Summe aus beidem. Flach;
+  #                                # "**/*.txt" nimmt Unterverzeichnisse
+  #                                # dazu (null oder mehr Ebenen).
+  #                                # Ein Lauf je Datei: Begleitmaterial,
+  #                                # das der Hase nur mitlesen soll, darf
+  #                                # das Muster nicht matchen.
   # debounce: 5s                   # nur bei watch: Ruhe vor dem Zugriff
   # cron: "0 7 * * *"              # fünf Felder, keine Sekunden — siehe unten
 

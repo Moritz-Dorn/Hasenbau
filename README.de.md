@@ -159,6 +159,13 @@ Definitionen liest der Daemon beim Start. Wer an `auftraege/`, `hasen/`
 oder `hasenbau.yaml` etwas ändert, startet ihn neu; Material in den
 Räumen ist davon nicht betroffen, das ist ja der Trigger.
 
+Ein watch-Auftrag feuert **einen Lauf je Datei**, und sein Muster ist die
+Steuerung dafür: `watch: "*.pdf"` sieht den input-Raum flach, `watch:
+"**/*.pdf"` nimmt Unterverzeichnisse dazu, und Material, das ein Hase nur
+neben dem Auslöser mitlesen soll, darf das Muster nicht matchen — sonst
+bekommt es einen eigenen Lauf
+([docs/de/architecture.md](docs/de/architecture.md#was-ein-watch-auftrag-sieht)).
+
 Ein `hasenbau lauf` daneben ist erlaubt und der normale Weg, einen
 einzelnen Auftrag zu prüfen: er startet seinen eigenen opencode-Server
 auf eigenem Port, die SQLite teilen sich beide im WAL-Modus.
