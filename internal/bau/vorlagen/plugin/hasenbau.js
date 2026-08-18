@@ -29,7 +29,6 @@
 // müsste man sie nachbauen. Aus demselben Grund erfindet es an den
 // Manifesten nichts: was ein Werkzeug ist, entscheidet der Hasenbau.
 import { readFileSync, readdirSync } from "node:fs"
-import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { tool } from "@opencode-ai/plugin"
 
@@ -132,89 +131,11 @@ function binaryPfad(bau) {
 // `hasenbau` liest dieselben Manifeste beim Generieren der Agenten und
 // verweigert dort den Start (internal/bau/tools.go). Diese Datei ist
 // die nachsichtige Hälfte eines Paares, dessen andere Hälfte streng ist.
-// reviewPruefung trennt den Review-Block vom Body und vergleicht den
-// Hash. Der Block ist die Zusage eines Menschen, GENAU DIESEN Inhalt
-// gelesen zu haben; passt der Hash nicht, wurde danach geändert und die
-// Zusage gilt nicht mehr (ValIntent `outdated`).
-//
-// Das ist die Stelle, an der die Bindung wirksam wird: ein Werkzeug,
-// dessen Skript nach dem Review getauscht wurde, kommt hier nicht durch
-// und wird keinem Hasen angeboten.
-function reviewPruefung(quelle) {
-  // `#` fuer Python und Bash, `//` fuer TypeScript — der Block gehoert
-  // an den Code, nicht an eine Sprache.
-  const kommentar = (z) => {
-    const t = z.trim()
-    for (const zeichen of ["//", "#"]) {
-      if (t.startsWith(zeichen)) return t.slice(zeichen.length).trim()
-    }
-    return null
-  }
-
-  // Der Block ist HOMOGEN: nur Zeilen mit demselben Kommentarzeichen
-  // wie die Markenzeile gehoeren dazu. Ohne das liesse sich Code am
-  // Hash vorbeischmuggeln — in einem Bash-Skript ist `//bin/sh -c …`
-  // kein Kommentar, sondern ein ausfuehrbarer Pfad (gemessen
-  // 2026-08-13, Hasenbau-9w6).
-  const zeilen = quelle.split("\n")
-  let start = -1
-  let ende = -1
-  let zeichen = ""
-  let abgeschlossen = false
-  for (let i = 0; i < zeilen.length; i++) {
-    if (start < 0) {
-      const feld = kommentar(zeilen[i])
-      if (feld !== null && feld.startsWith("hasenbau-review:")) {
-        start = i
-        zeichen = zeilen[i].trim().startsWith("//") ? "//" : "#"
-      }
-      continue
-    }
-    if (ende >= 0) continue
-    if (!zeilen[i].trim().startsWith(zeichen)) {
-      ende = i
-      continue
-    }
-    // Ausdrueckliche Grenze: ohne sie muesste man das Ende raten, und
-    // das verschluckt Kommentare, die ohnehin schon im Skript standen.
-    if (kommentar(zeilen[i]).startsWith("hasenbau-review-end")) {
-      ende = i + 1
-      abgeschlossen = true
-    }
-  }
-  if (start < 0) return { ok: false, grund: "kein Review — ungelesen" }
-  if (!abgeschlossen) return { ok: false, grund: "Review ohne Schlusszeile" }
-  if (ende < 0) ende = zeilen.length
-
-  const block = zeilen.slice(start, ende).join("\n")
-  const body = zeilen.slice(0, start).concat(zeilen.slice(ende)).join("\n")
-  const soll = /^\s*(?:#|\/\/)\s*body-sha256:\s*([0-9a-f]{64})\s*$/m.exec(block)?.[1]
-  if (!soll) return { ok: false, grund: "Review ohne body-sha256" }
-
-  const ist = createHash("sha256").update(body).digest("hex")
-  if (ist !== soll) return { ok: false, grund: "seit dem Review geaendert (outdated)" }
-
-  // Ab hier dieselbe Ableitung wie LeiteZustandAb auf der Go-Seite
-  // (internal/bau/review.go) — beide Stellen muessen denselben Zustand
-  // ausrechnen, sonst registriert das Plugin, was der Generator verbietet.
-  // Dass sie es tun, prueft plugin_jsseite_test.go: er schneidet diese
-  // Funktion heraus und laesst sie ueber dieselben Skripte laufen wie die
-  // Go-Fassung. Wer sie umbenennt, macht den Test rot, nicht wirkungslos.
-  const exit = /^\s*(?:#|\/\/)\s*verified-exit:\s*(-?\d+)\s*$/m.exec(block)?.[1]
-  if (exit !== undefined && exit !== "0") {
-    return { ok: false, grund: `Probelauf gescheitert, exit ${exit} (invalid)` }
-  }
-  // Ein bestandener Probelauf reicht NICHT: Exit 0 heisst „es lief", nicht
-  // „es stimmt". Registriert wird nur, was ein Mensch bei `tool release`
-  // fuer richtig befunden hat — `released-by` ist dessen Spur (actual).
-  if (!/^\s*(?:#|\/\/)\s*released-by:\s*\S/m.test(block)) {
-    return { ok: false, grund: "nicht freigegeben — niemand hat die Ausgabe bestaetigt (hypothetical)" }
-  }
-  return { ok: true }
-}
-
 async function ladeWerkzeuge(bau, $) {
   const dir = join(bau, "tools")
+  // Derselbe Pfad, ueber den auch der Waechter meldet: das Binary, das
+  // diesen Bau faehrt (Selbstreferenz im mcp-Block, Hasenbau-2nq/08u).
+  const hasenbau = binaryPfad(bau)
   let dateien = []
   try {
     dateien = readdirSync(dir).filter((f) => f.endsWith(".json")).sort()
@@ -263,9 +184,18 @@ async function ladeWerkzeuge(bau, $) {
       if (!m?.description || !m?.script) throw new Error("description oder script fehlt")
 
       // Vor allem anderen: hat ein Mensch genau diesen Inhalt gelesen?
-      const pruefung = reviewPruefung(readFileSync(join(dir, m.script), "utf8"))
-      if (!pruefung.ok) {
-        console.error(`hasenbau: Werkzeug ${name} NICHT registriert — ${pruefung.grund}`)
+      // Die Frage beantwortet der HASENBAU, nicht diese Datei. Sie stand
+      // hier einmal nachgerechnet — und ist genau deshalb abgedriftet:
+      // die JS-Seite registrierte, was nur den Probelauf bestanden hatte,
+      // waehrend Go laengst die Freigabe verlangte (Hasenbau-7or/cko).
+      //
+      // Exit 0 heisst registrieren, alles andere nicht. Faellt der Aufruf
+      // aus — kein Binary, kaputter Pfad —, ist das ebenfalls "nicht":
+      // fail-closed, wie ueberall in dieser Datei.
+      const zustand = await $`${hasenbau} -bau ${bau} tool state ${name}`.quiet().nothrow()
+      if (zustand.exitCode !== 0) {
+        const grund = (zustand.stdout.toString() + zustand.stderr.toString()).trim() || `exit ${zustand.exitCode}`
+        console.error(`hasenbau: Werkzeug ${name} NICHT registriert — ${grund}`)
         continue
       }
 

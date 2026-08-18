@@ -66,6 +66,8 @@ const toolUsage = `Usage: hasenbau tool <verb> …
   test <name> [--<arg> <val>]   run it once and show what came out
         [-` + probeSandboxFlag + `]           without a sandbox, under real conditions
   release <name>                move it to ` + bau.ToolsDir + `/
+  state <name>                  may it be registered? (exit 0/1; the Bau
+                                plugin asks this — not meant for hand use)
 
 The three verbs are an order, not a choice. A tool passes through them
 in this sequence, and each step requires the previous one:
@@ -109,6 +111,12 @@ func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int 
 		return toolTest(root, args[1], args[2:], in, out, errw)
 	case "review":
 		return toolReview(root, args[1:], in, out, errw)
+	case "state":
+		if len(args) != 2 {
+			fmt.Fprintln(errw, "Usage: hasenbau tool state <name>")
+			return 2
+		}
+		return toolState(root, args[1], out, errw)
 	case "release":
 		fs := flag.NewFlagSet("tool release", flag.ContinueOnError)
 		fs.SetOutput(errw)
@@ -891,4 +899,51 @@ func vermerkeFreigabe(root string, t *bau.Tool, wer string) error {
 		return err
 	}
 	return os.WriteFile(pfad, []byte(bau.SchreibeReviewBlock(review, body)), info.Mode().Perm())
+}
+
+// toolState beantwortet genau eine Frage, und zwar für eine MASCHINE:
+// darf dieses Werkzeug registriert werden?
+//
+// Es gibt diesen Befehl, weil das Bau-Plugin die Antwort braucht und die
+// Regel nicht kennen soll. PLAN §3 sagt das über dieses Plugin
+// ausdrücklich — „die Regel steht NICHT hier, das Plugin meldet an das
+// Binary und tut, was zurückkommt" —, und für den Sandbox-Wächter galt
+// es von Anfang an; die Review-Prüfung rechnete sie dagegen selbst nach
+// und ist genau deshalb einmal abgedriftet (Hasenbau-7or/cko).
+//
+// Der Exit-Code trägt die Antwort, damit ein Aufrufer nichts parsen
+// muss: 0 = registrieren, 1 = nicht, 2 = die Frage ergibt keinen Sinn.
+// Auf stdout steht der Grund, in einer Zeile — er landet im Server-Log
+// des Baus, wo sonst niemand erführe, warum ein Werkzeug fehlt.
+func toolState(root, name string, out, errw io.Writer) int {
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 2
+	}
+	// Freigegebenes hat hier Vorrang, anders als bei `test`: gefragt wird
+	// nach dem Werkzeug, das ein Hase bekäme, und das liegt in tools/.
+	var gefunden *bau.Tool
+	for i := range werkzeuge {
+		if werkzeuge[i].Name != name {
+			continue
+		}
+		if gefunden == nil || !werkzeuge[i].Entwurf {
+			gefunden = &werkzeuge[i]
+		}
+	}
+	if gefunden == nil {
+		fmt.Fprintf(errw, "hasenbau tool state: no tool %q\n", name)
+		return 2
+	}
+	if !gefunden.Einsatzbereit() {
+		grund := string(gefunden.Zustand) + " — " + gefunden.Zustand.Erklaerung()
+		if gefunden.Entwurf {
+			grund = "draft, not released"
+		}
+		fmt.Fprintln(out, grund)
+		return 1
+	}
+	fmt.Fprintln(out, string(gefunden.Zustand))
+	return 0
 }

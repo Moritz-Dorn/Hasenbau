@@ -159,3 +159,8 @@ func PluginEingetragen(root string) (bool, error) {
 	}
 	return false, nil
 }
+
+// PluginQuelle gibt die ausgelieferte Fassung des Bau-Plugins heraus —
+// für Tests, die etwas über ihren Inhalt behaupten, ohne den Pfad zur
+// Vorlage zu kennen.
+func PluginQuelle() string { return sandboxWaechter }
