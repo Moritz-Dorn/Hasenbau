@@ -541,6 +541,22 @@ bestanden hatte, während die Go-Seite längst die Freigabe verlangte. Der
 Generator hätte es einem Hasen trotzdem verboten, aber die zweite Grenze
 war offen. Wer eine Stelle ändert, muss die andere mitziehen.
 
+Seit Hasenbau-7or hängt das nicht mehr am Erinnern: ein Differenz-Test
+(`plugin_jsseite_test.go`) schickt dieselben Skripte durch beide
+Fassungen und vergleicht das Urteil der JS-Seite mit dem, was Go
+ausrechnet — die Erwartung steht also nicht im Test, sondern entsteht
+aus der maßgeblichen Implementierung. Gegen die gedriftete Fassung ist
+er rot, mit genau dem historischen Befund („Go sagt hypothetical, das
+Plugin sagt ok").
+
+Dass das ohne neue Abhängigkeit geht, ist ein Nebenprodukt: in dieser
+Umgebung liegt keine JS-Runtime im PATH, aber `opencode` ist ein
+bun-kompiliertes Einzelbinary, und `BUN_BE_BUN=1` macht es zur bun-CLI.
+Der Test gatet damit auf dasselbe `opencode` wie die übrige
+Integrationsschicht. Was bleibt: die Doppelung selbst. Sie zu beseitigen
+— das Plugin aus einer gemeinsamen Quelle zu erzeugen — wäre teurer und
+steht weiter offen; abgesichert ist sie jetzt.
+
 Der Zustand wird dabei **abgeleitet, nicht gespeichert** — aus Block,
 Hash und vermerktem Probelauf. So kann ihn jedes Werkzeug ausrechnen,
 eine GUI ebenso wie dieser Code, und niemand muss ihn pflegen. Die Zeile
