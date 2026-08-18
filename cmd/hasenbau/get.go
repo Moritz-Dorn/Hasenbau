@@ -411,12 +411,12 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 func getTools(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("get tools", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	entwuerfe := fs.Bool("entwuerfe", false, "the review queue instead of the released tools")
+	entwuerfe := fs.Bool("drafts", false, "the review queue instead of the released tools")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(errw, "Usage: hasenbau get tools [-entwuerfe]")
+		fmt.Fprintln(errw, "Usage: hasenbau get tools [-drafts]")
 		return 2
 	}
 	werkzeuge, err := bau.LadeTools(root)
@@ -467,7 +467,7 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 		fmt.Fprintf(out, "\ncolumn RELEASED FOR incomplete: %v\n", ladefehler)
 	}
 	if offen > 0 {
-		fmt.Fprintf(out, "\n%d draft(s) waiting for review: hasenbau get tools -entwuerfe\n", offen)
+		fmt.Fprintf(out, "\n%d draft(s) waiting for review: hasenbau get tools -drafts\n", offen)
 	}
 	return 0
 }

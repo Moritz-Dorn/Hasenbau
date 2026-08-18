@@ -41,8 +41,8 @@ the Bau.
 hasenbau get auftraege     # what the Bau knows
 hasenbau get hasen         # templates, models, who uses them
 hasenbau get gaenge        # Gang scripts, who calls them, open drafts
-hasenbau get tools             # released tools and who may call them
-hasenbau get tools -entwuerfe  # what is waiting for review
+hasenbau get tools          # released tools and who may call them
+hasenbau get tools -drafts  # what is waiting for review
 hasenbau get laeufe [-n N] # history
 hasenbau get lauf <id>     # one Lauf, one line
 hasenbau get provider      # which providers the Bau knows, which are fetchable
@@ -112,8 +112,8 @@ Why a Bau brings its own providers at all is in
 
 ```bash
 hasenbau mcp               # back channel over stdio (started by opencode itself)
-hasenbau sandbox-vorfall   # reports a tool call from inside the sandbox
+hasenbau sandbox-incident   # reports a tool call from inside the sandbox
 ```
 
-Both are self-calls: `mcp` is started by opencode, `sandbox-vorfall` by
+Both are self-calls: `mcp` is started by opencode, `sandbox-incident` by
 the guard in the opencode server.

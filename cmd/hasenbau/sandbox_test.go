@@ -47,7 +47,7 @@ func TestSandboxVorfallWeistAbUndVerbucht(t *testing.T) {
 	lauf := laufendenLaufAnlegen(t, root)
 
 	var out, errw strings.Builder
-	code := run([]string{"-bau", root, "sandbox-vorfall",
+	code := run([]string{"-bau", root, "sandbox-incident",
 		"--tool", "task", "--session", "ses_x", "--args", `{"prompt":"mach was"}`}, &out, &errw)
 	if code != 3 {
 		t.Fatalf("Exit = %d, erwartet 3 (abweisen); stderr: %s", code, errw.String())
@@ -75,7 +75,7 @@ func TestSandboxVorfallWarnLaesstDurch(t *testing.T) {
 	lauf := laufendenLaufAnlegen(t, root)
 
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "sandbox-vorfall", "--tool", "bash"}, &out, &errw); code != 0 {
+	if code := run([]string{"-bau", root, "sandbox-incident", "--tool", "bash"}, &out, &errw); code != 0 {
 		t.Fatalf("Exit = %d, erwartet 0 (durchlassen); stderr: %s", code, errw.String())
 	}
 	if out.String() != "" {
@@ -95,7 +95,7 @@ func TestSandboxVorfallOhneLauf(t *testing.T) {
 	root := probeBau(t)
 
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "sandbox-vorfall", "--tool", "task"}, &out, &errw); code != 3 {
+	if code := run([]string{"-bau", root, "sandbox-incident", "--tool", "task"}, &out, &errw); code != 3 {
 		t.Fatalf("Exit = %d, erwartet 3", code)
 	}
 	if !strings.Contains(errw.String(), "ohne laufenden Lauf") {

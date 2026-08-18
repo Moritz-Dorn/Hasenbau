@@ -94,7 +94,7 @@ state stays as it was. A verdict without asking exists only under real
 conditions: ` + "`-" + probeSandboxFlag + "`" + `.
 
 What the Bau knows is shown by ` + "`hasenbau get tools`" + `,
-what is waiting for review by ` + "`hasenbau get tools -entwuerfe`" + `.
+what is waiting for review by ` + "`hasenbau get tools -drafts`" + `.
 `
 
 func cmdTool(root string, args []string, in io.Reader, out, errw io.Writer) int {

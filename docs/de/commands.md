@@ -41,8 +41,8 @@ deshalb Bau-relativ.
 hasenbau get auftraege     # was der Bau kennt
 hasenbau get hasen         # Templates, Modelle, wer sie benutzt
 hasenbau get gaenge        # Gang-Skripte, wer sie ruft, offene Entwürfe
-hasenbau get tools             # freigegebene Werkzeuge und wer sie rufen darf
-hasenbau get tools -entwuerfe  # was auf Review wartet
+hasenbau get tools          # freigegebene Werkzeuge und wer sie rufen darf
+hasenbau get tools -drafts  # was auf Review wartet
 hasenbau get laeufe [-n N] # Historie
 hasenbau get lauf <id>     # ein Lauf, eine Zeile
 hasenbau get provider      # welche Provider kennt der Bau, welche sind holbar
@@ -113,8 +113,8 @@ Warum ein Bau seine Provider überhaupt selbst mitbringt, steht in
 
 ```bash
 hasenbau mcp               # Rückkanal über stdio (startet opencode selbst)
-hasenbau sandbox-vorfall   # meldet einen Werkzeug-Aufruf aus der Sandbox heraus
+hasenbau sandbox-incident   # meldet einen Werkzeug-Aufruf aus der Sandbox heraus
 ```
 
-Beide sind Selbstaufrufe: `mcp` startet opencode, `sandbox-vorfall`
+Beide sind Selbstaufrufe: `mcp` startet opencode, `sandbox-incident`
 ruft der Wächter im opencode-Server.

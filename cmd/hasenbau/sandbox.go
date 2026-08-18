@@ -1,4 +1,4 @@
-// sandbox.go: `hasenbau sandbox-vorfall` — die Gegenstelle des
+// sandbox.go: `hasenbau sandbox-incident` — die Gegenstelle des
 // Sandbox-Wächters (Hasenbau-d2p).
 //
 // Der Wächter ist ein opencode-Plugin und sitzt im Server-Prozess; er
@@ -38,17 +38,17 @@ const abweisungsText = `Dieses Werkzeug führt aus der Sandbox heraus, die der H
 Wenn du es für deine Aufgabe brauchst: fordere eines an mit hasenbau_tool_request (Zweck, Eingabe, Ausgabe). Es wird geprüft und gebaut — niemand baut sich hier selbst eines.
 Was du jetzt tun kannst: die Aufgabe mit deinen Datei-Werkzeugen lösen, oder melden, dass sie so nicht lösbar ist.`
 
-func cmdSandboxVorfall(root string, args []string, out, errw io.Writer) int {
-	fs := flag.NewFlagSet("sandbox-vorfall", flag.ContinueOnError)
+func cmdSandboxIncident(root string, args []string, out, errw io.Writer) int {
+	fs := flag.NewFlagSet("sandbox-incident", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	tool := fs.String("tool", "", "Name des gerufenen Werkzeugs")
+	tool := fs.String("tool", "", "name of the called tool")
 	session := fs.String("session", "", "opencode session of the call")
 	argsJSON := fs.String("args", "", "arguments of the call (JSON)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if *tool == "" {
-		fmt.Fprintln(errw, "hasenbau sandbox-vorfall: -tool fehlt")
+		fmt.Fprintln(errw, "hasenbau sandbox-incident: -tool is missing")
 		return 1
 	}
 
@@ -65,7 +65,7 @@ func cmdSandboxVorfall(root string, args []string, out, errw io.Writer) int {
 	// Scheitert das Verbuchen, ändert es an der Entscheidung nichts:
 	// die Sandbox hängt nicht daran, dass die Notiz ankommt.
 	if err := verbucheVorfall(root, *tool, *session, *argsJSON, abweisen, errw); err != nil {
-		fmt.Fprintf(errw, "hasenbau sandbox-vorfall: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau sandbox-incident: %v\n", err)
 		if abweisen {
 			fmt.Fprint(out, abweisungsText)
 			return 3

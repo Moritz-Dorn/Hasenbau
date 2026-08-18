@@ -207,7 +207,7 @@ Fall davor, den nächsten Umweg zu suchen. `sandbox: warn` in
 Fällen, als Notiz am Lauf.
 
 **Die Regel steht nicht im Plugin.** Es meldet an `hasenbau
-sandbox-vorfall` und tut, was der Exit-Code sagt (3 = abweisen, Text auf
+sandbox-incident` und tut, was der Exit-Code sagt (3 = abweisen, Text auf
 stdout ist für den Hasen). So bleibt die Sandbox-Semantik im Hasenbau
 und überlebt einen Wechsel des Backends (§6) — nachzubauen wäre dann
 ein dünner Hook, keine Bedeutung. Aus demselben Grund kennt das Plugin

@@ -279,7 +279,7 @@ export const SandboxWaechter = async ({ $, directory }) => {
       // nothrow: ein Wächter, der Läufe umbringt, wird abgeschaltet —
       // und misst dann gar nichts mehr. Fällt die Meldung aus, läuft
       // der Aufruf durch, und die Lücke steht im Server-Log.
-      const r = await $`${hasenbau} -bau ${directory} sandbox-vorfall --tool ${input.tool} --session ${input.sessionID} --args ${args}`
+      const r = await $`${hasenbau} -bau ${directory} sandbox-incident --tool ${input.tool} --session ${input.sessionID} --args ${args}`
         .quiet()
         .nothrow()
 

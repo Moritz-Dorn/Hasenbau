@@ -61,7 +61,7 @@ Commands:
   status                show the state of the Bau
   mcp                   serve the back channel over stdio (opencode
                         starts this itself; do not call by hand)
-  sandbox-vorfall       report a tool call that leads out of the sandbox
+  sandbox-incident      report a tool call that leads out of the sandbox
                         (called by the guard in the opencode server;
                         do not call by hand)
 
@@ -149,8 +149,8 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 		return cmdStatus(bau, out, errw)
 	case "mcp":
 		return cmdMCP(bau, errw)
-	case "sandbox-vorfall":
-		return cmdSandboxVorfall(bau, rest[1:], out, errw)
+	case "sandbox-incident":
+		return cmdSandboxIncident(bau, rest[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau: unknown command %q\n\n%s", rest[0], usage)
 		return 2

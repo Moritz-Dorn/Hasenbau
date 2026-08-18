@@ -79,7 +79,7 @@ func TestToolTestFaengtWasSonstDurchrutscht(t *testing.T) {
 
 	// Vorbedingung: der bisherige Weg meldet nichts.
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "get", "tools", "-entwuerfe"}, &out, &errw); code != 0 {
+	if code := run([]string{"-bau", root, "get", "tools", "-drafts"}, &out, &errw); code != 0 {
 		t.Fatalf("get tools: exit %d — %s", code, errw.String())
 	}
 	if !strings.Contains(out.String(), "kaputt") {
