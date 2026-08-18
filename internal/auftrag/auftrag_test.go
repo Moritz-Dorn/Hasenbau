@@ -448,7 +448,11 @@ func TestParseFehler(t *testing.T) {
 			"trigger:\n  manual: true"), "$TRIGGER_FILE ist bei einem manual-Auftrag nicht gebunden"},
 		{"watch ohne input-Raum", ersetze(t, "  input: raeume/laderampe/sources/\n", ""), "watch-Trigger ohne Raum"},
 		{"watch mit Bau-Pfad", ersetze(t, "watch: \"*.pdf\"", "watch: raeume/laderampe/sources/*.pdf"), "sieht aus wie ein Bau-relativer Pfad"},
-		{"watch mit Platzhalter im Verzeichnis", ersetze(t, "watch: \"*.pdf\"", "watch: \"*/*.pdf\""), "Platzhalter-Zeichen im Verzeichnis-Anteil"},
+		// Platzhalter im Verzeichnis-Anteil sind seit Hasenbau-5xv erlaubt
+		// (siehe TestWatchRekursiv). Abgelehnt wird jetzt, was der Matcher
+		// nicht lesen kann — beim Laden, nicht als Trigger, der nie feuert.
+		{"watch mit kaputtem Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"[a-.pdf\""), "kein gültiges Glob-Muster"},
+		{"watch mit .. im Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"../*.pdf\""), "darf den input-Raum nicht verlassen"},
 		{"$INPUT gibt es nicht mehr", ersetze(t, "$TRIGGER_FILE -> raeume/archiv/", "$INPUT -> raeume/archiv/"), "$INPUT heißt jetzt $TRIGGER_FILE"},
 	}
 
