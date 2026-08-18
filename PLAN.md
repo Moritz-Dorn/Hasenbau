@@ -578,6 +578,19 @@ Fassungen, und es gibt nur noch eine. Was bleibt, sichert ein Test, der
 das Plugin auf seinen Inhalt festnagelt — wer dort wieder anfängt,
 `released-by` selbst zu lesen, wird rot.
 
+**Der Weg selbst ist am 2026-08-18 an einem echten Lauf nachgemessen**
+(Hasenbau-lep), weil ein Fehler darin still wäre: fail-closed heißt
+„kein Werkzeug", und ein Hase ohne Werkzeug sieht aus wie einer, der
+keines braucht. Der Auftrag `werkzeugprobe` im Test-Bau nannte zwei
+Werkzeuge — `zeilen` freigegeben, `notiz` unfreigegeben, aber in
+`tools/` liegend, damit die Gegenprobe wirklich den Zustands-Aufruf
+trifft und nicht bloß das Verzeichnis. Der Hase zählte `zeilen` in
+seiner Werkzeugliste auf, rief es, und die Antwort des Skripts (7)
+landete beim Modell und in seiner Ausgabedatei; `notiz` fehlte, mit
+einer Zeile im Server-Log: `Werkzeug notiz NICHT registriert —
+hypothetical`. Beides in einem Lauf, denn eine Liste ohne Gegenprobe
+zeigt nur, dass irgendetwas registriert wurde.
+
 Der Zustand wird dabei **abgeleitet, nicht gespeichert** — aus Block,
 Hash und vermerktem Probelauf. So kann ihn jedes Werkzeug ausrechnen,
 eine GUI ebenso wie dieser Code, und niemand muss ihn pflegen. Die Zeile
