@@ -39,7 +39,7 @@ func TestFindingsOhneServer(t *testing.T) {
 	if code := run([]string{"-bau", bau, "findings", "pdf-einlagern"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	for _, muss := range []string{"read → write", "in 3 von 3", "VARIIERT"} {
+	for _, muss := range []string{"read → write", "in 3 of 3", "VARIIERT"} {
 		if !strings.Contains(out.String(), muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, out.String())
 		}
@@ -110,8 +110,8 @@ func TestStatusMeldetNurUeberwachteAuftraege(t *testing.T) {
 	}
 	got := out.String()
 	for _, muss := range []string{
-		"Überwacht  (1 von 2 Aufträgen)",
-		"pdf-einlagern", "2 Befunde über 3 Läufe", "read → write",
+		"Monitored  (1 of 2 Aufträge)",
+		"pdf-einlagern", "2 findings across 3 Läufe", "read → write",
 		"hasenbau findings <auftrag>",
 	} {
 		if !strings.Contains(got, muss) {
@@ -120,8 +120,8 @@ func TestStatusMeldetNurUeberwachteAuftraege(t *testing.T) {
 	}
 	// Nur im Abschnitt prüfen: in der Auftrags-Tabelle darüber steht
 	// tagesbericht zu Recht.
-	abschnitt := got[strings.Index(got, "Überwacht  ("):]
-	if i := strings.Index(abschnitt, "\nDie letzten Läufe"); i >= 0 {
+	abschnitt := got[strings.Index(got, "Monitored  ("):]
+	if i := strings.Index(abschnitt, "\nThe most recent Läufe"); i >= 0 {
 		abschnitt = abschnitt[:i]
 	}
 	if strings.Contains(abschnitt, "tagesbericht") {
@@ -133,7 +133,7 @@ func TestStatusMeldetNurUeberwachteAuftraege(t *testing.T) {
 	if code := run([]string{"-bau", root, "findings", "tagesbericht"}, &out, &errw); code != 0 {
 		t.Fatalf("findings tagesbericht: exit %d, stderr %q", code, errw.String())
 	}
-	for _, muss := range []string{"Befunde zu tagesbericht", "3 ausgewertete Läufe", "read → write"} {
+	for _, muss := range []string{"Findings for tagesbericht", "Based on 3 evaluated Läufe", "read → write"} {
 		if !strings.Contains(out.String(), muss) {
 			t.Errorf("nicht überwachter Auftrag nicht analysierbar (%q):\n%s", muss, out.String())
 		}
@@ -219,9 +219,9 @@ Berichte.
 	got := out.String()
 	for _, muss := range []string{
 		"\nGedrosselt (1)",
-		"pdf-einlagern", "2 Läufe je 1h",
+		"pdf-einlagern", "2 Läufe per 1h",
 		"7 Dateien im Eingang",
-		"nächster Lauf frühestens",
+		"next Lauf at the earliest",
 	} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Status ohne %q:\n%s", muss, got)
@@ -262,7 +262,7 @@ func TestFindingsFehlerpfade(t *testing.T) {
 	if code := run([]string{"-bau", t.TempDir(), "findings", "gibtsnicht"}, &out, &errw); code != 0 {
 		t.Errorf("exit %d, erwartet 0", code)
 	}
-	if !strings.Contains(out.String(), "Keine ausgewerteten Läufe") {
+	if !strings.Contains(out.String(), "No evaluated Läufe") {
 		t.Errorf("Ausgabe: %q", out.String())
 	}
 }
@@ -334,9 +334,9 @@ func TestDigBefundLiefertBefundUndTraces(t *testing.T) {
 	}
 	got := out.String()
 	for _, muss := range []string{
-		"# Befund 1 zu pdf-einlagern", "deterministisch, ohne Modell",
+		"# Finding 1 of pdf-einlagern", "deterministic, no model",
 		"read → write", "VARIIERT",
-		"Die Läufe, auf denen der Befund beruht", "## Lauf 3", "[tool read — completed]",
+		"The Läufe the finding rests on", "## Lauf 3", "[tool read — completed]",
 	} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Material ohne %q:\n%s", muss, got)

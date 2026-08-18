@@ -104,10 +104,10 @@ func TestDescribeAuftrag(t *testing.T) {
 	got := out.String()
 	for _, muss := range []string{
 		"Agent pdf-einlagern__archivar",
-		"pdf-zu-markdown", "2m0s", "gaenge/pdf_to_md.py  vorhanden",
-		"→ Schreibrecht des Hasen",
-		"letzten 3 Summaries", "move $TRIGGER_FILE -> raeume/archiv/",
-		"Prompt-Kern", "Noch nie gelaufen",
+		"pdf-zu-markdown", "2m0s", "gaenge/pdf_to_md.py  present",
+		"→ the Hase may write here",
+		"the last 3 summaries", "move $TRIGGER_FILE -> raeume/archiv/",
+		"Prompt core", "Has never run",
 	} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
@@ -171,7 +171,7 @@ func TestDescribeHaseZeigtEffektivePermissions(t *testing.T) {
 	if code := run([]string{"-bau", root, "describe", "hase", "ungenutzt"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(out.String(), "Kein Auftrag benutzt diesen Hasen") {
+	if !strings.Contains(out.String(), "No Auftrag uses this Hase") {
 		t.Errorf("ungenutzter Hase nicht erklärt:\n%s", out.String())
 	}
 }
@@ -251,7 +251,7 @@ func TestGetUndDescribeGang(t *testing.T) {
 	if !strings.Contains(got, "gaenge/pdf_to_md.py") || !strings.Contains(got, "pdf-einlagern/pdf-zu-markdown") {
 		t.Errorf("Benutzung fehlt:\n%s", got)
 	}
-	if !strings.Contains(got, "Draft, nicht eingetragen") {
+	if !strings.Contains(got, "draft, not registered") {
 		t.Errorf("Draft nicht als solcher markiert:\n%s", got)
 	}
 
@@ -260,7 +260,7 @@ func TestGetUndDescribeGang(t *testing.T) {
 		t.Fatalf("describe: exit %d, stderr %q", code, errw.String())
 	}
 	got = out.String()
-	for _, muss := range []string{"gaenge/pdf_to_md.py", "Benutzt von", "pdf-einlagern / pdf-zu-markdown", "2m0s"} {
+	for _, muss := range []string{"gaenge/pdf_to_md.py", "Used by", "pdf-einlagern / pdf-zu-markdown", "2m0s"} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
 		}
@@ -274,7 +274,7 @@ func TestGetUndDescribeGang(t *testing.T) {
 	if !strings.Contains(got, "Stellt einen Index.") && !strings.Contains(got, "lager_index.py --lager") {
 		t.Errorf("Zweck aus dem Docstring fehlt:\n%s", got)
 	}
-	if !strings.Contains(got, "trag den Gang selbst ein") {
+	if !strings.Contains(got, "register the Gang yourself") {
 		t.Errorf("Hinweis auf den Einbau fehlt:\n%s", got)
 	}
 }
@@ -290,7 +290,7 @@ func TestGetGaengeToteReferenz(t *testing.T) {
 	if code := run([]string{"-bau", root, "get", "gaenge"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(out.String(), "FEHLT") {
+	if !strings.Contains(out.String(), "MISSING") {
 		t.Errorf("tote Referenz nicht gemeldet:\n%s", out.String())
 	}
 
@@ -298,7 +298,7 @@ func TestGetGaengeToteReferenz(t *testing.T) {
 	if code := run([]string{"-bau", root, "describe", "gang", "gaenge/pdf_to_md.py"}, &out, &errw); code != 0 {
 		t.Fatalf("describe: exit %d", code)
 	}
-	if !strings.Contains(out.String(), "FEHLT") {
+	if !strings.Contains(out.String(), "MISSING") {
 		t.Errorf("describe meldet die fehlende Datei nicht:\n%s", out.String())
 	}
 }

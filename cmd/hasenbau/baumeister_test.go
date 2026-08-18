@@ -86,7 +86,7 @@ func TestBaumeisterGangZiehtMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("$WORK/material.md fehlt: %v", err)
 	}
-	for _, muss := range []string{"Trace Lauf 1", "notiz-einlagern", "[tool read — completed]", "notiz.txt"} {
+	for _, muss := range []string{"Trace of Lauf 1", "notiz-einlagern", "[tool read — completed]", "notiz.txt"} {
 		if !strings.Contains(string(trace), muss) {
 			t.Errorf("Trace ohne %q:\n%s", muss, trace)
 		}
@@ -124,7 +124,7 @@ func TestZielLauf(t *testing.T) {
 		t.Errorf("Auftrag als Ziel: %+v, %v", l, err)
 	}
 	// Ein Lauf ohne Session hat nichts zu verdichten.
-	if _, err := targetLauf(st, "1"); err == nil || !strings.Contains(err.Error(), "keine Session") {
+	if _, err := targetLauf(st, "1"); err == nil || !strings.Contains(err.Error(), "has no session") {
 		t.Errorf("Lauf ohne Session: %v", err)
 	}
 	if _, err := targetLauf(st, "tagesbericht"); err == nil {
@@ -148,7 +148,7 @@ func TestBerichteEntwurf(t *testing.T) {
 	if len(neu) != 1 || neu[0] != "gaenge/entwurf/neu.py" {
 		t.Errorf("neu = %v", neu)
 	}
-	for _, muss := range []string{"neu        gaenge/entwurf/neu.py (42 Bytes)", "GEÄNDERT   gaenge/entwurf/alt.py", "unverändert: 1 Datei"} {
+	for _, muss := range []string{"new        gaenge/entwurf/neu.py (42 bytes)", "CHANGED   gaenge/entwurf/alt.py", "unchanged: 1 file"} {
 		if !strings.Contains(b.String(), muss) {
 			t.Errorf("Bericht ohne %q:\n%s", muss, b.String())
 		}
@@ -159,7 +159,7 @@ func TestBerichteEntwurf(t *testing.T) {
 	if neu := reportDrafts(&b, "gaenge/entwurf/", vorher, vorher); neu != nil {
 		t.Errorf("neu = %v ohne Änderung", neu)
 	}
-	if !strings.Contains(b.String(), "unverändert — der Baumeister hat nichts geschrieben") {
+	if !strings.Contains(b.String(), "unchanged — the Baumeister wrote nothing") {
 		t.Errorf("Bericht: %s", b.String())
 	}
 }
@@ -191,10 +191,10 @@ func TestPruefeEntwurfFindetSyntaxfehler(t *testing.T) {
 	}
 
 	meldungen := strings.Join(checkDrafts(root, []string{gut, kaputt}), "\n")
-	if !strings.Contains(meldungen, "Syntax von "+gut+" ist in Ordnung") {
+	if !strings.Contains(meldungen, "syntax of "+gut+" is fine") {
 		t.Errorf("gutes Skript: %s", meldungen)
 	}
-	if !strings.Contains(meldungen, "SYNTAXFEHLER in "+kaputt) {
+	if !strings.Contains(meldungen, "SYNTAX ERROR in "+kaputt) {
 		t.Errorf("kaputtes Skript: %s", meldungen)
 	}
 	// Die Meldung muss den Fehler nennen, nicht die Traceback-Kopfzeile.
@@ -221,7 +221,7 @@ func TestBaumeisterOhneConfigEintrag(t *testing.T) {
 	if code := cmdBaumeister(t.TempDir(), []string{"1"}, &out, &errw); code != 1 {
 		t.Errorf("exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "nennt keinen baumeister:") {
+	if !strings.Contains(errw.String(), "names no baumeister:") {
 		t.Errorf("Meldung: %q", errw.String())
 	}
 }
@@ -248,7 +248,7 @@ func TestBerichteLaufNenntDenStatusAusDerDB(t *testing.T) {
 
 	var out strings.Builder
 	reportLauf(&out, st, id)
-	for _, teil := range []string{"aborted", "context canceled", "unfertig"} {
+	for _, teil := range []string{"aborted", "context canceled", "incomplete"} {
 		if !strings.Contains(out.String(), teil) {
 			t.Errorf("Bericht nennt %q nicht: %q", teil, out.String())
 		}
@@ -261,7 +261,7 @@ func TestBerichteLaufNenntDenStatusAusDerDB(t *testing.T) {
 	}
 	out.Reset()
 	reportLauf(&out, st, ok)
-	if !strings.Contains(out.String(), "ok") || strings.Contains(out.String(), "unfertig") {
+	if !strings.Contains(out.String(), "ok") || strings.Contains(out.String(), "incomplete") {
 		t.Errorf("geglückter Lauf: %q", out.String())
 	}
 }
@@ -326,7 +326,7 @@ func TestBaumeisterMaterialBeideStufen(t *testing.T) {
 	if m.Input != "pdf-einlagern#1" {
 		t.Errorf("Stufe 2: Input = %q", m.Input)
 	}
-	for _, muss := range []string{"Befund 1", "read → write", "Läufe 3, 2, 1"} {
+	for _, muss := range []string{"finding 1", "read → write", "Läufe 3, 2, 1"} {
 		if !strings.Contains(m.Kopf, muss) {
 			t.Errorf("Kopfzeile ohne %q: %q", muss, m.Kopf)
 		}

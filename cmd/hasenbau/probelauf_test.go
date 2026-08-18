@@ -43,7 +43,7 @@ func TestProbelaufNimmtDasSchreibrecht(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "spur.txt")); err == nil {
 		t.Error("die Datei liegt im Bau — der Sandkasten hat nicht gehalten")
 	}
-	if !strings.Contains(out.String(), "Sandkasten:") {
+	if !strings.Contains(out.String(), "Sandbox:") {
 		t.Errorf("die Bedingungen des Laufs stehen nicht in der Ausgabe:\n%s", out.String())
 	}
 }
@@ -88,7 +88,7 @@ func TestFehlschlagImSandkastenWiderlegtNichts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "spur.txt")); err != nil {
 		t.Errorf("ohne Sandkasten wurde nicht geschrieben: %v", err)
 	}
-	if !strings.Contains(out.String(), "OHNE SANDKASTEN") {
+	if !strings.Contains(out.String(), "WITHOUT A SANDBOX") {
 		t.Errorf("der abgeschaltete Sandkasten wird nicht gemeldet — dieser Fall muss laut sein:\n%s", out.String())
 	}
 

@@ -19,11 +19,11 @@ func TestUnbekannterBefehlUndUsage(t *testing.T) {
 	if code := run([]string{"quatsch"}, &out, &errw); code != 2 {
 		t.Errorf("exit %d, erwartet 2", code)
 	}
-	if !strings.Contains(errw.String(), "unbekannter Befehl") {
+	if !strings.Contains(errw.String(), "unknown command") {
 		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
 	}
 	errw.Reset()
-	if code := run(nil, &out, &errw); code != 2 || !strings.Contains(errw.String(), "Befehle:") {
+	if code := run(nil, &out, &errw); code != 2 || !strings.Contains(errw.String(), "Commands:") {
 		t.Errorf("ohne Argumente: exit %d, usage %q", code, errw.String())
 	}
 }
@@ -35,7 +35,7 @@ func TestLaufUnbekannterAuftrag(t *testing.T) {
 	if code := run([]string{"-bau", t.TempDir(), "lauf", "pdf-einlagern"}, &out, &errw); code != 1 {
 		t.Errorf("exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "unbekannter Auftrag") {
+	if !strings.Contains(errw.String(), "unknown Auftrag") {
 		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
 	}
 }
@@ -48,7 +48,7 @@ func TestGrabenFehlerpfade(t *testing.T) {
 	if code := run([]string{"-bau", bau, "dig", "7"}, &out, &errw); code != 1 {
 		t.Errorf("unbekannter Lauf: exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "kein Lauf mit ID 7") {
+	if !strings.Contains(errw.String(), "no Lauf with ID 7") {
 		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
 	}
 
@@ -70,7 +70,7 @@ func TestGrabenFehlerpfade(t *testing.T) {
 	if code := run([]string{"-bau", bau, "dig", "1"}, &out, &errw); code != 1 {
 		t.Errorf("Lauf ohne Session: exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "hat keine Session") {
+	if !strings.Contains(errw.String(), "has no session") {
 		t.Errorf("Fehlermeldung fehlt: %q", errw.String())
 	}
 
@@ -112,7 +112,7 @@ func TestGrabenAusDerDBOhneServer(t *testing.T) {
 	if code := run([]string{"-bau", bau, "dig", "1"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	for _, muss := range []string{"Trace Lauf 1", "notiz-einlagern", "[tool write — completed]", "raeume/lager/x.md"} {
+	for _, muss := range []string{"Trace of Lauf 1", "notiz-einlagern", "[tool write — completed]", "raeume/lager/x.md"} {
 		if !strings.Contains(out.String(), muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, out.String())
 		}
@@ -126,7 +126,7 @@ func TestGetLaeufeUndStatus(t *testing.T) {
 	if code := run([]string{"-bau", bau, "get", "laeufe"}, &out, &errw); code != 0 {
 		t.Fatalf("get laeufe (leer): exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "keine Läufe") {
+	if !strings.Contains(out.String(), "no Läufe") {
 		t.Errorf("Leer-Ausgabe: %q", out.String())
 	}
 
@@ -146,10 +146,10 @@ func TestGetLaeufeUndStatus(t *testing.T) {
 		t.Fatalf("status: exit %d, stderr %q", code, errw.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "1 gesamt") || !strings.Contains(got, "1 ok") {
+	if !strings.Contains(got, "1 total") || !strings.Contains(got, "1 ok") {
 		t.Errorf("Status-Zähler fehlen: %q", got)
 	}
-	if !strings.Contains(got, "FEHLERSERIE") || !strings.Contains(got, "pdf-einlagern") {
+	if !strings.Contains(got, "FAILURE STREAK") || !strings.Contains(got, "pdf-einlagern") {
 		t.Errorf("Auftrag-Zustand fehlt: %q", got)
 	}
 }
@@ -195,7 +195,7 @@ func TestVerwaisteZeileWirdBeimStartAufgeraeumt(t *testing.T) {
 	if code := run([]string{"-bau", bau, "lauf", "tagesbericht"}, &out, &errw); code != 1 {
 		t.Fatalf("exit %d, erwartet 1 (unbekannter Auftrag), stderr %q", code, errw.String())
 	}
-	if !strings.Contains(errw.String(), "aufgeräumt") {
+	if !strings.Contains(errw.String(), "cleaned up") {
 		t.Errorf("keine Log-Zeile zum aufgeräumten Lauf: %q", errw.String())
 	}
 
@@ -286,7 +286,7 @@ func TestProviderFetch(t *testing.T) {
 	if !strings.Contains(out.String(), "local") {
 		t.Errorf("connection_type gehört in den Diff: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "abgebrochen") {
+	if !strings.Contains(out.String(), "aborted") {
 		t.Errorf("Abbruch nicht gemeldet: %q", out.String())
 	}
 	nachher, err := os.ReadFile(conf)
@@ -302,7 +302,7 @@ func TestProviderFetch(t *testing.T) {
 	if code := cmdProvider(root, []string{"fetch", "-yes", "scc"}, strings.NewReader(""), &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "geschrieben") {
+	if !strings.Contains(out.String(), "written:") {
 		t.Errorf("Schreiben nicht gemeldet: %q", out.String())
 	}
 	b, err := os.ReadFile(conf)
@@ -317,7 +317,7 @@ func TestProviderFetch(t *testing.T) {
 	if code := cmdProvider(root, []string{"fetch", "scc"}, strings.NewReader(""), &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "auf Stand") {
+	if !strings.Contains(out.String(), "up to date") {
 		t.Errorf("zweiter Lauf ist nicht idempotent: %q", out.String())
 	}
 }

@@ -123,10 +123,10 @@ func TestProbelaufAlleinMachtNichtActual(t *testing.T) {
 
 	// release ohne jeden Probelauf: es gaebe nichts zu beurteilen.
 	var out, errw strings.Builder
-	if code := run([]string{"-bau", root, "tool", "release", "-ja", "heil"}, &out, &errw); code == 0 {
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "heil"}, &out, &errw); code == 0 {
 		t.Errorf("release ohne Probelauf ging durch:\n%s", out.String())
 	}
-	if !strings.Contains(errw.String(), "nie gelaufen") {
+	if !strings.Contains(errw.String(), "has never run") {
 		t.Errorf("die Ablehnung nennt den Grund nicht:\n%s", errw.String())
 	}
 
@@ -154,7 +154,7 @@ func TestProbelaufAlleinMachtNichtActual(t *testing.T) {
 	// Erst das Urteil eines Menschen macht actual.
 	out.Reset()
 	errw.Reset()
-	if code := run([]string{"-bau", root, "tool", "release", "-ja", "heil"}, &out, &errw); code != 0 {
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "heil"}, &out, &errw); code != 0 {
 		t.Fatalf("release nach dem Probelauf: exit %d — %s", code, errw.String())
 	}
 	for _, rel := range []string{"tools/heil.py", "tools/heil.json"} {
@@ -189,7 +189,7 @@ func TestReleaseFragtNachDemUrteil(t *testing.T) {
 	if code := runMitEingabe(strings.NewReader("n\n"), []string{"-bau", root, "tool", "release", "heil"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(out.String(), "abgebrochen") {
+	if !strings.Contains(out.String(), "aborted") {
 		t.Errorf("ohne Bestaetigung wurde nicht abgebrochen:\n%s", out.String())
 	}
 	if _, err := os.Stat(filepath.Join(root, "tools", "heil.py")); err == nil {

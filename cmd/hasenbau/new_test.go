@@ -40,7 +40,7 @@ func TestNewLegtLadbaresAn(t *testing.T) {
 	}
 
 	// Der Nutzer bekommt gesagt, was als Nächstes dran ist.
-	if !strings.Contains(out.String(), "angelegt: auftraege/notizen.md") ||
+	if !strings.Contains(out.String(), "created: auftraege/notizen.md") ||
 		!strings.Contains(out.String(), "describe auftrag notizen") {
 		t.Errorf("Ausgabe hilft nicht weiter:\n%s", out.String())
 	}
@@ -94,7 +94,7 @@ func TestNewUeberschreibtNie(t *testing.T) {
 	if code := run([]string{"-bau", bau, "new", "hase", "h"}, &out, &errw); code != 1 {
 		t.Errorf("exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "gibt es schon") {
+	if !strings.Contains(errw.String(), "already exists") {
 		t.Errorf("Meldung: %q", errw.String())
 	}
 	if b, _ := os.ReadFile(pfad); string(b) != "meins" {
@@ -111,7 +111,7 @@ func TestNewAuftragBestehtAufVorhandenemHasen(t *testing.T) {
 	if code := run([]string{"-bau", bau, "new", "auftrag", "a"}, &out, &errw); code != 2 {
 		t.Errorf("ohne -hase: exit %d, erwartet 2", code)
 	}
-	if !strings.Contains(errw.String(), "noch keine Hasen") {
+	if !strings.Contains(errw.String(), "no Hasen yet") {
 		t.Errorf("Meldung ohne Hinweis auf `new hase`: %q", errw.String())
 	}
 
@@ -139,10 +139,10 @@ func TestNewArgumenteInBeidenReihenfolgen(t *testing.T) {
 		{"Flag hinten", []string{"notizen", "-hase", "h"}, "notizen", "h", ""},
 		{"Flag vorne", []string{"-hase", "h", "notizen"}, "notizen", "h", ""},
 		{"mit Gleichheitszeichen", []string{"notizen", "--hase=h"}, "notizen", "h", ""},
-		{"ohne Namen", []string{"-hase", "h"}, "", "", "Name fehlt"},
-		{"zwei Namen", []string{"a", "b", "-hase", "h"}, "", "", "mehr als ein Name"},
-		{"unbekanntes Flag", []string{"a", "-farbe", "braun"}, "", "", "unbekanntes Flag"},
-		{"-hase ohne Wert", []string{"a", "-hase"}, "", "", "ohne Wert"},
+		{"ohne Namen", []string{"-hase", "h"}, "", "", "the name is missing"},
+		{"zwei Namen", []string{"a", "b", "-hase", "h"}, "", "", "more than one name"},
+		{"unknown flag", []string{"a", "-farbe", "braun"}, "", "", "unknown flag"},
+		{"-hase without a value", []string{"a", "-hase"}, "", "", "without a value"},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestNewUnbekannteRessource(t *testing.T) {
 	if code := run([]string{"-bau", t.TempDir(), "new", "gang", "x"}, &out, &errw); code != 2 {
 		t.Errorf("exit %d, erwartet 2", code)
 	}
-	if !strings.Contains(errw.String(), "unbekannte Ressource") {
+	if !strings.Contains(errw.String(), "unknown resource") {
 		t.Errorf("Meldung: %q", errw.String())
 	}
 	errw.Reset()

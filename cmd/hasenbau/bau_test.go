@@ -28,9 +28,9 @@ func TestDescribeBauMeldetDieStillenFehler(t *testing.T) {
 	}
 	got := out.String()
 	for _, muss := range []string{
-		"kein .git", "Raum-Permissions", // ohne Commit greifen sie nicht (§11.5)
-		"/gibt/es/nicht/hasenbau", "gibt es nicht",
-		"PRÜFEN", "zum Nachsehen",
+		"no .git", "Raum permissions", // ohne Commit greifen sie nicht (§11.5)
+		"/gibt/es/nicht/hasenbau", "does not exist",
+		"CHECK", "to look into",
 	} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Diagnose ohne %q:\n%s", muss, got)
@@ -58,10 +58,10 @@ func TestDescribeBauSchweigtWennAllesStimmt(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
 	got := out.String()
-	if strings.Contains(got, "PRÜFEN") {
+	if strings.Contains(got, "CHECK") {
 		t.Errorf("frischer Bau meldet etwas:\n%s", got)
 	}
-	if !strings.Contains(got, "Nichts zu tun") {
+	if !strings.Contains(got, "Nothing to do") {
 		t.Errorf("Ausgabe:\n%s", got)
 	}
 }
@@ -100,14 +100,14 @@ func TestStatusZeigtOhneZuPruefen(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
 	got := out.String()
-	for _, muss := range []string{"Bau:", "Läufe:", "Die letzten Läufe", "describe bau"} {
+	for _, muss := range []string{"Bau:", "Läufe:", "The most recent Läufe", "describe bau"} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Dashboard ohne %q:\n%s", muss, got)
 		}
 	}
 	// Dieser Bau hat weder .git noch Bau-Config — status sagt trotzdem
 	// kein Wort dazu.
-	for _, darfNicht := range []string{"PRÜFEN", "kein .git", "fehlt"} {
+	for _, darfNicht := range []string{"CHECK", "no .git", "missing"} {
 		if strings.Contains(got, darfNicht) {
 			t.Errorf("status prüft (%q):\n%s", darfNicht, got)
 		}
@@ -230,7 +230,7 @@ func TestFixStelltWaechterWiederHer(t *testing.T) {
 	// unsichtbar, und genau das ist der Fall, den es zu vermeiden gilt.
 	out.Reset()
 	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
-	if !strings.Contains(out.String(), "Sandbox-Wächter") || !strings.Contains(out.String(), "fehlt") {
+	if !strings.Contains(out.String(), "Sandbox guard") || !strings.Contains(out.String(), "missing") {
 		t.Errorf("Diagnose meldet den fehlenden Wächter nicht:\n%s", out.String())
 	}
 
@@ -267,7 +267,7 @@ func TestVeralteterWaechterWirdGemeldetUndErsetzt(t *testing.T) {
 
 	out.Reset()
 	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
-	if !strings.Contains(out.String(), "Sandbox-Wächter") || !strings.Contains(out.String(), "veraltet") {
+	if !strings.Contains(out.String(), "Sandbox guard") || !strings.Contains(out.String(), "outdated") {
 		t.Errorf("Diagnose meldet den veralteten Wächter nicht:\n%s", out.String())
 	}
 
@@ -285,10 +285,10 @@ func TestVeralteterWaechterWirdGemeldetUndErsetzt(t *testing.T) {
 	// Und es muss dabeistehen: ein Befehl, der eine Sicherheitsdatei
 	// tauscht und „nichts zu tun" meldet, verbirgt genau das, was dieser
 	// Bead sichtbar machen soll.
-	if !strings.Contains(out.String(), "ersetzt") {
+	if !strings.Contains(out.String(), "replaced") {
 		t.Errorf("fix schweigt über den Tausch:\n%s", out.String())
 	}
-	if strings.Contains(out.String(), "nichts zu tun") {
+	if strings.Contains(out.String(), "nothing to do") {
 		t.Errorf("fix meldet trotz Tausch, es sei nichts zu tun:\n%s", out.String())
 	}
 }
@@ -350,7 +350,7 @@ func TestWaechterOhneEintragWirdGemeldet(t *testing.T) {
 
 	out.Reset()
 	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
-	if !strings.Contains(out.String(), "steht aber nicht im plugin") {
+	if !strings.Contains(out.String(), "not listed in the plugin") {
 		t.Errorf("Diagnose meldet den fehlenden Eintrag nicht:\n%s", out.String())
 	}
 }

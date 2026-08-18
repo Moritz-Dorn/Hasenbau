@@ -51,7 +51,7 @@ func TestRueckkanalGescheitertNenntDenGrund(t *testing.T) {
 func TestRueckkanalFehltGanz(t *testing.T) {
 	url := mcpServer(t, `{"anderer":{"status":"connected"}}`)
 	err := verifyBackchannel(context.Background(), url)
-	if err == nil || !strings.Contains(err.Error(), "kennt keinen MCP-Server") {
+	if err == nil || !strings.Contains(err.Error(), "knows no MCP server") {
 		t.Errorf("fehlender Eintrag muss auffallen, bekam: %v", err)
 	}
 }
@@ -72,7 +72,7 @@ func TestRueckkanalServerNichtErreichbar(t *testing.T) {
 	srv.Close() // Port ist jetzt tot
 
 	err := verifyBackchannel(context.Background(), url)
-	if err == nil || !strings.Contains(err.Error(), "nicht abfragbar") {
+	if err == nil || !strings.Contains(err.Error(), "not queryable") {
 		t.Errorf("unerreichbarer Server muss auffallen, bekam: %v", err)
 	}
 }

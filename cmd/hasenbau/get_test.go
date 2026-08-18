@@ -19,7 +19,7 @@ func TestGetProvider(t *testing.T) {
 	}
 	got := out.String()
 	for _, muss := range []string{
-		"ID", "ENDPOINT", "MODELLE", "AKTIV", "SCHLÜSSEL",
+		"ID", "ENDPOINT", "MODELS", "ACTIVE", "KEY",
 		"scc", "https://beispiel.invalid/api/v1",
 		"hasenbau provider fetch <id>",
 	} {
@@ -27,12 +27,14 @@ func TestGetProvider(t *testing.T) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
 		}
 	}
-	// Der Schlüssel selbst darf nie in der Ausgabe stehen.
-	if strings.Contains(got, `"k"`) || strings.Contains(got, "key") {
+	// Der Schlüssel selbst darf nie in der Ausgabe stehen. Geprüft wird
+	// auf den Wert und auf das JSON-Feld — nicht auf das Wort „key",
+	// seit die Ausgabe englisch redet und es dort erklärend vorkommt.
+	if strings.Contains(got, `"k"`) || strings.Contains(got, `"key":`) {
 		t.Errorf("Schlüssel in der Ausgabe:\n%s", got)
 	}
 	// Die Fixture hat ein Modell und keinen enabled_providers-Eintrag.
-	if !strings.Contains(got, "nein") {
+	if !strings.Contains(got, "no") {
 		t.Errorf("nicht-aktiver Provider nicht als solcher erkennbar:\n%s", got)
 	}
 }
@@ -77,7 +79,7 @@ func TestGetProviderOhneSchluesselUndOhneEndpoint(t *testing.T) {
 	if !strings.Contains(got, "verschrieben") {
 		t.Errorf("ID nur in enabled_providers fehlt:\n%s", got)
 	}
-	if !strings.Contains(got, "Ohne Endpoint:") || !strings.Contains(got, "Ohne Schlüssel:") {
+	if !strings.Contains(got, "Without an endpoint:") || !strings.Contains(got, "Without a key:") {
 		t.Errorf("Erklärung fehlt:\n%s", got)
 	}
 }
@@ -87,14 +89,14 @@ func TestGetOhneUndMitUnbekannterRessource(t *testing.T) {
 	if code := run([]string{"-bau", t.TempDir(), "get"}, &out, &errw); code != 2 {
 		t.Errorf("ohne Ressource: exit %d, erwartet 2", code)
 	}
-	if !strings.Contains(errw.String(), "Ressourcen:") {
+	if !strings.Contains(errw.String(), "Resources:") {
 		t.Errorf("Hilfe fehlt: %q", errw.String())
 	}
 	errw.Reset()
 	if code := run([]string{"-bau", t.TempDir(), "get", "karotten"}, &out, &errw); code != 2 {
 		t.Errorf("unbekannte Ressource: exit %d, erwartet 2", code)
 	}
-	if !strings.Contains(errw.String(), "unbekannte Ressource") {
+	if !strings.Contains(errw.String(), "unknown resource") {
 		t.Errorf("Meldung: %q", errw.String())
 	}
 }
@@ -121,7 +123,7 @@ func laufMitNotizen(t *testing.T, bau string) *store.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.WriteNote(id, "31. Februar exists nicht"); err != nil {
+	if err := st.WriteNote(id, "31. Februar gibt es nicht"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.WriteNote(id, "zweite Beobachtung"); err != nil {
@@ -145,7 +147,7 @@ func TestGetLauf(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
 	got := out.String()
-	for _, muss := range []string{"ID", "KOSTEN", "notiz-einlagern", "watch", "12 ct", "Notiz abgelegt"} {
+	for _, muss := range []string{"ID", "COST", "notiz-einlagern", "watch", "12 ct", "Notiz abgelegt"} {
 		if !strings.Contains(got, muss) {
 			t.Errorf("Ausgabe ohne %q:\n%s", muss, got)
 		}
@@ -175,9 +177,9 @@ func TestDescribeLauf(t *testing.T) {
 	}
 	got := out.String()
 	for _, muss := range []string{
-		"Lauf", "Auftrag", "notiz-einlagern", "Auslöser", "raeume/laderampe/sources/a.txt",
-		"Session", "ses_t", "2100 ein, 360 aus", "12 ct", "Notiz abgelegt",
-		"Notizen des Hasen", "31. Februar exists nicht", "zweite Beobachtung",
+		"Lauf", "Auftrag", "notiz-einlagern", "Trigger file", "raeume/laderampe/sources/a.txt",
+		"Session", "ses_t", "2100 in, 360 out", "12 ct", "Notiz abgelegt",
+		"Notes from the Hase", "31. Februar gibt es nicht", "zweite Beobachtung",
 		"hasenbau dig 1",
 	} {
 		if !strings.Contains(got, muss) {
@@ -215,7 +217,7 @@ func TestDescribeLaufOhneSessionUndMitFehler(t *testing.T) {
 	if !strings.Contains(got, "gang pdf-zu-markdown: exit 1") || !strings.Contains(got, "gang.log") {
 		t.Errorf("Fehler nicht vollständig:\n%s", got)
 	}
-	if !strings.Contains(got, "Kein Trace") {
+	if !strings.Contains(got, "No trace") {
 		t.Errorf("fehlende Session nicht erklärt:\n%s", got)
 	}
 }
@@ -268,7 +270,7 @@ func TestDescribeAuftragZeigtZeitlimit(t *testing.T) {
 	if code := run([]string{"-bau", bau, "describe", "auftrag", "ohne"}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "30m ") || !strings.Contains(out.String(), "Vorgabe") {
+	if !strings.Contains(out.String(), "30m ") || !strings.Contains(out.String(), "default") {
 		t.Errorf("Vorgabe fehlt:\n%s", out.String())
 	}
 }
@@ -287,7 +289,7 @@ func TestDescribeProvider(t *testing.T) {
 	for _, muss := range []string{
 		"Provider", "scc", "@ai-sdk/openai-compatible",
 		"https://beispiel.invalid/api/v1",
-		"Schlüssel", "Modelle (1)",
+		"Key", "Models (1)",
 		"scc/alt", "Alt", // genau so gehört es ins Template
 	} {
 		if !strings.Contains(got, muss) {
@@ -299,7 +301,7 @@ func TestDescribeProvider(t *testing.T) {
 	}
 	// Die Fixture steht nicht in enabled_providers — das ist der stille
 	// Fehler, den der Befehl laut machen soll.
-	if !strings.Contains(got, "fehlt in enabled_providers") {
+	if !strings.Contains(got, "missing from enabled_providers") {
 		t.Errorf("nicht aktivierter Provider nicht erkennbar:\n%s", got)
 	}
 }
@@ -311,7 +313,7 @@ func TestDescribeProviderFehlerpfade(t *testing.T) {
 	if code := run([]string{"-bau", root, "describe", "provider", "gibtsnicht"}, &out, &errw); code != 1 {
 		t.Errorf("exit %d, erwartet 1", code)
 	}
-	if !strings.Contains(errw.String(), "vorhanden: scc") {
+	if !strings.Contains(errw.String(), "available: scc") {
 		t.Errorf("Meldung zählt nicht auf, was es gibt: %q", errw.String())
 	}
 	errw.Reset()
