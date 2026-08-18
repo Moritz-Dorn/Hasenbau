@@ -45,6 +45,24 @@ Auftrags. Das ist auch der Grund, warum `hasenbau init` einen Root-Commit
 anlegt: ohne ihn bekommt der Bau keine eigene Projekt-ID, und die
 Raum-Permissions greifen nicht.
 
+### Das Bau-Plugin ist generiert
+
+Eine Datei im Bau gehört nicht dir:
+`.opencode-home/opencode/plugin/hasenbau.js`. In ihr stecken der
+Sandbox-Wächter und das Gate, das nur freigegebene Werkzeuge
+registriert, und der Hasenbau schreibt sie aus dem Binary neu, sobald
+sie abweicht — bei jedem Daemon-Start, jedem Lauf und jedem `hasenbau
+fix`. Ein Upgrade des Hasenbaus ist damit zugleich eines des Baus, und
+eine eigene Änderung daran ist beim nächsten Lauf weg. `hasenbau
+describe bau` meldet eine veraltete Datei; eine ersetzte steht in der
+Ausgabe.
+
+Alles andere, was `init` schreibt, gehört dir und wird nie
+überschrieben: `hasenbau.yaml`, die Sonder-Hasen, deine Aufträge. Eigene
+Plugins gehören als eigene Dateien **daneben**, eingetragen im
+`plugin:`-Block der Bau-Config — das Verzeichnis bleibt deins, nur diese
+eine Datei nicht.
+
 ## Provider im Bau
 
 Dass ein Bau seine custom Provider selbst mitbringt, folgt aus derselben

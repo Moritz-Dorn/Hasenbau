@@ -44,6 +44,22 @@ Räume of their Auftrag. That is also why `hasenbau init` creates a root
 commit: without it the Bau gets no project ID of its own, and the Raum
 permissions do not take effect.
 
+### The Bau plugin is generated
+
+One file in the Bau is not yours:
+`.opencode-home/opencode/plugin/hasenbau.js`. It carries the sandbox
+guard and the gate that only registers released tools, and Hasenbau
+rewrites it from the binary whenever it differs — on every daemon start,
+every Lauf and every `hasenbau fix`. So upgrading Hasenbau upgrades the
+Bau, and an edit of your own is gone with the next Lauf. `hasenbau
+describe bau` reports an outdated file; a replaced one is named in the
+output.
+
+Everything else `init` writes is yours and is never overwritten:
+`hasenbau.yaml`, the special Hasen, your Aufträge. Own plugins belong
+**next to** it as separate files, entered in the `plugin:` block of the
+Bau config — the directory stays yours, only that one file does not.
+
 ## Providers in a Bau
 
 That a Bau brings its own custom providers follows from the same

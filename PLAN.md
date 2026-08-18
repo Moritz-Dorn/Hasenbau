@@ -197,6 +197,34 @@ Wächter, der nicht geladen ist, schweigt genauso. `describe bau` prüft
 deshalb Datei und `plugin:`-Eintrag; dieselbe Falle hat beim Rückkanal
 schon einmal fünf Tage gekostet (Hasenbau-2nq/08u).
 
+**Das Plugin ist ein Artefakt, keine Vorlage** (Hasenbau-uei). Alles
+andere, was `init` in einen Bau legt — `hasenbau.yaml`, die Sonder-Hasen
+—, gehört danach dem Menschen und wird nie überschrieben. Für diese eine
+Datei ist das falsch, denn in ihr steht seither Logik, die niemand von
+Hand pflegt: das Review-Gate der Werkzeuge, ihr Sandkasten samt
+Raum-Grenze, der Wächter selbst. Ein Bau von 2026-07 trug deshalb
+72 Zeilen, während die ausgelieferte Fassung 359 hatte — die Eigenschaft
+stand in PLAN und README und galt auf keiner Maschine, die früher
+angefangen hatte, und nichts meldete es.
+
+Sie wird deshalb wie die generierten Agenten behandelt: bei jedem
+Daemon-Start, jedem Lauf und jedem `fix` aus dem Binary geschrieben,
+sobald sie abweicht, und in `.gitignore` geführt. Verglichen wird der
+**Inhalt**, nicht eine Versionsmarke — eine Marke müsste jemand
+hochzählen und vergäße es. Wurde etwas ersetzt, steht es in der
+Ausgabe: die Datei ist generiert, aber wessen Änderung verschwindet,
+soll erfahren warum. Eigene Hooks gehören in ein **eigenes** Plugin
+daneben; das Verzeichnis bleibt dem Bau (§3), nur diese Datei nicht.
+
+Nachgemessen (2026-08-18, opencode 1.15.13): Ein Plugin außerhalb des
+Config-Homes wird ebenfalls geladen (`file://`-Eintrag, `directory`
+zeigt weiter auf den Bau), der Weg wäre also gangbar gewesen. Dagegen
+sprach der absolute Pfad in der Bau-Config — dieselbe Sorte, die beim
+Rückkanal schon einmal ins Leere zeigte. Nebenbefund für künftige
+Messungen: Plugins laden nicht beim Serverstart, sondern erst mit der
+ersten Anfrage, die die Instanz aufbaut; ein stiller Start beweist
+nichts.
+
 **Das Messergebnis (2026-08-12).** Ein Hase wurde ausdrücklich
 aufgefordert, über `task` einen Subagenten zu starten:
 

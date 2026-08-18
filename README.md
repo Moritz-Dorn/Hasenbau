@@ -67,6 +67,11 @@ channel in the Bau config. Every further command needs the Bau: either
 `-bau ~/meinbau` in front of the subcommand or one `cd`, since the
 default is the current directory.
 
+The guard is the one file in the Bau that Hasenbau keeps for itself: it
+is rewritten from the binary whenever it differs, so an upgrade of
+Hasenbau reaches an existing Bau as well. Everything else stays as you
+left it. Details in [Architecture](docs/architecture.md).
+
 ### 2. Register a provider
 
 A Bau brings its own providers; `auth.json` only shares the keys, not the

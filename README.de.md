@@ -61,6 +61,12 @@ Bau-Config ein. Jeder weitere Befehl braucht den Bau: entweder `-bau
 ~/meinbau` vor dem Unterbefehl oder einmal `cd`, denn der Vorgabewert ist
 das aktuelle Verzeichnis.
 
+Der Wächter ist die eine Datei im Bau, die der Hasenbau für sich behält:
+sie wird aus dem Binary neu geschrieben, sobald sie abweicht — ein
+Upgrade des Hasenbaus erreicht damit auch einen bestehenden Bau. Alles
+andere bleibt, wie du es hinterlassen hast. Näheres in
+[Architektur](docs/de/architecture.md).
+
 ### 2. Provider eintragen
 
 Ein Bau bringt seine Provider selbst mit; `auth.json` teilt nur die
