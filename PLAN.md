@@ -33,9 +33,23 @@ und in der Ausgabe.
 Ausgenommen ist die Nutzer-Doku: `README.md` und `docs/` sind seit
 2026-08-17 englisch, weil GitHub `README.md` als Vorgabe rendert; die
 deutsche Fassung steht als Spiegel daneben (`README.de.md`, `docs/de/`,
-gleiche Dateinamen). Das Vokabular oben bleibt auch dort deutsch. Offen
-bleibt die Frage nach den Meldungstexten der CLI: sie sind deutsch, und
-ein englisches README zeigt sie als Beispielausgabe.
+gleiche Dateinamen). Das Vokabular oben bleibt auch dort deutsch.
+
+**Die CLI redet seit 2026-08-18 englisch** (Hasenbau-ucu, Entscheidung
+Moritz). Nicht lokalisiert — es gibt keinen Mechanismus für Sprachen und
+soll keinen geben: eine Sprache für die Oberfläche, und die ist Englisch.
+Damit zeigt das englische README seine Beispielausgabe wörtlich, und die
+deutsche Fassung sagt dazu, warum dort englische Ausgabe in deutscher
+Prosa steht. Deutsch bleibt alles andere an Prosa: Kommentare, PLAN.md,
+AGENTS.md, Beads, Testfunktionsnamen.
+
+Zwei Grenzen dazu, beide bewusst gezogen: **modellgerichteter Text**
+bleibt deutsch, weil er nicht zur Oberfläche gehört — der Rückkanal
+(`internal/backchannel/`) beschreibt seine Werkzeuge dem Hasen, und der
+Prompt-Aufbau (`runner/prompt.go`) redet mit ihm. Und **Dateien, die in
+einen Bau geschrieben werden** — das Gerüst von `hasenbau new`,
+`beispiele/`, die Sonder-Hasen — sind eine eigene Kategorie und noch
+deutsch (Hasenbau-tzl).
 
 | Begriff | Technisch |
 |---|---|

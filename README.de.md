@@ -29,6 +29,14 @@ Ende-zu-Ende. Wie die Teile zusammenstecken, steht in
 [docs/de/architecture.md](docs/de/architecture.md), das Warum in
 [`PLAN.md`](PLAN.md).
 
+**Die CLI redet englisch, dieser Text deutsch.** Das ist Absicht und kein
+Versehen: es gibt eine Sprache für die Oberfläche, und die ist Englisch —
+deshalb steht die Beispiel-Ausgabe unten wörtlich so da, wie sie auf dem
+Terminal erscheint. Deutsch bleibt das Vokabular: Bau, Raum, Hase, Gang,
+Auftrag, Lauf, Baumeister, Schmied. `hasenbau get laeufe` heißt so, und
+eine Meldung darüber sagt „3 Läufe", nicht „3 runs" — sonst beschriebe
+die Doku ein anderes System als das, das man tippt.
+
 ## Install
 
 `opencode` muss im PATH sein, `bwrap` (bubblewrap) für die
@@ -96,8 +104,8 @@ hasenbau describe bau
 Genau ein Punkt darf hier offen sein:
 
 ```
-PRÜFEN  Agenten        nicht generiert: pdf-einlagern__archivar
-                       → der nächste Daemon- oder Lauf-Start schreibt sie
+CHECK   Agents         not generated: pdf-einlagern__archivar
+                       → the next daemon or Lauf start writes them
 ```
 
 Das ist die Reihenfolge: den Agenten erzeugt der Hasenbau, wenn er die
@@ -151,7 +159,7 @@ Repo.
 
 `hasenbau daemon` schaltet die Trigger scharf (cron + watch) und läuft im
 Vordergrund, mit dem Log auf stderr. Beendet wird er mit Ctrl-C oder
-`SIGTERM`; er meldet `sauber beendet` und geht mit 0. Ein Lauf, der dabei
+`SIGTERM`; er meldet `shut down cleanly` und geht mit 0. Ein Lauf, der dabei
 mitten in der Arbeit ist, wird als `aborted` geschlossen; sein
 `$WORK`-Verzeichnis bleibt liegen, `describe bau` erinnert später daran.
 

@@ -131,10 +131,19 @@ Domänen-Nomen** — `StartLauf`, `EndLauf`, `LaufByID`, `RecentLaeufe`,
 `RunGaenge`, `last_lauf`. Das ist keine Nachlässigkeit, sondern die
 Folge daraus, dass die Fachsprache deutsch bleibt und der Rest nicht.
 
-Ausgenommen bleibt **Prosa**: Kommentare, PLAN.md, AGENTS.md, die
-Meldungstexte der CLI und Testfunktionsnamen sind deutsch. Die
-Zustandswerte eines Laufs (`running`, `ok`, `failed`, `aborted`) sind
-Daten, keine Prosa — sie stehen englisch in der DB und in der Ausgabe.
+Ausgenommen bleibt **Prosa**: Kommentare, PLAN.md, AGENTS.md und
+Testfunktionsnamen sind deutsch. Die Zustandswerte eines Laufs
+(`running`, `ok`, `failed`, `aborted`) sind Daten, keine Prosa — sie
+stehen englisch in der DB und in der Ausgabe.
+
+**Die Meldungstexte der CLI sind seit 2026-08-18 englisch**
+(Hasenbau-ucu): eine Sprache für die Oberfläche, nicht lokalisiert. Das
+Vokabular oben bleibt auch darin deutsch — eine Meldung sagt „3 Läufe",
+nicht „3 runs". Zwei Grenzen: modellgerichteter Text bleibt deutsch (der
+Rückkanal beschreibt seine Werkzeuge dem Hasen, `runner/prompt.go` baut
+den Prompt), und Dateien, die in einen Bau geschrieben werden (das
+Gerüst von `hasenbau new`, `beispiele/`, die Sonder-Hasen) ebenfalls —
+das ist eine eigene Kategorie, siehe Hasenbau-tzl.
 
 **Die Nutzer-Doku ist die Ausnahme von der Ausnahme**: `README.md`,
 `docs/` und `beispiele/README.md` sind englisch, weil GitHub `README.md`

@@ -30,10 +30,11 @@ end to end. How the parts fit together is in
 [docs/architecture.md](docs/architecture.md), the reasoning in
 [`PLAN.md`](PLAN.md).
 
-The vocabulary stays German, in this document as well as in the code:
-Bau, Raum, Hase, Gang, Auftrag, Lauf. There is a glossary
-[below](#vocabulary), and the CLI speaks German too, so the sample
-output in this README is verbatim.
+The vocabulary stays German, in this document as well as in the code and
+in the CLI: Bau, Raum, Hase, Gang, Auftrag, Lauf. There is a glossary
+[below](#vocabulary). Everything around those words is English —
+`hasenbau get laeufe` is spelled that way and prints its table in
+English, so the sample output in this README is verbatim.
 
 ## Install
 
@@ -101,8 +102,8 @@ hasenbau describe bau
 Exactly one item may be open here:
 
 ```
-PRÜFEN  Agenten        nicht generiert: pdf-einlagern__archivar
-                       → der nächste Daemon- oder Lauf-Start schreibt sie
+CHECK   Agents         not generated: pdf-einlagern__archivar
+                       → the next daemon or Lauf start writes them
 ```
 
 That is the order of things: Hasenbau generates the agents when it loads
@@ -156,7 +157,7 @@ A "Bau" is an instance created by `hasenbau init`, not this repository.
 
 `hasenbau daemon` arms the triggers (cron + watch) and runs in the
 foreground, with the log on stderr. It stops on Ctrl-C or `SIGTERM`,
-reports `sauber beendet` and exits with 0. A Lauf that is in the middle
+reports `shut down cleanly` and exits with 0. A Lauf that is in the middle
 of its work is closed as `aborted`; its `$WORK` directory stays, and
 `describe bau` reminds you of it later.
 
