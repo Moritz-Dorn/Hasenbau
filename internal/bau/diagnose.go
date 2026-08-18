@@ -60,11 +60,11 @@ func Diagnose(root string) []Check {
 // der Schmied an einem Briefkasten, in den niemand einwirft. Beides
 // sieht man dem Bau nicht an.
 func checkWerkzeuge(root string) Check {
-	const name = "Werkzeuge"
+	const name = "Tools"
 	alle, err := LadeTools(root)
 	if err != nil {
 		return Check{Name: name, Detail: err.Error(),
-			Hint: "solange das Manifest kaputt ist, generiert `hasenbau daemon` keine Agenten"}
+			Hint: "while the manifest is broken, `hasenbau daemon` generates no agents"}
 	}
 	var frei, entwuerfe int
 	var lahm []string
@@ -78,7 +78,7 @@ func checkWerkzeuge(root string) Check {
 			lahm = append(lahm, fmt.Sprintf("%s (%s)", t.Name, t.Zustand))
 		}
 	}
-	detail := fmt.Sprintf("%d freigegeben, %d im Entwurf", frei, entwuerfe)
+	detail := fmt.Sprintf("%d released, %d in draft", frei, entwuerfe)
 
 	// Ein freigegebenes Werkzeug, das nicht mehr einsatzbereit ist, ist
 	// der stillste Fall von allen: es liegt in tools/, `get tools`
@@ -87,8 +87,8 @@ func checkWerkzeuge(root string) Check {
 	// nicht sucht, findet es nie.
 	if len(lahm) > 0 {
 		return Check{Name: name, Detail: detail,
-			Hint: "freigegeben, aber nicht einsatzbereit: " + strings.Join(lahm, ", ") + "\n" +
-				"                       Das Plugin registriert sie nicht. `hasenbau tool review <name>`, dann erneut testen"}
+			Hint: "released but not ready for use: " + strings.Join(lahm, ", ") + "\n" +
+				"                       The plugin does not register them. `hasenbau tool review <name>`, then test again"}
 	}
 
 	// Ohne bwrap registriert das Plugin gar kein Werkzeug (Hasenbau-9w6):
@@ -99,9 +99,9 @@ func checkWerkzeuge(root string) Check {
 	if frei > 0 {
 		if _, err := exec.LookPath("bwrap"); err != nil {
 			return Check{Name: name, Detail: detail,
-				Hint: "bwrap fehlt — das Plugin registriert deshalb KEIN Werkzeug.\n" +
-					"                       Ein Werkzeug läuft im Server-Prozess; ohne Sandkasten dürfte es mehr\n" +
-					"                       als der Hase, der es ruft. Installieren (bubblewrap) oder ohne Werkzeuge fahren"}
+				Hint: "bwrap is missing — the plugin therefore registers NO tool.\n" +
+					"                       A tool runs in the server process; without a sandbox it could do more\n" +
+					"                       than the Hase calling it. Install it (bubblewrap) or run without tools"}
 		}
 	}
 
@@ -114,9 +114,9 @@ func checkWerkzeuge(root string) Check {
 	}
 	if entwuerfe > 0 {
 		return Check{Name: name, OK: true, Detail: detail,
-			Hint: "Ein Entwurf ist Code, den ein Modell geschrieben und niemand gelesen hat.\n" +
-				"                       ERST LESEN. Dann `hasenbau tool test <name> …` — der Befehl FÜHRT AUS,\n" +
-				"                       mit deinen Rechten; er findet Fehler, keine Absichten. Zuletzt nach " + ToolsDir + "/ verschieben"}
+			Hint: "A draft is code a model wrote and nobody read.\n" +
+				"                       READ IT FIRST. Then `hasenbau tool test <name> …` — that command RUNS it,\n" +
+				"                       with your rights; it finds mistakes, not intentions. Finally move it to " + ToolsDir + "/"}
 	}
 	return Check{Name: name, OK: true, Detail: detail}
 }
@@ -142,7 +142,7 @@ func schmiedEingang(root string) string {
 		if ist == "" || filepath.Clean(ist) == filepath.Clean(soll) {
 			return ""
 		}
-		return fmt.Sprintf("Auftrag %s beobachtet %s, die Wünsche landen aber in %s — der Schmied bekommt sie nie",
+		return fmt.Sprintf("Auftrag %s watches %s, but the requests land in %s — the Schmied never gets them",
 			a.Name, ist, soll)
 	}
 	return ""
@@ -162,10 +162,10 @@ func checkLayout(root string) Check {
 	}
 	sort.Strings(fehlt)
 	if len(fehlt) > 0 {
-		return Check{Name: "Layout", Detail: "fehlt: " + strings.Join(fehlt, ", "),
+		return Check{Name: "Layout", Detail: "missing: " + strings.Join(fehlt, ", "),
 			Hint: "`hasenbau init " + root + "` legt Fehlendes nach, ohne Vorhandenes anzufassen"}
 	}
-	return Check{Name: "Layout", OK: true, Detail: fmt.Sprintf("%d Verzeichnisse, %d Dateien", len(dirs), len(files))}
+	return Check{Name: "Layout", OK: true, Detail: fmt.Sprintf("%d directories, %d files", len(dirs), len(files))}
 }
 
 // checkGit ist die wichtigste Prüfung und die unauffälligste: ohne
@@ -173,48 +173,48 @@ func checkLayout(root string) Check {
 // Permissions der Hasen ankern dann woanders (§11.5).
 func checkGit(root string) Check {
 	if _, err := os.Stat(filepath.Join(root, ".git")); errors.Is(err, fs.ErrNotExist) {
-		return Check{Name: "Git-Repo", Detail: "kein .git",
-			Hint: "`git init` im Bau, dann committen — ohne eigene Projekt-ID greifen die Raum-Permissions nicht (PLAN.md §11.5)"}
+		return Check{Name: "Git repo", Detail: "no .git",
+			Hint: "`git init` in the Bau, then commit — without its own project ID the Raum permissions do not take effect (PLAN.md §11.5)"}
 	}
 	if _, err := exec.LookPath("git"); err != nil {
-		return Check{Name: "Git-Repo", Detail: "git nicht im PATH — nicht prüfbar"}
+		return Check{Name: "Git repo", Detail: "git not in PATH — cannot check"}
 	}
 	cmd := exec.Command("git", "-C", root, "rev-parse", "--verify", "-q", "HEAD")
 	roh, err := cmd.Output()
 	if err != nil {
-		return Check{Name: "Git-Repo", Detail: "Repo ohne Commit",
-			Hint: "`git add -A && git commit` — erst der Root-Commit gibt dem Bau seine Projekt-ID (PLAN.md §11.5)"}
+		return Check{Name: "Git repo", Detail: "repo without a commit",
+			Hint: "`git add -A && git commit` — only the root commit gives the Bau its project ID (PLAN.md §11.5)"}
 	}
 	commit := strings.TrimSpace(string(roh))
 	if len(commit) > 12 {
 		commit = commit[:12]
 	}
-	return Check{Name: "Git-Repo", OK: true, Detail: "HEAD " + commit}
+	return Check{Name: "Git repo", OK: true, Detail: "HEAD " + commit}
 }
 
 func checkOpencodeConfig(root string) Check {
 	pfad := filepath.Join(root, OpencodeConfig)
 	roh, err := os.ReadFile(pfad)
 	if err != nil {
-		return Check{Name: "Bau-Config", Detail: OpencodeConfig + " fehlt",
-			Hint: "`hasenbau init` legt sie an — ohne sie liefe der Server mit der Alltags-Config (PLAN.md §3)"}
+		return Check{Name: "Bau config", Detail: OpencodeConfig + " missing",
+			Hint: "`hasenbau init` creates it — without it the server would run with your everyday config (PLAN.md §3)"}
 	}
 	var m map[string]any
 	if err := json.NewDecoder(bytes.NewReader(roh)).Decode(&m); err != nil {
-		return Check{Name: "Bau-Config", Detail: "unlesbar: " + err.Error(),
-			Hint: "JSON reparieren — opencode startet damit nicht"}
+		return Check{Name: "Bau config", Detail: "unreadable: " + err.Error(),
+			Hint: "fix the JSON — opencode will not start with this"}
 	}
 	var teile []string
 	if p, ok := m["plugin"].([]any); ok && len(p) == 0 {
-		teile = append(teile, "plugin: [] (keine geerbten)")
+		teile = append(teile, "plugin: [] (none inherited)")
 	}
 	if e, ok := m["enabled_providers"].([]any); ok {
 		teile = append(teile, fmt.Sprintf("%d aktive Provider", len(e)))
 	}
 	if len(teile) == 0 {
-		teile = append(teile, "lesbar")
+		teile = append(teile, "readable")
 	}
-	return Check{Name: "Bau-Config", OK: true, Detail: strings.Join(teile, ", ")}
+	return Check{Name: "Bau config", OK: true, Detail: strings.Join(teile, ", ")}
 }
 
 // checkMCP ist der Befund aus Hasenbau-2nq: der Eintrag zeigte fünf
@@ -224,33 +224,33 @@ func checkMCP(root string) Check {
 	pfad := filepath.Join(root, OpencodeConfig)
 	roh, err := os.ReadFile(pfad)
 	if err != nil {
-		return Check{Name: "Rückkanal", Detail: "keine Bau-Config"}
+		return Check{Name: "Back channel", Detail: "no Bau config"}
 	}
 	var m map[string]any
 	if err := json.Unmarshal(roh, &m); err != nil {
-		return Check{Name: "Rückkanal", Detail: "Bau-Config unlesbar"}
+		return Check{Name: "Back channel", Detail: "Bau config unreadable"}
 	}
 	mcp, _ := m["mcp"].(map[string]any)
 	eintrag, ok := mcp[MCPEintrag].(map[string]any)
 	if !ok {
-		return Check{Name: "Rückkanal", Detail: "kein mcp." + MCPEintrag,
-			Hint: "der nächste Daemon- oder Lauf-Start trägt ihn ein"}
+		return Check{Name: "Back channel", Detail: "no mcp." + MCPEintrag,
+			Hint: "the next daemon or Lauf start writes it"}
 	}
 	if an, da := eintrag["enabled"].(bool); da && !an {
-		return Check{Name: "Rückkanal", Detail: "enabled: false",
-			Hint: "so bekommt kein Hase hasenbau_summary und hasenbau_notiz"}
+		return Check{Name: "Back channel", Detail: "enabled: false",
+			Hint: "this way no Hase gets hasenbau_summary and hasenbau_notiz"}
 	}
 	befehl, _ := eintrag["command"].([]any)
 	if len(befehl) == 0 {
-		return Check{Name: "Rückkanal", Detail: "Eintrag ohne command",
-			Hint: "der nächste Start setzt ihn kanonisch neu"}
+		return Check{Name: "Back channel", Detail: "entry without command",
+			Hint: "the next start rewrites it canonically"}
 	}
 	binary, _ := befehl[0].(string)
 	if _, err := os.Stat(binary); err != nil {
-		return Check{Name: "Rückkanal", Detail: "zeigt auf " + binary + " — das gibt es nicht (mehr)",
-			Hint: "der nächste Daemon- oder Lauf-Start korrigiert den Pfad auf das laufende Binary"}
+		return Check{Name: "Back channel", Detail: "points at " + binary + " — that does not exist (any more)",
+			Hint: "the next daemon or Lauf start corrects the path to the running binary"}
 	}
-	return Check{Name: "Rückkanal", OK: true, Detail: binary}
+	return Check{Name: "Back channel", OK: true, Detail: binary}
 }
 
 // checkWaechter prüft den Sandbox-Wächter (Hasenbau-d2p). Er MUSS
@@ -261,10 +261,10 @@ func checkMCP(root string) Check {
 // dessen Eintrag fünf Tage lang auf ein verschwundenes Binary zeigte
 // (Hasenbau-2nq/08u).
 func checkWaechter(root string) Check {
-	const name = "Sandbox-Wächter"
+	const name = "Sandbox guard"
 	if _, err := os.Stat(filepath.Join(root, PluginDatei)); err != nil {
-		return Check{Name: name, Detail: PluginDatei + " fehlt",
-			Hint: "`hasenbau fix` legt ihn wieder an"}
+		return Check{Name: name, Detail: PluginDatei + " missing",
+			Hint: "`hasenbau fix` creates it again"}
 	}
 	// Veraltet ist der leisere, aber gefährlichere Fall: die Datei liegt
 	// da, der Wächter meldet auch etwas — nur fehlen ihr die Zusagen, die
@@ -272,27 +272,27 @@ func checkWaechter(root string) Check {
 	// Bau von 2026-07 trug 72 Zeilen gegen 359 und sagte nichts dazu
 	// (Hasenbau-uei).
 	if aktuell, err := PluginAktuell(root); err == nil && !aktuell {
-		return Check{Name: name, Detail: "veraltet — nicht die Fassung dieses Binaries",
-			Hint: "`hasenbau fix` oder der nächste Daemon-Start ersetzt ihn"}
+		return Check{Name: name, Detail: "outdated — not the version of this binary",
+			Hint: "`hasenbau fix` or the next daemon start replaces it"}
 	}
 	eingetragen, err := PluginEingetragen(root)
 	if err != nil {
-		return Check{Name: name, Detail: "Bau-Config unlesbar"}
+		return Check{Name: name, Detail: "Bau config unreadable"}
 	}
 	if !eingetragen {
-		return Check{Name: name, Detail: "liegt da, steht aber nicht im plugin:-Block",
-			Hint: "so lädt opencode ihn nicht — `hasenbau fix` trägt ihn ein"}
+		return Check{Name: name, Detail: "present, but not listed in the plugin: block",
+			Hint: "opencode will not load it like this — `hasenbau fix` adds it"}
 	}
 	conf, err := LoadConfig(root)
 	if err == nil && conf.Sandbox == SandboxWarn {
-		return Check{Name: name, OK: true, Detail: "aktiv, sandbox: warn (Aufrufe werden gemeldet, nicht abgewiesen)"}
+		return Check{Name: name, OK: true, Detail: "active, sandbox: warn (calls are reported, not refused)"}
 	}
-	return Check{Name: name, OK: true, Detail: "aktiv, sandbox: deny"}
+	return Check{Name: name, OK: true, Detail: "active, sandbox: deny"}
 }
 
 func checkHasenbauYAML(root string) Check {
 	if _, err := os.Stat(filepath.Join(root, ConfigFile)); err != nil {
-		return Check{Name: ConfigFile, Detail: "fehlt — es gelten die Vorgaben"}
+		return Check{Name: ConfigFile, Detail: "missing — the defaults apply"}
 	}
 	conf, err := LoadConfig(root)
 	if err != nil {
@@ -309,11 +309,11 @@ func checkHasenbauYAML(root string) Check {
 	if conf.Requests != "" {
 		teile = append(teile, "requests: "+conf.Requests)
 	} else {
-		teile = append(teile, "kein requests-Raum (Hasen können kein Werkzeug anfordern)")
+		teile = append(teile, "no requests Raum (Hasen cannot ask for a tool)")
 	}
 	if conf.Baumeister == "" {
-		return Check{Name: ConfigFile, OK: true, Detail: strings.Join(teile, ", ") + ", kein baumeister",
-			Hint: "ohne `baumeister:` läuft `hasenbau baumeister` nicht"}
+		return Check{Name: ConfigFile, OK: true, Detail: strings.Join(teile, ", ") + ", no baumeister",
+			Hint: "without `baumeister:` the command `hasenbau baumeister` does not run"}
 	}
 	teile = append(teile, "baumeister: "+conf.Baumeister)
 	return Check{Name: ConfigFile, OK: true, Detail: strings.Join(teile, ", ")}

@@ -47,7 +47,7 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau baumeister [-finding N] <lauf-id|auftrag>")
+		fmt.Fprintln(errw, "Usage: hasenbau baumeister [-finding N] <lauf-id|auftrag>")
 		return 2
 	}
 	args = fs.Args()
@@ -59,9 +59,9 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if conf.Baumeister == "" {
-		fmt.Fprintf(errw, "hasenbau baumeister: %s nennt keinen baumeister:\n"+
-			"  Vorlage kopieren (beispiele/auftraege/baumeister.md, beispiele/hasen/baumeister.md),\n"+
-			"  dann `baumeister: <auftrag>` in %s eintragen.\n", bau.ConfigFile, bau.ConfigFile)
+		fmt.Fprintf(errw, "hasenbau baumeister: %s names no baumeister:\n"+
+			"  copy the templates (beispiele/auftraege/baumeister.md, beispiele/hasen/baumeister.md),\n"+
+			"  then set `baumeister: <auftrag>` in %s.\n", bau.ConfigFile, bau.ConfigFile)
 		return 1
 	}
 
@@ -79,8 +79,8 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 	}
 	raum := ziel.Raeume["out"]
 	if raum == "" {
-		fmt.Fprintf(errw, "hasenbau baumeister: der Auftrag %s braucht einen Raum mit Rolle out —\n"+
-			"  nur daraus entsteht das Schreibrecht des Baumeisters (PLAN.md §6).\n", ziel.Name)
+		fmt.Fprintf(errw, "hasenbau baumeister: Auftrag %s needs a Raum with role out —\n"+
+			"  that is the only source of the Baumeister's write right (PLAN.md §6).\n", ziel.Name)
 		return 1
 	}
 
@@ -120,11 +120,11 @@ func cmdBaumeister(root string, args []string, out, errw io.Writer) int {
 		fmt.Fprintf(out, "  %s\n", meldung)
 	}
 	if len(neu) > 0 {
-		fmt.Fprintf(out, "\nNICHT AKTIVIERT — der Hasenbau trägt nie selbst etwas in einen Auftrag ein\n"+
-			"(PLAN.md §8/§10). Lies das Skript, dann trag den Gang selbst ein; der\n"+
-			"Vorschlag steht im Kopf der Datei.\n")
+		fmt.Fprintf(out, "\nNOT ACTIVATED — Hasenbau never enters anything into an Auftrag itself\n"+
+			"(PLAN.md §8/§10). Read the script, then register the Gang yourself; the\n"+
+			"proposal is in the head of the file.\n")
 	}
-	fmt.Fprintf(out, "\nDas Material, aus dem er gearbeitet hat: `hasenbau dig %s`.\n", material.Input)
+	fmt.Fprintf(out, "\nThe material it worked from: `hasenbau dig %s`.\n", material.Input)
 
 	if laufFehler != nil {
 		return 1
@@ -146,7 +146,7 @@ func reportLauf(w io.Writer, st *store.Store, laufID int64) {
 	}
 	l, err := st.LaufByID(laufID)
 	if err != nil {
-		fmt.Fprintf(w, "\nLauf %d: Status nicht lesbar — %v\n", laufID, err)
+		fmt.Fprintf(w, "\nLauf %d: status not readable — %v\n", laufID, err)
 		return
 	}
 	dauer := ""
@@ -158,7 +158,7 @@ func reportLauf(w io.Writer, st *store.Store, laufID int64) {
 		fmt.Fprintf(w, "  %s\n", l.Error)
 	}
 	if l.Status != "ok" {
-		fmt.Fprintf(w, "  Was unten steht, ist deshalb womöglich unfertig.\n")
+		fmt.Fprintf(w, "  What follows may therefore be incomplete.\n")
 	}
 }
 
@@ -190,7 +190,7 @@ func resolveMaterial(st *store.Store, ziel string, befund int) (material, error)
 
 	sel := selector{Auftrag: ziel, Nr: befund}
 	if auftrag.ValidName(ziel) != nil {
-		return material{}, fmt.Errorf("-finding braucht einen Auftrag, %q ist keiner", ziel)
+		return material{}, fmt.Errorf("-finding needs an Auftrag, %q is not one", ziel)
 	}
 	_, f, err := resolveFinding(st, sel, 20)
 	if err != nil {
@@ -198,7 +198,7 @@ func resolveMaterial(st *store.Store, ziel string, befund int) (material, error)
 	}
 	return material{
 		Input: sel.String(),
-		Kopf: fmt.Sprintf("Befund %d von %s: %s (Läufe %s)",
+		Kopf: fmt.Sprintf("finding %d of %s: %s (Läufe %s)",
 			befund, ziel, f.Title, laufListe(f.Laeufe)),
 	}, nil
 }
@@ -230,7 +230,7 @@ func targetLauf(st *store.Store, ziel string) (*store.Lauf, error) {
 		return nil, err
 	}
 	if l.SessionID == "" {
-		return nil, fmt.Errorf("lauf %d (%s, %s) hat keine Session — es gibt nichts zu verdichten", l.ID, l.Auftrag, l.Status)
+		return nil, fmt.Errorf("Lauf %d (%s, %s) has no session — there is nothing to distil", l.ID, l.Auftrag, l.Status)
 	}
 	return l, nil
 }
@@ -294,18 +294,18 @@ func reportDrafts(w io.Writer, raum string, vorher, nachher map[string]draftFile
 
 	fmt.Fprintf(w, "\n%s:\n", raum)
 	if len(neu) == 0 && len(geaendert) == 0 {
-		fmt.Fprintln(w, "  unverändert — der Baumeister hat nichts geschrieben (warum, sagt seine Summary)")
+		fmt.Fprintln(w, "  unchanged — the Baumeister wrote nothing (its summary says why)")
 		return nil
 	}
 	for _, p := range neu {
-		fmt.Fprintf(w, "  neu        %s (%d Bytes)\n", p, nachher[p].Size)
+		fmt.Fprintf(w, "  new        %s (%d bytes)\n", p, nachher[p].Size)
 	}
 	for _, p := range geaendert {
-		fmt.Fprintf(w, "  GEÄNDERT   %s (%d → %d Bytes) — hier lag schon ein Draft\n",
+		fmt.Fprintf(w, "  CHANGED   %s (%d → %d bytes) — a draft was already here\n",
 			p, vorher[p].Size, nachher[p].Size)
 	}
 	if unveraendert := len(nachher) - len(neu) - len(geaendert); unveraendert > 0 {
-		fmt.Fprintf(w, "  unverändert: %d Datei(en)\n", unveraendert)
+		fmt.Fprintf(w, "  unchanged: %d file(s)\n", unveraendert)
 	}
 	return neu
 }
@@ -344,9 +344,9 @@ func checkDrafts(bauRoot string, dateien []string) []string {
 			// Die letzte Zeile, nicht die erste: bei Python steht oben
 			// der Traceback und unten die eigentliche Meldung.
 			zeilen := strings.Split(strings.TrimSpace(string(ausgabe)), "\n")
-			meldungen = append(meldungen, fmt.Sprintf("SYNTAXFEHLER in %s: %s", rel, strings.TrimSpace(zeilen[len(zeilen)-1])))
+			meldungen = append(meldungen, fmt.Sprintf("SYNTAX ERROR in %s: %s", rel, strings.TrimSpace(zeilen[len(zeilen)-1])))
 		} else {
-			meldungen = append(meldungen, fmt.Sprintf("Syntax von %s ist in Ordnung (ausgeführt wurde nichts)", rel))
+			meldungen = append(meldungen, fmt.Sprintf("syntax of %s is fine (nothing was executed)", rel))
 		}
 	}
 	return meldungen

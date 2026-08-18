@@ -189,7 +189,7 @@ func TestGaengeOhneWorkRaum(t *testing.T) {
 	delete(a.Raeume, "work")
 	u := testUmgebung(t, a)
 
-	if _, err := RunGaenge(context.Background(), u, a, time.Minute); err == nil || !strings.Contains(err.Error(), "Rolle work") {
+	if _, err := RunGaenge(context.Background(), u, a, time.Minute); err == nil || !strings.Contains(err.Error(), "role work") {
 		t.Errorf("ohne work-Raum: %v", err)
 	}
 }

@@ -153,7 +153,7 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		return fehler("manifest: %v (erlaubt: description, script, args)", err)
 	}
 	if strings.TrimSpace(m.Beschreibung) == "" {
-		return fehler("description fehlt — sie ist das, woran das Modell erkennt, wozu das Werkzeug da ist")
+		return fehler("description missing — it is how the model recognises what the tool is for")
 	}
 	if strings.TrimSpace(m.Skript) == "" {
 		return fehler("script fehlt")
@@ -162,7 +162,7 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 	// woandershin zeigt, wäre ein Weg aus dem Bau heraus — und das
 	// Skript läuft im Server-Prozess, nicht in der Sandbox des Hasen.
 	if filepath.Base(m.Skript) != m.Skript {
-		return fehler("script %q enthält einen Pfad — erlaubt ist nur ein Dateiname neben dem Manifest", m.Skript)
+		return fehler("script %q contains a path — only a file name next to the manifest is allowed", m.Skript)
 	}
 	skript := filepath.Join(dir, m.Skript)
 	roh, lesefehler := os.ReadFile(filepath.Join(root, skript))
@@ -177,14 +177,14 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 			return fehler("arg %d: name fehlt", i+1)
 		}
 		if gesehen[a.Name] {
-			return fehler("arg %q steht zweimal", a.Name)
+			return fehler("arg %q listed twice", a.Name)
 		}
 		gesehen[a.Name] = true
 		if !erlaubteTypen[a.Typ] {
-			return fehler("arg %q: type %q — erlaubt sind string, number, boolean", a.Name, a.Typ)
+			return fehler("arg %q: type %q — allowed are string, number, boolean", a.Name, a.Typ)
 		}
 		if strings.TrimSpace(a.Beschreibung) == "" {
-			return fehler("arg %q: description fehlt", a.Name)
+			return fehler("arg %q: description missing", a.Name)
 		}
 	}
 

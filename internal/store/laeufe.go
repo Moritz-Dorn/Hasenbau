@@ -156,7 +156,7 @@ func (s *Store) LaufByID(id int64) (*Lauf, error) {
 		&l.Status, &l.SessionID, &l.Summary, &l.Error, &l.TokensIn,
 		&l.TokensOut, &l.CostCent, &l.ToolSignature)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("store: kein Lauf mit ID %d", id)
+		return nil, fmt.Errorf("store: no Lauf with ID %d", id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("store: Lauf %d lesen: %w", id, err)
@@ -178,7 +178,7 @@ func (s *Store) LastLaufByAuftrag(auftrag string) (*Lauf, error) {
 		WHERE auftrag = ? AND session_id IS NOT NULL AND session_id != ''
 		ORDER BY started DESC, id DESC LIMIT 1`, auftrag).Scan(&id)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("store: kein Lauf des Auftrags %q mit Session", auftrag)
+		return nil, fmt.Errorf("store: no Lauf of Auftrag %q with a session", auftrag)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("store: letzten Lauf von %q lesen: %w", auftrag, err)
@@ -195,7 +195,7 @@ func (s *Store) RecentLaeufe(limit int) ([]Lauf, error) {
 		       COALESCE(cost_cent,0)
 		FROM laeufe ORDER BY started DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
-		return nil, fmt.Errorf("store: Läufe lesen: %w", err)
+		return nil, fmt.Errorf("store: reading Läufe: %w", err)
 	}
 	defer rows.Close()
 	return scanLaeufe(rows)
@@ -233,7 +233,7 @@ func (s *Store) RecentLaeufeByAuftrag(auftrag string, n int) ([]Lauf, error) {
 		FROM laeufe WHERE auftrag = ?
 		ORDER BY started DESC, id DESC LIMIT ?`, auftrag, n)
 	if err != nil {
-		return nil, fmt.Errorf("store: Läufe von %q lesen: %w", auftrag, err)
+		return nil, fmt.Errorf("store: reading Läufe of %q: %w", auftrag, err)
 	}
 	defer rows.Close()
 	return scanLaeufe(rows)
@@ -252,7 +252,7 @@ func (s *Store) LaeufeSince(auftrag string, since time.Time) ([]time.Time, error
 		WHERE auftrag = ? AND started > ?
 		ORDER BY started ASC`, auftrag, since.UTC())
 	if err != nil {
-		return nil, fmt.Errorf("store: Läufe von %q seit %s lesen: %w", auftrag, since, err)
+		return nil, fmt.Errorf("store: reading Läufe of %q since %s: %w", auftrag, since, err)
 	}
 	defer rows.Close()
 
@@ -277,7 +277,7 @@ func (s *Store) LaeufeSinceAll(since time.Time) ([]time.Time, error) {
 		WHERE started > ?
 		ORDER BY started ASC`, since.UTC())
 	if err != nil {
-		return nil, fmt.Errorf("store: Läufe seit %s lesen: %w", since, err)
+		return nil, fmt.Errorf("store: reading Läufe since %s: %w", since, err)
 	}
 	defer rows.Close()
 
@@ -329,7 +329,7 @@ func (s *Store) RecentSummaries(auftrag string, n int) ([]string, error) {
 func (s *Store) StatusCounts() (map[string]int, error) {
 	rows, err := s.db.Query(`SELECT status, count(*) FROM laeufe GROUP BY status`)
 	if err != nil {
-		return nil, fmt.Errorf("store: Status zählen: %w", err)
+		return nil, fmt.Errorf("store: counting status: %w", err)
 	}
 	defer rows.Close()
 
@@ -359,7 +359,7 @@ func (s *Store) AuftragStates() ([]AuftragState, error) {
 		SELECT auftrag, last_lauf, last_ok, error_streak
 		FROM auftrag_state ORDER BY auftrag`)
 	if err != nil {
-		return nil, fmt.Errorf("store: Auftrag-Zustände lesen: %w", err)
+		return nil, fmt.Errorf("store: reading Auftrag states: %w", err)
 	}
 	defer rows.Close()
 

@@ -63,7 +63,7 @@ func resolveFinding(st *store.Store, sel selector, n int) (findings.Report, find
 	}
 	if sel.Nr > len(report.Findings) {
 		return report, findings.Finding{}, fmt.Errorf(
-			"Befund %d gibt es nicht — %s hat %d (`hasenbau findings %s`)",
+			"finding %d does not exist — %s has %d (`hasenbau findings %s`)",
 			sel.Nr, sel.Auftrag, len(report.Findings), sel.Auftrag)
 	}
 	return report, report.Findings[sel.Nr-1], nil
@@ -92,8 +92,8 @@ func digFinding(st *store.Store, sel selector, alsJSON bool, out, errw io.Writer
 		return 0
 	}
 
-	fmt.Fprintf(out, "# Befund %d zu %s\n\n", sel.Nr, sel.Auftrag)
-	fmt.Fprintf(out, "Gerechnet über %d ausgewertete Läufe — deterministisch, ohne Modell.\n\n", report.Laeufe)
+	fmt.Fprintf(out, "# Finding %d of %s\n\n", sel.Nr, sel.Auftrag)
+	fmt.Fprintf(out, "Computed over %d evaluated Läufe — deterministic, no model.\n\n", report.Laeufe)
 	fmt.Fprint(out, f.Markdown(sel.Nr))
 
 	if len(f.Laeufe) == 0 {
@@ -108,16 +108,16 @@ func digFinding(st *store.Store, sel selector, alsJSON bool, out, errw io.Writer
 	if len(zeigen) > maxTraces {
 		zeigen = zeigen[:maxTraces]
 	}
-	fmt.Fprintf(out, "\n---\n\n# Die Läufe, auf denen der Befund beruht\n")
+	fmt.Fprintf(out, "\n---\n\n# The Läufe the finding rests on\n")
 	if len(zeigen) < len(f.Laeufe) {
-		fmt.Fprintf(out, "\nAbgedruckt sind die jüngsten %d von %d — die übrigen (%s)\n"+
-			"stehen einzeln unter `hasenbau dig <id>`.\n",
+		fmt.Fprintf(out, "Printed are the most recent %d of %d — the others (%s)\n"+
+			"are available individually via `hasenbau dig <id>`.\n",
 			len(zeigen), len(f.Laeufe), laufListe(f.Laeufe[maxTraces:]))
 	}
 	for _, id := range zeigen {
 		l, err := st.LaufByID(id)
 		if err != nil {
-			fmt.Fprintf(out, "\n## Lauf %d — nicht mehr in der Datenbank\n", id)
+			fmt.Fprintf(out, "\n## Lauf %d — no longer in the database\n", id)
 			continue
 		}
 		// Aus der DB, nie vom Server: dieser Befehl läuft in einem Gang,
@@ -125,12 +125,12 @@ func digFinding(st *store.Store, sel selector, alsJSON bool, out, errw io.Writer
 		// Gang-Timeout verwaist zurück (§2).
 		roh, da, err := st.ReadTrace(id)
 		if err != nil || !da {
-			fmt.Fprintf(out, "\n## Lauf %d (%s) — kein abgelegter Trace\n", id, l.Status)
+			fmt.Fprintf(out, "\n## Lauf %d (%s) — no stored trace\n", id, l.Status)
 			continue
 		}
 		var tr opencode.Trace
 		if err := json.Unmarshal(roh, &tr); err != nil {
-			fmt.Fprintf(out, "\n## Lauf %d — Trace unlesbar\n", id)
+			fmt.Fprintf(out, "\n## Lauf %d — trace unreadable\n", id)
 			continue
 		}
 		fmt.Fprintf(out, "\n## Lauf %d — %s, %s\n\n", id, l.Trigger, l.Status)
@@ -165,30 +165,30 @@ func writeMonitored(st *store.Store, ueberwacht []string, gesamt int, out io.Wri
 		breite = max(breite, len(name))
 	}
 
-	fmt.Fprintf(out, "\nÜberwacht  (%d von %d Aufträgen)\n", len(ueberwacht), gesamt)
+	fmt.Fprintf(out, "\nMonitored  (%d of %d Aufträge)\n", len(ueberwacht), gesamt)
 	for _, name := range ueberwacht {
 		zeile := func(format string, args ...any) {
 			fmt.Fprintf(out, "  %-*s  %s\n", breite, name, fmt.Sprintf(format, args...))
 		}
 		report, err := analyzeAuftrag(st, name, statusLaeufe)
 		if err != nil {
-			zeile("nicht auswertbar: %v", err)
+			zeile("not evaluable: %v", err)
 			continue
 		}
 		switch {
 		case report.Laeufe == 0:
-			zeile("noch kein ausgewerteter Lauf")
+			zeile("no evaluated Lauf yet")
 			continue
 		case len(report.Findings) == 0:
 			// Auch das ist eine Meldung: nichts gefunden über N Läufe
 			// heißt, dass der Auftrag rund läuft.
-			zeile("keine Befunde über %s", anzahlLaeufe(report.Laeufe))
+			zeile("no findings across %s", anzahlLaeufe(report.Laeufe))
 			continue
 		}
-		zeile("%s über %s", anzahlBefunde(len(report.Findings)), anzahlLaeufe(report.Laeufe))
+		zeile("%s across %s", anzahlBefunde(len(report.Findings)), anzahlLaeufe(report.Laeufe))
 		for i, f := range report.Findings {
 			if i == maxGemeldet {
-				fmt.Fprintf(out, "      … und %d weitere\n", len(report.Findings)-maxGemeldet)
+				fmt.Fprintf(out, "      … and %d more\n", len(report.Findings)-maxGemeldet)
 				break
 			}
 			fmt.Fprintf(out, "      %d. %s\n", i+1, f.Title)
@@ -251,8 +251,8 @@ func writeBauDeckel(root string, st *store.Store, out io.Writer) {
 		// Deckel gilt. Wer einen eingetragen hat, hielte sich sonst für
 		// geschützt und wäre es nicht — dieselbe Sorte Stille wie beim
 		// toten Rückkanal-Pfad (§8).
-		fmt.Fprintf(out, "\nBau-Deckel  unbekannt — %s ist nicht lesbar, es gilt keiner\n"+
-			"            (`hasenbau describe bau` nennt die Stelle)\n", bau.ConfigFile)
+		fmt.Fprintf(out, "\nBau cap  unknown — %s is not readable, none is in effect\n"+
+			"         (`hasenbau describe bau` names the spot)\n", bau.ConfigFile)
 		return
 	}
 	b := budgetAus(conf, st, func(string, ...any) {})
@@ -263,12 +263,12 @@ func writeBauDeckel(root string, st *store.Store, out io.Writer) {
 	if err != nil {
 		return
 	}
-	fmt.Fprintf(out, "\nBau-Deckel  %s über alle Aufträge\n", b.Rate)
+	fmt.Fprintf(out, "\nBau cap  %s across all Aufträge\n", b.Rate)
 	if warten == 0 {
 		fmt.Fprintf(out, "            %d im Fenster, %d frei\n", belegt, b.Rate.Max-belegt)
 		return
 	}
-	fmt.Fprintf(out, "            voll (%d im Fenster) — nächster Lauf frühestens %s (in %s)\n",
+	fmt.Fprintf(out, "         full (%d in the window) — next Lauf at the earliest %s (in %s)\n",
 		belegt, time.Now().Add(warten).Local().Format("15:04"),
 		auftrag.FormatDuration(warten.Round(time.Minute)))
 }
@@ -290,9 +290,9 @@ func writeDrosseln(stand []drossel, out io.Writer) {
 			teile = append(teile, fmt.Sprintf("%s im Eingang", anzahlDateien(d.Eingang)))
 		}
 		if d.Warten == 0 {
-			teile = append(teile, "nächster Lauf: jetzt")
+			teile = append(teile, "next Lauf: now")
 		} else {
-			teile = append(teile, fmt.Sprintf("nächster Lauf frühestens %s (in %s)",
+			teile = append(teile, fmt.Sprintf("next Lauf at the earliest %s (in %s)",
 				d.Naechster.Local().Format("15:04"), auftrag.FormatDuration(d.Warten.Round(time.Minute))))
 		}
 		fmt.Fprintf(out, "  %-*s  %s\n", breite, "", strings.Join(teile, ", "))
@@ -319,9 +319,9 @@ func monitoredNames(auftraege []*auftrag.Auftrag) []string {
 
 func anzahlBefunde(n int) string {
 	if n == 1 {
-		return "1 Befund"
+		return "1 finding"
 	}
-	return fmt.Sprintf("%d Befunde", n)
+	return fmt.Sprintf("%d findings", n)
 }
 
 func anzahlLaeufe(n int) string {
@@ -349,12 +349,12 @@ func cmdFindings(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	alsJSON := fs.Bool("json", false, "strukturiert ausgeben (für Gänge)")
-	n := fs.Int("n", 20, "wie viele Läufe zurück")
+	n := fs.Int("n", 20, "how many Läufe back")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau findings [-json] [-n N] <auftrag>")
+		fmt.Fprintln(errw, "Usage: hasenbau findings [-json] [-n N] <auftrag>")
 		return 2
 	}
 	name := fs.Arg(0) // nicht `auftrag`: so heißt in dieser Datei das Paket

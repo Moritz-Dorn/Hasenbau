@@ -54,7 +54,7 @@ func Fetch(ctx context.Context, baseURL, key string) ([]Model, error) {
 
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("provider: %s nicht erreichbar: %w", url, err)
+		return nil, fmt.Errorf("provider: %s not reachable: %w", url, err)
 	}
 	defer resp.Body.Close()
 
@@ -77,7 +77,7 @@ func Fetch(ctx context.Context, baseURL, key string) ([]Model, error) {
 		}
 	}
 	if len(modelle) == 0 {
-		return nil, fmt.Errorf("provider: %s liefert keine Modelle mit id", url)
+		return nil, fmt.Errorf("provider: %s returns no models with an id", url)
 	}
 	sort.Slice(modelle, func(i, j int) bool { return modelle[i].ID < modelle[j].ID })
 	return modelle, nil
@@ -131,7 +131,7 @@ func Key(id string) (string, error) {
 	pfad := AuthPath()
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("provider: keine auth.json unter %s — erst im Alltags-opencode anmelden (`opencode auth login`)", pfad)
+		return "", fmt.Errorf("provider: no auth.json at %s — log in with your everyday opencode first (`opencode auth login`)", pfad)
 	}
 	if err != nil {
 		return "", fmt.Errorf("provider: %s lesen: %w", pfad, err)
@@ -145,10 +145,10 @@ func Key(id string) (string, error) {
 	}
 	eintrag, ok := auth[id]
 	if !ok {
-		return "", fmt.Errorf("provider: %s hat keinen Eintrag für %q — erst im Alltags-opencode anmelden (`opencode auth login`)", pfad, id)
+		return "", fmt.Errorf("provider: %s has no entry for %q — log in with your everyday opencode first (`opencode auth login`)", pfad, id)
 	}
 	if eintrag.Key == "" {
-		return "", fmt.Errorf("provider: Eintrag für %q in %s ist type=%q ohne key — fetch kann nur API-Keys nutzen", id, pfad, eintrag.Type)
+		return "", fmt.Errorf("provider: entry for %q in %s is type=%q without a key — fetch can only use API keys", id, pfad, eintrag.Type)
 	}
 	return eintrag.Key, nil
 }
@@ -206,7 +206,7 @@ func LoadConfig(root string) (*Config, error) {
 	pfad := filepath.Join(root, bau.OpencodeConfig)
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("provider: keine Bau-Config unter %s — `hasenbau init` läuft lassen", pfad)
+		return nil, fmt.Errorf("provider: no Bau config at %s — run `hasenbau init`", pfad)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("provider: %s lesen: %w", pfad, err)
@@ -227,12 +227,12 @@ func LoadConfig(root string) (*Config, error) {
 func (c *Config) BaseURL(id string) (string, error) {
 	p, ok := c.provider()[id].(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("provider: %s kennt keinen Provider %q — das Gerüst (npm, name, options.baseURL) gehört handgepflegt in den provider:-Block", c.Pfad, id)
+		return "", fmt.Errorf("provider: %s knows no provider %q — the scaffold (npm, name, options.baseURL) is hand-maintained in the provider: block", c.Pfad, id)
 	}
 	opts, _ := p["options"].(map[string]any)
 	url, _ := opts["baseURL"].(string)
 	if url == "" {
-		return "", fmt.Errorf("provider: %q hat keine options.baseURL in %s — ohne Endpoint kein Fetch (PLAN.md §3)", id, c.Pfad)
+		return "", fmt.Errorf("provider: %q has no options.baseURL in %s — no endpoint, no fetch (PLAN.md §3)", id, c.Pfad)
 	}
 	return url, nil
 }
@@ -443,12 +443,12 @@ func (a Change) Report() string {
 		fmt.Fprintf(&b, "  ~ %s  %q → %q\n", u.ID, u.Alt, u.Neu)
 	}
 	for _, id := range a.Weg {
-		fmt.Fprintf(&b, "  - %s  (Endpoint kennt es nicht mehr)\n", id)
+		fmt.Fprintf(&b, "  - %s  (the endpoint no longer knows it)\n", id)
 	}
 	if a.EnabledErgaenzt {
 		fmt.Fprintln(&b, "  + enabled_providers")
 	}
-	fmt.Fprintf(&b, "\n%d neu, %d umbenannt, %d entfernt, %d unverändert\n",
+	fmt.Fprintf(&b, "\n%d new, %d renamed, %d removed, %d unchanged\n",
 		len(a.Neu), len(a.Umbenannt), len(a.Weg), a.Unveraendert)
 	return b.String()
 }

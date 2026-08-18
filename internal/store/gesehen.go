@@ -16,7 +16,7 @@ func (s *Store) IsSeen(auftrag, hash string) (bool, error) {
 		auftrag, hash,
 	).Scan(&n)
 	if err != nil {
-		return false, fmt.Errorf("store: gesehen prüfen: %w", err)
+		return false, fmt.Errorf("store: checking already-seen: %w", err)
 	}
 	return n > 0, nil
 }

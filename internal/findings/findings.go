@@ -142,7 +142,7 @@ func gangCandidate(history []store.LaufTools) (Finding, bool) {
 
 	f := Finding{
 		Kind:  KindGang,
-		Title: fmt.Sprintf("%s — in %d von %d Läufen", strings.Join(best, " → "), bestLaeufe, len(history)),
+		Title: fmt.Sprintf("%s — in %d of %d Läufe", strings.Join(best, " → "), bestLaeufe, len(history)),
 	}
 	// Argumente je Position einsammeln, aus dem ersten Vorkommen je Lauf.
 	proPosition := make([]map[string]bool, len(best))
@@ -171,9 +171,9 @@ func gangCandidate(history []store.LaufTools) (Finding, bool) {
 	}
 	switch len(variabel) {
 	case 0:
-		f.Detail = "Alle Argumente sind über die Läufe konstant — das Muster hängt an nichts, was der Lauf mitbringt. Ein Gang daraus braucht keine Parameter."
+		f.Detail = "All arguments are constant across the Läufe — the pattern depends on nothing the Lauf brings along. A Gang built from it needs no parameters."
 	default:
-		f.Detail = fmt.Sprintf("Variabel sind die Positionen %s — das sind die Parameter. Alles andere war über die Läufe konstant und gehört als Konstante ins Skript.",
+		f.Detail = fmt.Sprintf("Variable are the positions %s — those are the parameters. Everything else was constant across the Läufe and belongs in the script as a constant.",
 			strings.Join(variabel, ", "))
 	}
 	return f, true
@@ -263,22 +263,22 @@ func costAndDuration(history []store.LaufTools, laeufe []store.Lauf) (Finding, b
 
 	f := Finding{
 		Kind:   KindCost,
-		Title:  fmt.Sprintf("Laufzeit: Median %s, längster %s", median.Round(time.Second), dauern[len(dauern)-1].Round(time.Second)),
+		Title:  fmt.Sprintf("Runtime: median %s, longest %s", median.Round(time.Second), dauern[len(dauern)-1].Round(time.Second)),
 		Laeufe: []int64{langsamster.ID},
 	}
 	var teile []string
 	if faktor := float64(dauern[len(dauern)-1]) / float64(max(median, time.Millisecond)); faktor >= 2 {
-		teile = append(teile, fmt.Sprintf("Der längste Lauf (%d) brauchte das %.1f-fache des Medians — bei Modellen ist das normal, bei Gängen wäre es ein Befund.", langsamster.ID, faktor))
+		teile = append(teile, fmt.Sprintf("The longest Lauf (%d) took %.1f times the median — normal for models, a finding for Gänge.", langsamster.ID, faktor))
 	}
 	if summe := summeKosten(kosten); summe > 0 {
-		teile = append(teile, fmt.Sprintf("Kosten über %d Läufe: %d ct.", len(kosten), summe))
+		teile = append(teile, fmt.Sprintf("Cost across %d Läufe: %d ct.", len(kosten), summe))
 	}
 	if tool, ms := teuerstesWerkzeug(history); tool != "" {
-		teile = append(teile, fmt.Sprintf("Die meiste Werkzeug-Zeit geht an %s (%s über alle Läufe).", tool, (time.Duration(ms)*time.Millisecond).Round(time.Millisecond)))
+		teile = append(teile, fmt.Sprintf("Most tool time goes to %s (%s across all Läufe).", tool, (time.Duration(ms)*time.Millisecond).Round(time.Millisecond)))
 	}
 	f.Detail = strings.Join(teile, " ")
 	if f.Detail == "" {
-		f.Detail = "Keine Ausreißer."
+		f.Detail = "No outliers."
 	}
 	return f, true
 }
@@ -289,7 +289,7 @@ func anzahlLaeufe(n int) string {
 	if n == 1 {
 		return "1 Lauf"
 	}
-	return fmt.Sprintf("%d Läufen", n)
+	return fmt.Sprintf("%d Läufe", n)
 }
 
 func teuerstesWerkzeug(history []store.LaufTools) (string, int64) {

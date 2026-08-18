@@ -43,7 +43,7 @@ func RunGaenge(ctx context.Context, u *lauf.Environment, a *auftrag.Auftrag, def
 		return nil, nil
 	}
 	if u.Work == "" {
-		return nil, fmt.Errorf("auftrag %s: Gänge brauchen einen Raum mit Rolle work (für $WORK und Logs)", a.Name)
+		return nil, fmt.Errorf("Auftrag %s: Gänge need a Raum with role work (for $WORK and logs)", a.Name)
 	}
 
 	var logs []string

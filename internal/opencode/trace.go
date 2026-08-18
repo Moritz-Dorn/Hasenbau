@@ -122,7 +122,7 @@ func truncateField(s string, max int) string {
 	for schnitt > 0 && !utf8.RuneStart(s[schnitt]) {
 		schnitt--
 	}
-	return s[:schnitt] + fmt.Sprintf("… (gekürzt, %d Bytes insgesamt)", len(s))
+	return s[:schnitt] + fmt.Sprintf("… (truncated, %d bytes total)", len(s))
 }
 
 // toolTimes liest start/end (Unix-ms) aus dem Time-Union des

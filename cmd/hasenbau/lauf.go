@@ -68,7 +68,7 @@ func (k *laufContext) Auftrag(name string) (*auftrag.Auftrag, error) {
 		namen = append(namen, a.Name)
 	}
 	if len(namen) == 0 {
-		return nil, fmt.Errorf("unbekannter Auftrag %q — der Bau hat keine Aufträge unter auftraege/", name)
+		return nil, fmt.Errorf("unknown Auftrag %q — the Bau has no Aufträge under auftraege/", name)
 	}
 	return nil, fmt.Errorf("unbekannter Auftrag %q — vorhanden: %v", name, namen)
 }

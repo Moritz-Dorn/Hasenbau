@@ -24,13 +24,13 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/hase"
 )
 
-const newUsage = `Aufruf: hasenbau new <ressource> <name>
+const newUsage = `Usage: hasenbau new <resource> <name>
 
-Ressourcen:
-  auftrag <name> -hase <hase>   Gerüst für auftraege/<name>.md
-  hase <name>                   Gerüst für hasen/<name>.md
+Resources:
+  auftrag <name> -hase <hase>   scaffold for auftraege/<name>.md
+  hase <name>                   scaffold for hasen/<name>.md
 
-Vorhandene Dateien bleiben unangetastet.
+Existing files are left untouched.
 `
 
 func cmdNew(root string, args []string, out, errw io.Writer) int {
@@ -44,7 +44,7 @@ func cmdNew(root string, args []string, out, errw io.Writer) int {
 	case "hase":
 		return newHase(root, args[1:], out, errw)
 	default:
-		fmt.Fprintf(errw, "hasenbau new: unbekannte Ressource %q\n\n%s", args[0], newUsage)
+		fmt.Fprintf(errw, "hasenbau new: unknown resource %q\n\n%s", args[0], newUsage)
 		return 2
 	}
 }
@@ -70,7 +70,7 @@ func newAuftrag(root string, args []string, out, errw io.Writer) int {
 
 	inhalt := auftragGeruest(name, haseName)
 	if _, err := auftrag.Parse(name, []byte(inhalt)); err != nil {
-		fmt.Fprintf(errw, "hasenbau new auftrag: das Gerüst lädt nicht — das ist ein Fehler im Hasenbau: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau new auftrag: the scaffold does not load — that is a bug in Hasenbau: %v\n", err)
 		return 1
 	}
 	rel := filepath.Join("auftraege", name+".md")
@@ -78,14 +78,14 @@ func newAuftrag(root string, args []string, out, errw io.Writer) int {
 		return code
 	}
 
-	fmt.Fprintf(out, "angelegt: %s\n\n", rel)
-	fmt.Fprintf(out, "Als Nächstes:\n"+
-		"  1. Den Markdown-Teil schreiben — er ist der Prompt-Kern, nicht Deko.\n"+
-		"  2. Trigger wählen: das Gerüst steht auf manual, watch und cron liegen auskommentiert daneben.\n"+
-		"     Bei watch gehört der Eingang als raeume: input: dazu — watch: trägt nur das Muster.\n"+
-		"  3. Räume prüfen. Anlegen muss sie niemand, das tut der erste Lauf.\n"+
-		"  4. hasenbau describe auftrag %s  — zeigt, was der Bau daraus liest.\n"+
-		"  5. hasenbau lauf %s  — einmal von Hand auslösen.\n", name, name)
+	fmt.Fprintf(out, "created: %s\n\n", rel)
+	fmt.Fprintf(out, "Next:\n"+
+		"  1. Write the Markdown part — it is the prompt core, not decoration.\n"+
+		"  2. Pick a trigger: the scaffold is set to manual, watch and cron sit next to it, commented out.\n"+
+		"     With watch the input belongs under raeume: input: — watch: carries only the pattern.\n"+
+		"  3. Check the Räume. Nobody has to create them, the first Lauf does that.\n"+
+		"  4. hasenbau describe auftrag %s  — shows what the Bau reads from it.\n"+
+		"  5. hasenbau lauf %s  — trigger it once by hand.\n", name, name)
 	return 0
 }
 
@@ -109,16 +109,16 @@ func newHase(root string, args []string, out, errw io.Writer) int {
 	// bleibt kein Torso liegen.
 	if _, err := hase.Lade(root, name); err != nil {
 		os.Remove(filepath.Join(root, rel))
-		fmt.Fprintf(errw, "hasenbau new hase: das Gerüst lädt nicht — das ist ein Fehler im Hasenbau: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau new hase: the scaffold does not load — that is a bug in Hasenbau: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(out, "angelegt: %s\n\n", rel)
-	fmt.Fprintf(out, "Als Nächstes:\n"+
-		"  1. Die Rolle schreiben — wer der Hase ist und was er tun soll.\n"+
-		"  2. model: setzen, falls nicht der Vorgabe-Provider gelten soll.\n"+
-		"  3. hasenbau new auftrag <name> -hase %s  — ein Hase ohne Auftrag läuft nie.\n"+
-		"  4. hasenbau describe hase %s  — zeigt die effektiven Permissions je Auftrag.\n", name, name)
+	fmt.Fprintf(out, "created: %s\n\n", rel)
+	fmt.Fprintf(out, "Next:\n"+
+		"  1. Write the role — who the Hase is and what it should do.\n"+
+		"  2. Set model: if the default provider should not apply.\n"+
+		"  3. hasenbau new auftrag <name> -hase %s  — a Hase without an Auftrag never runs.\n"+
+		"  4. hasenbau describe hase %s  — shows the effective permissions per Auftrag.\n", name, name)
 	return 0
 }
 
@@ -133,14 +133,14 @@ func parseNewAuftragArgs(args []string) (name, haseName string, err error) {
 		switch {
 		case arg == "-hase" || arg == "--hase":
 			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("-hase ohne Wert")
+				return "", "", fmt.Errorf("-hase without a value")
 			}
 			haseName = args[i+1]
 			i++
 		case strings.HasPrefix(arg, "-hase="), strings.HasPrefix(arg, "--hase="):
 			haseName = arg[strings.Index(arg, "=")+1:]
 		case strings.HasPrefix(arg, "-"):
-			return "", "", fmt.Errorf("unbekanntes Flag %q (es gibt nur -hase)", arg)
+			return "", "", fmt.Errorf("unknown flag %q (there is only -hase)", arg)
 		default:
 			frei = append(frei, arg)
 		}
@@ -149,9 +149,9 @@ func parseNewAuftragArgs(args []string) (name, haseName string, err error) {
 	case 1:
 		return frei[0], haseName, nil
 	case 0:
-		return "", "", fmt.Errorf("der Name fehlt")
+		return "", "", fmt.Errorf("the name is missing")
 	default:
-		return "", "", fmt.Errorf("mehr als ein Name: %s", strings.Join(frei, ", "))
+		return "", "", fmt.Errorf("more than one name: %s", strings.Join(frei, ", "))
 	}
 }
 
@@ -160,7 +160,7 @@ func parseNewAuftragArgs(args []string) (name, haseName string, err error) {
 func requireHase(root, name string, errw io.Writer) int {
 	vorhanden := existingHasen(root)
 	if name == "" {
-		fmt.Fprintf(errw, "hasenbau new auftrag: -hase fehlt — jeder Auftrag braucht einen Hasen.\n%s", hasenHinweis(vorhanden))
+		fmt.Fprintf(errw, "hasenbau new auftrag: -hase is missing — every Auftrag needs a Hase.\n%s", hasenHinweis(vorhanden))
 		return 2
 	}
 	if err := auftrag.ValidName(name); err != nil {
@@ -172,15 +172,15 @@ func requireHase(root, name string, errw io.Writer) int {
 			return 0
 		}
 	}
-	fmt.Fprintf(errw, "hasenbau new auftrag: kein Template hasen/%s.md.\n%s", name, hasenHinweis(vorhanden))
+	fmt.Fprintf(errw, "hasenbau new auftrag: no template hasen/%s.md.\n%s", name, hasenHinweis(vorhanden))
 	return 1
 }
 
 func hasenHinweis(vorhanden []string) string {
 	if len(vorhanden) == 0 {
-		return "  Der Bau hat noch keine Hasen — `hasenbau new hase <name>` legt einen an.\n"
+		return "  The Bau has no Hasen yet — `hasenbau new hase <name>` creates one.\n"
 	}
-	return fmt.Sprintf("  Vorhanden: %s\n  Neu: `hasenbau new hase <name>`\n", strings.Join(vorhanden, ", "))
+	return fmt.Sprintf("  Available: %s\n  New: `hasenbau new hase <name>`\n", strings.Join(vorhanden, ", "))
 }
 
 func existingHasen(root string) []string {
@@ -200,7 +200,7 @@ func existingHasen(root string) []string {
 func writeNew(root, rel, inhalt string, errw io.Writer) int {
 	abs := filepath.Join(root, rel)
 	if _, err := os.Stat(abs); err == nil {
-		fmt.Fprintf(errw, "hasenbau new: %s gibt es schon — anderer Name, oder die Datei selbst bearbeiten.\n", rel)
+		fmt.Fprintf(errw, "hasenbau new: %s already exists — pick another name, or edit the file itself.\n", rel)
 		return 1
 	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(errw, "hasenbau new: %s: %v\n", rel, err)
@@ -215,7 +215,7 @@ func writeNew(root, rel, inhalt string, errw io.Writer) int {
 	f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		if os.IsExist(err) {
-			fmt.Fprintf(errw, "hasenbau new: %s gibt es schon — anderer Name, oder die Datei selbst bearbeiten.\n", rel)
+			fmt.Fprintf(errw, "hasenbau new: %s already exists — pick another name, or edit the file itself.\n", rel)
 		} else {
 			fmt.Fprintf(errw, "hasenbau new: %s schreiben: %v\n", rel, err)
 		}

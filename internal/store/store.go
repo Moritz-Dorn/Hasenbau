@@ -165,7 +165,7 @@ func Open(path string) (*Store, error) {
 		"&_pragma=foreign_keys(ON)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("store: öffnen: %w", err)
+		return nil, fmt.Errorf("store: opening: %w", err)
 	}
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
@@ -183,7 +183,7 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("store: user_version lesen: %w", err)
 	}
 	if version > len(migrations) {
-		return fmt.Errorf("store: Datenbank ist neuer als der Code (user_version %d > %d)", version, len(migrations))
+		return fmt.Errorf("store: database is newer than the code (user_version %d > %d)", version, len(migrations))
 	}
 	for i := version; i < len(migrations); i++ {
 		tx, err := s.db.Begin()

@@ -20,16 +20,16 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/store"
 )
 
-const getUsage = `Aufruf: hasenbau get <ressource>
+const getUsage = `Usage: hasenbau get <resource>
 
-Ressourcen:
-  auftraege       die Aufträge des Baus
-  hasen           die Hasen-Templates
-  gaenge          die Gang-Skripte und wer sie benutzt
-  tools           die Schmied-Werkzeuge und wer sie rufen darf
-  laeufe [-n N]   die letzten Läufe
-  lauf <id>       ein Lauf (Details: hasenbau describe lauf <id>)
-  provider        Provider der Bau-Config: Endpoint, Modelle, Schlüssel
+Resources:
+  auftraege       the Aufträge of the Bau
+  hasen           the Hase templates
+  gaenge          the Gang scripts and who uses them
+  tools           the Schmied tools and who may call them
+  laeufe [-n N]   the most recent Läufe
+  lauf <id>       one Lauf (details: hasenbau describe lauf <id>)
+  provider        providers of the Bau config: endpoint, models, key
 `
 
 func cmdGet(root string, args []string, out, errw io.Writer) int {
@@ -53,7 +53,7 @@ func cmdGet(root string, args []string, out, errw io.Writer) int {
 	case "tools", "tool":
 		return getTools(root, args[1:], out, errw)
 	default:
-		fmt.Fprintf(errw, "hasenbau get: unbekannte Ressource %q\n\n%s", args[0], getUsage)
+		fmt.Fprintf(errw, "hasenbau get: unknown resource %q\n\n%s", args[0], getUsage)
 		return 2
 	}
 }
@@ -66,7 +66,7 @@ func getLaeufe(root string, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get laeufe [-n N]")
+		fmt.Fprintln(errw, "Usage: hasenbau get laeufe [-n N]")
 		return 2
 	}
 
@@ -83,7 +83,7 @@ func getLaeufe(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if len(laeufe) == 0 {
-		fmt.Fprintln(out, "keine Läufe")
+		fmt.Fprintln(out, "no Läufe")
 		return 0
 	}
 	writeLaufTable(out, laeufe)
@@ -92,7 +92,7 @@ func getLaeufe(root string, args []string, out, errw io.Writer) int {
 
 func getLauf(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get lauf <id>")
+		fmt.Fprintln(errw, "Usage: hasenbau get lauf <id>")
 		return 2
 	}
 	st, l, code := openLauf(root, args[0], errw)
@@ -111,7 +111,7 @@ func getLauf(root string, args []string, out, errw io.Writer) int {
 func openLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, int) {
 	id, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: ungültige Lauf-ID %q\n", arg)
+		fmt.Fprintf(errw, "hasenbau: invalid Lauf ID %q\n", arg)
 		return nil, nil, 2
 	}
 	st, err := store.Open(dbPath(root))
@@ -129,10 +129,14 @@ func openLauf(root, arg string, errw io.Writer) (*store.Store, *store.Lauf, int)
 
 func writeLaufTable(out io.Writer, laeufe []store.Lauf) {
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tGESTARTET\tDAUER\tKOSTEN\tSUMMARY")
+	fmt.Fprintln(w, "ID\tAUFTRAG\tTRIGGER\tSTATUS\tSTARTED\tDURATION\tCOST\tSUMMARY")
 	for _, l := range laeufe {
 		summary := l.Summary
-		if l.Status == "fehler" && l.Error != "" {
+		// "failed", nicht "fehler": die Zustandswerte sind Daten und
+		// stehen englisch in der DB (§1). Der deutsche Vergleich hier traf
+		// nie, und ein gescheiterter Lauf zeigte deshalb eine leere
+		// Summary statt seines Fehlertextes.
+		if l.Status == "failed" && l.Error != "" {
 			summary = l.Error
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
@@ -145,7 +149,7 @@ func writeLaufTable(out io.Writer, laeufe []store.Lauf) {
 
 func laufDuration(l store.Lauf) string {
 	if l.Ended == nil {
-		return "läuft"
+		return "running"
 	}
 	return l.Ended.Sub(l.Started).Round(time.Second).String()
 }
@@ -181,7 +185,7 @@ func truncate(s string, max int) string {
 // davon lassen sich überhaupt holen?
 func getProvider(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get provider")
+		fmt.Fprintln(errw, "Usage: hasenbau get provider")
 		return 2
 	}
 	conf, err := provider.LoadConfig(root)
@@ -191,8 +195,8 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 	}
 	eintraege := conf.List()
 	if len(eintraege) == 0 {
-		fmt.Fprintf(out, "keine Provider in %s\n", conf.Pfad)
-		fmt.Fprintln(out, "Das Gerüst (npm, options.baseURL) gehört handgepflegt in den provider:-Block (PLAN.md §3).")
+		fmt.Fprintf(out, "no providers in %s\n", conf.Pfad)
+		fmt.Fprintln(out, "The scaffold (npm, options.baseURL) is hand-maintained in the provider: block (PLAN.md §3).")
 		return 0
 	}
 
@@ -205,7 +209,7 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 	}
 
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tENDPOINT\tMODELLE\tAKTIV\tSCHLÜSSEL")
+	fmt.Fprintln(w, "ID\tENDPOINT\tMODELS\tACTIVE\tKEY")
 	var ohneEndpoint, ohneSchluessel bool
 	for _, e := range eintraege {
 		endpoint := e.BaseURL
@@ -222,28 +226,28 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 	w.Flush()
 
 	fmt.Fprintf(out, "\n%s\n", conf.Pfad)
-	fmt.Fprintln(out, "Holen lässt sich, was Endpoint und Schlüssel hat: hasenbau provider fetch <id>")
+	fmt.Fprintln(out, "Anything with an endpoint and a key can be fetched: hasenbau provider fetch <id>")
 	if ohneEndpoint {
-		fmt.Fprintln(out, "Ohne Endpoint: eingebauter Provider (seine Modelle kennt opencode aus models.dev)")
-		fmt.Fprintln(out, "oder das Gerüst im provider:-Block ist unvollständig.")
+		fmt.Fprintln(out, "Without an endpoint: a built-in provider (opencode knows its models from models.dev)")
+		fmt.Fprintln(out, "or the scaffold in the provider: block is incomplete.")
 	}
 	if ohneSchluessel {
-		fmt.Fprintf(out, "Ohne Schlüssel: in %s anmelden (`opencode auth login`) — die Datei teilen\n", provider.AuthPath())
-		fmt.Fprintln(out, "sich Bau und Alltags-opencode (PLAN.md §3).")
+		fmt.Fprintf(out, "Without a key: log in via %s (`opencode auth login`) — the file is shared\n", provider.AuthPath())
+		fmt.Fprintln(out, "between the Bau and your everyday opencode (PLAN.md §3).")
 	}
 	return 0
 }
 
 func yesNo(b bool) string {
 	if b {
-		return "ja"
+		return "yes"
 	}
-	return "nein"
+	return "no"
 }
 
 func getAuftraege(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get auftraege")
+		fmt.Fprintln(errw, "Usage: hasenbau get auftraege")
 		return 2
 	}
 	auftraege, err := loadDefinitions(root)
@@ -252,7 +256,7 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if len(auftraege) == 0 {
-		fmt.Fprintln(out, "keine Aufträge unter auftraege/")
+		fmt.Fprintln(out, "no Aufträge under auftraege/")
 		return 0
 	}
 
@@ -273,7 +277,7 @@ func getAuftraege(root string, args []string, out, errw io.Writer) int {
 	}
 
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTRIGGER\tHASE\tGÄNGE\tRÄUME\tLETZTER LAUF\tFEHLERSERIE")
+	fmt.Fprintln(w, "NAME\tTRIGGER\tHASE\tGÄNGE\tRÄUME\tLAST LAUF\tFAILURE STREAK")
 	for _, a := range auftraege {
 		s := stand[a.Name]
 		letzter := "—"
@@ -305,7 +309,7 @@ func triggerShort(a *auftrag.Auftrag) string {
 
 func getHasen(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get hasen")
+		fmt.Fprintln(errw, "Usage: hasenbau get hasen")
 		return 2
 	}
 	namen, err := hasenNames(root)
@@ -314,7 +318,7 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if len(namen) == 0 {
-		fmt.Fprintln(out, "keine Hasen unter hasen/")
+		fmt.Fprintln(out, "no Hasen under hasen/")
 		return 0
 	}
 	// Ohne die Aufträge fehlt die Spalte, die den Hasen erst einordnet —
@@ -323,16 +327,16 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 	auftraege, ladefehler := loadDefinitions(root)
 
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tMODELL\tTEMPERATUR\tDENIES\tBENUTZT VON")
+	fmt.Fprintln(w, "NAME\tMODEL\tTEMPERATURE\tDENIES\tUSED BY")
 	for _, name := range namen {
 		t, err := hase.Lade(root, name)
 		if err != nil {
-			fmt.Fprintf(w, "%s\tKAPUTT: %s\t\t\t\n", name, oneLine(err.Error()))
+			fmt.Fprintf(w, "%s\tBROKEN: %s\t\t\t\n", name, oneLine(err.Error()))
 			continue
 		}
 		modell := t.Model
 		if modell == "" {
-			modell = "— (opencode-Default)"
+			modell = "— (opencode default)"
 		}
 		temp := "—"
 		if t.Temperature != nil {
@@ -350,14 +354,14 @@ func getHasen(root string, args []string, out, errw io.Writer) int {
 	}
 	w.Flush()
 	if ladefehler != nil {
-		fmt.Fprintf(out, "\nSpalte BENUTZT VON unvollständig: %v\n", ladefehler)
+		fmt.Fprintf(out, "\ncolumn USED BY incomplete: %v\n", ladefehler)
 	}
 	return 0
 }
 
 func getGaenge(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get gaenge")
+		fmt.Fprintln(errw, "Usage: hasenbau get gaenge")
 		return 2
 	}
 	auftraege, ladefehler := loadDefinitions(root)
@@ -367,12 +371,12 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if len(gaenge) == 0 {
-		fmt.Fprintln(out, "keine Gänge unter gaenge/")
+		fmt.Fprintln(out, "no Gänge under gaenge/")
 		return 0
 	}
 
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "DATEI\tGRÖSSE\tBENUTZT VON")
+	fmt.Fprintln(w, "FILE\tSIZE\tUSED BY")
 	for _, g := range gaenge {
 		var von []string
 		for _, b := range g.Uses {
@@ -382,18 +386,18 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 		groesse := fmt.Sprintf("%d B", g.Size)
 		switch {
 		case len(g.Uses) == 0 && g.Draft:
-			benutzt = "—  (Draft, nicht eingetragen)"
+			benutzt = "—  (draft, not registered)"
 		case len(g.Uses) == 0:
 			benutzt = "—"
 		}
 		if g.Size == 0 && len(g.Uses) > 0 && !exists(root, g.Path) {
-			groesse = "FEHLT"
+			groesse = "MISSING"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\n", g.Path, groesse, benutzt)
 	}
 	w.Flush()
 	if ladefehler != nil {
-		fmt.Fprintf(out, "\nSpalte BENUTZT VON unvollständig: %v\n", ladefehler)
+		fmt.Fprintf(out, "\ncolumn USED BY incomplete: %v\n", ladefehler)
 	}
 	return 0
 }
@@ -407,12 +411,12 @@ func getGaenge(root string, args []string, out, errw io.Writer) int {
 func getTools(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("get tools", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	entwuerfe := fs.Bool("entwuerfe", false, "die Review-Queue statt der freigegebenen Werkzeuge")
+	entwuerfe := fs.Bool("entwuerfe", false, "the review queue instead of the released tools")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau get tools [-entwuerfe]")
+		fmt.Fprintln(errw, "Usage: hasenbau get tools [-entwuerfe]")
 		return 2
 	}
 	werkzeuge, err := bau.LadeTools(root)
@@ -440,7 +444,7 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 
 	var offen int
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tZUSTAND\tARGUMENTE\tFREIGEGEBEN FÜR")
+	fmt.Fprintln(w, "NAME\tSTATE\tARGUMENTS\tRELEASED FOR")
 	for _, t := range werkzeuge {
 		if t.Entwurf {
 			offen++
@@ -454,16 +458,16 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 			// man den Fehler im Modell.
 			frei = "—  (" + t.Zustand.Erklaerung() + ")"
 		case frei == "":
-			frei = "—  (kein Auftrag nennt es)"
+			frei = "—  (no Auftrag names it)"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", t.Name, t.Zustand, argSpalte(t), frei)
 	}
 	w.Flush()
 	if ladefehler != nil {
-		fmt.Fprintf(out, "\nSpalte FREIGEGEBEN FÜR unvollständig: %v\n", ladefehler)
+		fmt.Fprintf(out, "\ncolumn RELEASED FOR incomplete: %v\n", ladefehler)
 	}
 	if offen > 0 {
-		fmt.Fprintf(out, "\n%d Entwurf/Entwürfe warten auf Review: hasenbau get tools -entwuerfe\n", offen)
+		fmt.Fprintf(out, "\n%d draft(s) waiting for review: hasenbau get tools -entwuerfe\n", offen)
 	}
 	return 0
 }
@@ -473,7 +477,7 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
 	var zeilen int
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tZUSTAND\tZEILEN\tGELESEN VON")
+	fmt.Fprintln(w, "NAME\tSTATE\tLINES\tREAD BY")
 	for _, t := range werkzeuge {
 		if !t.Entwurf {
 			continue
@@ -489,10 +493,10 @@ func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
 	}
 	w.Flush()
 	if zeilen == 0 {
-		fmt.Fprintln(out, "Nichts wartet auf Review.")
+		fmt.Fprintln(out, "Nothing is waiting for review.")
 		return 0
 	}
-	fmt.Fprintln(out, "\nEin Entwurf ist Code, den ein Modell geschrieben und niemand gelesen hat.")
+	fmt.Fprintln(out, "\nA draft is code a model wrote and nobody read.")
 	fmt.Fprintln(out, "  hasenbau tool review --next")
 	return 0
 }

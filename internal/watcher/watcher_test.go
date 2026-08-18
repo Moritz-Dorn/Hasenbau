@@ -297,7 +297,7 @@ func TestWartenWirdEinmalGemeldet(t *testing.T) {
 			return nil
 		},
 		func(format string, args ...any) {
-			if strings.Contains(fmt.Sprintf(format, args...), "wartet") {
+			if strings.Contains(fmt.Sprintf(format, args...), "waiting") {
 				mu.Lock()
 				wartezeilen++
 				mu.Unlock()

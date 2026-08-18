@@ -54,7 +54,7 @@ func orphaned(pid sql.NullInt64, pidStarted sql.NullTime) bool {
 func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("store: verwaiste Läufe aufräumen: %w", err)
+		return nil, fmt.Errorf("store: cleaning up orphaned Läufe: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -63,7 +63,7 @@ func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 		       pid, pid_started
 		FROM laeufe WHERE status = 'running' ORDER BY id`)
 	if err != nil {
-		return nil, fmt.Errorf("store: verwaiste Läufe suchen: %w", err)
+		return nil, fmt.Errorf("store: looking for orphaned Läufe: %w", err)
 	}
 	var leichen []Lauf
 	for rows.Next() {
@@ -80,15 +80,15 @@ func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 		}
 		l.Status = "aborted"
 		if pid.Valid {
-			l.Error = fmt.Sprintf("Prozess %d ist gestorben, ohne den Lauf zu beenden — beim Start aufgeräumt", pid.Int64)
+			l.Error = fmt.Sprintf("process %d died without ending the Lauf — cleaned up at startup", pid.Int64)
 		} else {
-			l.Error = "Lauf ohne Wirt in der Zeile (älteres Binary) — beim Start aufgeräumt"
+			l.Error = "Lauf without a host in the row (older binary) — cleaned up at startup"
 		}
 		leichen = append(leichen, l)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: verwaiste Läufe suchen: %w", err)
+		return nil, fmt.Errorf("store: looking for orphaned Läufe: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -99,7 +99,7 @@ func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 			`UPDATE laeufe SET ended = ?, status = 'aborted', error = ?
 			 WHERE id = ? AND status = 'running'`,
 			now, l.Error, l.ID); err != nil {
-			return nil, fmt.Errorf("store: Lauf %d aufräumen: %w", l.ID, err)
+			return nil, fmt.Errorf("store: cleaning up Lauf %d: %w", l.ID, err)
 		}
 		// Wie bei jedem nicht-ok-Ende (EndLauf): der Lauf ist
 		// gescheitert, die Serie zählt hoch.
@@ -111,7 +111,7 @@ func (s *Store) CleanupLaeufe() ([]Lauf, error) {
 		leichen[i].Ended = &now
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("store: verwaiste Läufe aufräumen: %w", err)
+		return nil, fmt.Errorf("store: cleaning up orphaned Läufe: %w", err)
 	}
 	return leichen, nil
 }

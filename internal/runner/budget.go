@@ -110,7 +110,7 @@ func (b *Budget) Start(ctx context.Context, trigger string, anlegen func() (int6
 		// Einmal melden, nicht bei jedem Versuch — dieselbe Regel wie im
 		// Watcher (Hasenbau-do0.1).
 		if !gemeldet && b.Logf != nil {
-			b.Logf("bau-deckel: %s erreicht (%d Läufe im Fenster) — %s wartet %s",
+			b.Logf("Bau cap: %s reached (%d Läufe in the window) — %s waits %s",
 				b.Rate, len(starts), trigger, auftrag.FormatDuration(warten.Round(time.Second)))
 			gemeldet = true
 		}

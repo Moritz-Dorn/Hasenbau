@@ -32,41 +32,41 @@ import (
 	"github.com/Moritz-Dorn/Hasenbau/internal/watcher"
 )
 
-const usage = `hasenbau — Daemon, der opencode headless orchestriert.
+const usage = `hasenbau — a daemon that orchestrates opencode headless.
 
-Befehle:
-  init <pfad>           leeren Bau anlegen (nicht-destruktiv, idempotent)
-  fix                   fehlende Teile des Baus ergänzen — dasselbe für
-                        einen Bau, den es schon gibt
-  daemon                Daemon starten (Trigger + opencode-Server)
-  lauf <auftrag> [in]   Auftrag manuell triggern; [in] ist die
-                        auslösende Datei (Bau-relativ, nur watch)
-  get <ressource>       zeigen, was der Bau kennt (auftraege, hasen,
+Commands:
+  init <path>           create an empty Bau (non-destructive, idempotent)
+  fix                   add the missing parts of a Bau — the same thing
+                        for a Bau that already exists
+  daemon                start the daemon (triggers + opencode server)
+  lauf <auftrag> [in]   trigger an Auftrag by hand; [in] is the
+                        triggering file (Bau-relative, watch only)
+  get <resource>        show what the Bau knows (auftraege, hasen,
                         gaenge, laeufe, lauf, provider)
-  describe <res> <name> ein Objekt im Detail (auftrag, gang, hase, lauf)
-  new <res> <name>      Gerüst anlegen (auftrag, hase)
-  dig [-json] <ziel>    Material für den Baumeister: der Trace eines
-                        Laufs, oder <auftrag>#<n> für einen Befund
-  findings <auftrag>    was sich über die Läufe rechnen lässt: Gang-
-                        Kandidaten, Reibung, Ausreißer (kein Modell)
-  baumeister [-finding N] <ziel>
-                        Baumeister-Auftrag (aus hasenbau.yaml) ansetzen —
-                        auf einen Lauf (Lauf-ID oder Auftrag) oder mit
-                        -finding auf einen Befund über viele Läufe
-  tool <verb> <name>    ein Schmied-Werkzeug durch seine drei Stufen
-                        führen: review (lesen und verantworten), test
-                        (ausführen und zeigen), release (freigeben).
-                        Jede Stufe setzt die vorige voraus
-  provider fetch <id>   Modell-Liste beim Provider-Endpoint holen
-  status                Zustand des Baus zeigen
-  mcp                   Rückkanal über stdio bedienen (startet opencode
-                        selbst; nicht von Hand aufrufen)
-  sandbox-vorfall       meldet einen Werkzeug-Aufruf, der aus der Sandbox
-                        führt (ruft der Wächter im opencode-Server auf;
-                        nicht von Hand aufrufen)
+  describe <res> <name> one object in detail (auftrag, gang, hase, lauf)
+  new <res> <name>      create a scaffold (auftrag, hase)
+  dig [-json] <target>  material for the Baumeister: the trace of a
+                        Lauf, or <auftrag>#<n> for a finding
+  findings <auftrag>    what can be computed over the Läufe: Gang
+                        candidates, friction, outliers (no model)
+  baumeister [-finding N] <target>
+                        put the Baumeister (from hasenbau.yaml) to work —
+                        on one Lauf (Lauf ID or Auftrag), or with
+                        -finding on a finding across many Läufe
+  tool <verb> <name>    take a Schmied tool through its three stages:
+                        review (read it and take responsibility), test
+                        (run it and show the output), release (release
+                        it). Each stage requires the previous one
+  provider fetch <id>   fetch the model list from the provider endpoint
+  status                show the state of the Bau
+  mcp                   serve the back channel over stdio (opencode
+                        starts this itself; do not call by hand)
+  sandbox-vorfall       report a tool call that leads out of the sandbox
+                        (called by the guard in the opencode server;
+                        do not call by hand)
 
-Globale Flags (vor dem Befehl):
-  -bau <pfad>      Root des Baus (Default: .)
+Global flags (before the command):
+  -bau <path>      root of the Bau (default: .)
 `
 
 func main() {
@@ -83,7 +83,7 @@ func run(args []string, out, errw io.Writer) int {
 func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("hasenbau", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	bauFlag := fs.String("bau", ".", "Root des Baus")
+	bauFlag := fs.String("bau", ".", "root of the Bau")
 	fs.Usage = func() { fmt.Fprint(errw, usage) }
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -95,20 +95,20 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 	}
 	bau, err := filepath.Abs(*bauFlag)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: Bau-Path: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau: Bau path: %v\n", err)
 		return 1
 	}
 
 	switch rest[0] {
 	case "init":
 		if len(rest) != 2 {
-			fmt.Fprintln(errw, "Aufruf: hasenbau init <pfad>")
+			fmt.Fprintln(errw, "Usage: hasenbau init <path>")
 			return 2
 		}
 		return cmdInit(rest[1], out, errw)
 	case "fix":
 		if len(rest) != 1 {
-			fmt.Fprintln(errw, "Aufruf: hasenbau [-bau <pfad>] fix")
+			fmt.Fprintln(errw, "Usage: hasenbau [-bau <path>] fix")
 			return 2
 		}
 		return cmdFix(bau, out, errw)
@@ -116,7 +116,7 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 		return cmdDaemon(bau, errw)
 	case "lauf":
 		if len(rest) != 2 && len(rest) != 3 {
-			fmt.Fprintln(errw, "Aufruf: hasenbau lauf <auftrag> [input]")
+			fmt.Fprintln(errw, "Usage: hasenbau lauf <auftrag> [input]")
 			return 2
 		}
 		input := ""
@@ -129,7 +129,7 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 	case "laeufe":
 		// Harter Schnitt zugunsten des get-Schemas (Hasenbau-ha0). Der
 		// alte Name bleibt nur als Wegweiser stehen.
-		fmt.Fprintln(errw, "hasenbau laeufe heißt jetzt `hasenbau get laeufe`")
+		fmt.Fprintln(errw, "hasenbau laeufe is now `hasenbau get laeufe`")
 		return 2
 	case "dig":
 		return cmdDig(bau, rest[1:], out, errw)
@@ -152,7 +152,7 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 	case "sandbox-vorfall":
 		return cmdSandboxVorfall(bau, rest[1:], out, errw)
 	default:
-		fmt.Fprintf(errw, "hasenbau: unbekannter Befehl %q\n\n%s", rest[0], usage)
+		fmt.Fprintf(errw, "hasenbau: unknown command %q\n\n%s", rest[0], usage)
 		return 2
 	}
 }
@@ -168,12 +168,12 @@ func runMitEingabe(in io.Reader, args []string, out, errw io.Writer) int {
 // meldet — beide gehen über dieselbe Tabelle (internal/bau).
 func cmdFix(pfad string, out, errw io.Writer) int {
 	if _, err := os.Stat(filepath.Join(pfad, "hasenbau.yaml")); err != nil {
-		fmt.Fprintf(errw, "hasenbau fix: %s ist kein Bau (hasenbau.yaml fehlt) — einen neuen legt `hasenbau init %s` an.\n", pfad, pfad)
+		fmt.Fprintf(errw, "hasenbau fix: %s is not a Bau (hasenbau.yaml missing) — `hasenbau init %s` creates a new one.\n", pfad, pfad)
 		return 1
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: eigenen Pfad bestimmen: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau: determining own path: %v\n", err)
 		return 1
 	}
 	// Vor Init nachsehen, denn Init ersetzt das Bau-Plugin still: es ist
@@ -185,7 +185,7 @@ func cmdFix(pfad string, out, errw io.Writer) int {
 
 	ergaenzt, err := bau.Init(pfad, exe)
 	for _, c := range ergaenzt {
-		fmt.Fprintf(out, "ergänzt: %s\n", c)
+		fmt.Fprintf(out, "added: %s\n", c)
 	}
 	if err != nil {
 		fmt.Fprintln(errw, err)
@@ -193,15 +193,15 @@ func cmdFix(pfad string, out, errw io.Writer) int {
 	}
 	ersetzt := pluginErr == nil && !pluginWarAktuell
 	if ersetzt {
-		fmt.Fprintf(out, "ersetzt: %s (war nicht die Fassung dieses Binaries)\n", bau.PluginDatei)
+		fmt.Fprintf(out, "replaced: %s (was not the version of this binary)\n", bau.PluginDatei)
 	}
 	if _, err := loadAndGenerate(pfad); err != nil {
-		fmt.Fprintf(errw, "hasenbau fix: Agenten nicht generiert: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau fix: agents not generated: %v\n", err)
 	}
 	if len(ergaenzt) == 0 && !ersetzt {
-		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
+		fmt.Fprintln(out, "Bau is complete, nothing to do")
 	} else {
-		fmt.Fprintln(out, "Was davon inhaltlich stimmt, sagt `hasenbau describe bau`.")
+		fmt.Fprintln(out, "Whether the contents are right is what `hasenbau describe bau` tells you.")
 	}
 	return 0
 }
@@ -213,17 +213,17 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	// `-bau testbau` relativ zum Bau selbst.
 	pfad, err := filepath.Abs(pfad)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: Bau-Pfad: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau: Bau path: %v\n", err)
 		return 1
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau: eigenen Pfad bestimmen: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau: determining own path: %v\n", err)
 		return 1
 	}
 	created, err := bau.Init(pfad, exe)
 	for _, c := range created {
-		fmt.Fprintf(out, "angelegt: %s\n", c)
+		fmt.Fprintf(out, "created: %s\n", c)
 	}
 	if err != nil {
 		fmt.Fprintln(errw, err)
@@ -236,14 +236,14 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 	// angelegt, und der nächste Daemon- oder Lauf-Start generiert
 	// ohnehin neu.
 	if _, err := loadAndGenerate(pfad); err != nil {
-		fmt.Fprintf(errw, "hasenbau init: Agenten noch nicht generiert: %v\n", err)
+		fmt.Fprintf(errw, "hasenbau init: agents not generated yet: %v\n", err)
 	}
 	if len(created) == 0 {
-		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
+		fmt.Fprintln(out, "Bau is complete, nothing to do")
 	} else {
-		fmt.Fprintf(out, "Rückkanal eingetragen: %s (wird bei jedem Start auf das laufende Binary korrigiert).\n", exe)
-		fmt.Fprintln(out, "Hinweis: custom Provider brauchen ihr Gerüst (npm, options.baseURL) im provider:-Block von .opencode-home/opencode/opencode.json — auth.json teilt nur Credentials (PLAN.md §3).")
-		fmt.Fprintln(out, "Die Modell-Liste holt danach `hasenbau provider fetch <provider-id>`.")
+		fmt.Fprintf(out, "Back channel registered: %s (corrected to the running binary on every start).\n", exe)
+		fmt.Fprintln(out, "Note: custom providers need their scaffold (npm, options.baseURL) in the provider: block of .opencode-home/opencode/opencode.json — auth.json only shares credentials (PLAN.md §3).")
+		fmt.Fprintln(out, "The model list is then fetched by `hasenbau provider fetch <provider-id>`.")
 	}
 	return 0
 }
@@ -259,7 +259,7 @@ func cmdInit(pfad string, out, errw io.Writer) int {
 func bauBudget(root string, st *store.Store, logf func(string, ...any)) *runner.Budget {
 	conf, err := bau.LoadConfig(root)
 	if err != nil {
-		logf("bau-deckel: %v — es gilt keiner", err)
+		logf("Bau cap: %v — none in effect", err)
 		return &runner.Budget{}
 	}
 	return budgetAus(conf, st, logf)
@@ -322,7 +322,7 @@ func cmdMCP(root string, errw io.Writer) int {
 func ensureBackchannel(root string, logf func(string, ...any)) error {
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("hasenbau: eigenen Pfad bestimmen: %w", err)
+		return fmt.Errorf("hasenbau: determining own path: %w", err)
 	}
 	update, err := bau.EnsureMCP(root, exe)
 	switch {
@@ -332,10 +332,10 @@ func ensureBackchannel(root string, logf func(string, ...any)) error {
 		// Sichtbar machen: der Eintrag zeigte auf ein anderes Binary,
 		// und genau das hat schon einmal still den Rückkanal gekostet
 		// (Hasenbau-2nq).
-		logf("Rückkanal in %s zeigte auf %s — korrigiert auf %s",
+		logf("back channel in %s pointed at %s — corrected to %s",
 			bau.OpencodeConfig, update.Previous, exe)
 	case update.Written:
-		logf("Rückkanal in %s eingetragen (%s)", bau.OpencodeConfig, exe)
+		logf("back channel registered in %s (%s)", bau.OpencodeConfig, exe)
 	}
 	return nil
 }
@@ -357,20 +357,20 @@ func verifyBackchannel(ctx context.Context, baseURL string) error {
 
 	status, err := opencode.MCPStatus(ctx, opencode.New(baseURL))
 	if err != nil {
-		return fmt.Errorf("Rückkanal: Zustand nicht abfragbar: %w", err)
+		return fmt.Errorf("back channel: state not queryable: %w", err)
 	}
 	s, da := status[bau.MCPEintrag]
 	switch {
 	case !da:
-		return fmt.Errorf("Rückkanal: opencode kennt keinen MCP-Server %q — fehlt der Eintrag in %s?",
+		return fmt.Errorf("back channel: opencode knows no MCP server %q — is the entry in %s missing?",
 			bau.MCPEintrag, bau.OpencodeConfig)
 	case s.Status == opencode.MCPConnected:
 		return nil
 	case s.Error != "":
-		return fmt.Errorf("Rückkanal %q: %s — %s (Eintrag in %s)",
+		return fmt.Errorf("back channel %q: %s — %s (entry in %s)",
 			bau.MCPEintrag, s.Status, s.Error, bau.OpencodeConfig)
 	default:
-		return fmt.Errorf("Rückkanal %q: %s (Eintrag in %s)",
+		return fmt.Errorf("back channel %q: %s (entry in %s)",
 			bau.MCPEintrag, s.Status, bau.OpencodeConfig)
 	}
 }
@@ -385,7 +385,7 @@ func cleanupLaeufe(st *store.Store, logf func(string, ...any)) error {
 		return err
 	}
 	for _, l := range leichen {
-		logf("Lauf %d (%s, %s, seit %s) aufgeräumt: %s",
+		logf("Lauf %d (%s, %s, since %s) cleaned up: %s",
 			l.ID, l.Auftrag, l.Trigger,
 			l.Started.Local().Format("2006-01-02 15:04"), l.Error)
 	}
@@ -402,11 +402,11 @@ func cleanupLaeufe(st *store.Store, logf func(string, ...any)) error {
 func backfillToolCalls(st *store.Store, logf func(string, ...any)) {
 	n, err := st.BackfillToolCalls(runner.ToolCallsFromTrace)
 	if err != nil {
-		logf("Tool-Calls nachziehen: %v", err)
+		logf("backfilling tool calls: %v", err)
 		return
 	}
 	if n > 0 {
-		logf("Tool-Calls von %d Lauf/Läufen nachgezogen", n)
+		logf("backfilled tool calls of %d Läufe", n)
 	}
 }
 
@@ -426,11 +426,11 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	// niemandem etwas weg (Moritz, 2026-08-13). Der Hash bleibt dabei
 	// unangetastet — sonst wäre die fremde Änderung gesegnet.
 	if nachgezogen, err := bau.AktualisiereValIntent(root); err != nil {
-		log.Printf("valintent nicht nachgezogen: %v", err)
+		log.Printf("valintent not updated: %v", err)
 	} else if len(nachgezogen) > 0 {
 		// Nur melden, wenn wirklich etwas nachgezogen wurde — das ist
 		// der seltene Fall, und dann will man ihn sehen.
-		log.Printf("valintent nachgezogen: %s", strings.Join(nachgezogen, ", "))
+		log.Printf("valintent updated: %s", strings.Join(nachgezogen, ", "))
 	}
 	o, err := generierOptionen(root)
 	if err != nil {
@@ -465,8 +465,8 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 		// Laut sagen, was verschwunden ist: die Datei ist generiert, aber
 		// wer sie angefasst hatte, soll erfahren, warum seine Änderung weg
 		// ist — und wo sie hingehört.
-		log.Printf("%s war nicht die Fassung dieses Binaries und wurde ersetzt "+
-			"(die Datei ist generiert; eigene Hooks gehören in ein eigenes Plugin daneben)", bau.PluginDatei)
+		log.Printf("%s was not the version of this binary and has been replaced "+
+			"(the file is generated; own hooks belong in a plugin of your own next to it)", bau.PluginDatei)
 	}
 	return auftraege, nil
 }
@@ -513,7 +513,7 @@ func waitForServer(ctx context.Context, sup *supervisor.Supervisor, timeout time
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("hasenbau daemon: opencode-Server kam nicht hoch")
+	return fmt.Errorf("hasenbau daemon: opencode server did not come up")
 }
 
 func cmdDaemon(root string, errw io.Writer) int {
@@ -607,7 +607,7 @@ func cmdDaemon(root string, errw io.Writer) int {
 	w.Stop()
 	sched.Stop()
 	if ctx.Err() != nil {
-		logger.Print("hasenbau daemon: sauber beendet")
+		logger.Print("hasenbau daemon: shut down cleanly")
 		return 0
 	}
 	logger.Printf("hasenbau daemon: %v", err)
@@ -625,13 +625,13 @@ func cmdDaemon(root string, errw io.Writer) int {
 func cmdDig(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("dig", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	alsJSON := fs.Bool("json", false, "Trace als JSON statt Markdown")
-	live := fs.Bool("live", false, "Trace beim Server holen statt aus der Bau-DB")
+	alsJSON := fs.Bool("json", false, "trace as JSON instead of Markdown")
+	live := fs.Bool("live", false, "fetch the trace from the server instead of the Bau DB")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau dig [-json] [-live] <lauf-id|auftrag#n>")
+		fmt.Fprintln(errw, "Usage: hasenbau dig [-json] [-live] <lauf-id|auftrag#n>")
 		return 2
 	}
 
@@ -652,7 +652,7 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 	}
 	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
 	if err != nil {
-		fmt.Fprintf(errw, "hasenbau dig: %q ist weder eine Lauf-ID noch ein Befund (<auftrag>#<n>)\n", fs.Arg(0))
+		fmt.Fprintf(errw, "hasenbau dig: %q is neither a Lauf ID nor a finding (<auftrag>#<n>)\n", fs.Arg(0))
 		return 2
 	}
 
@@ -662,7 +662,7 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if l.SessionID == "" {
-		fmt.Fprintf(errw, "hasenbau dig: Lauf %d (%s, %s) hat keine Session — der Lauf scheiterte vor dem Hasen (Gänge? Prompt?).\n",
+		fmt.Fprintf(errw, "hasenbau dig: Lauf %d (%s, %s) has no session — the Lauf failed before the Hase (Gänge? prompt?).\n",
 			l.ID, l.Auftrag, l.Status)
 		return 1
 	}
@@ -681,7 +681,7 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintf(out, "# Trace Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
+	fmt.Fprintf(out, "# Trace of Lauf %d — Auftrag %s (%s, %s)\n\n", l.ID, l.Auftrag, l.Trigger, l.Status)
 	// Notizen aus dem Rückkanal zuerst: was der Hase selbst für
 	// erwähnenswert hielt, ordnet den Trace darunter ein.
 	notizen, err := st.Notes(l.ID)
@@ -690,7 +690,7 @@ func cmdDig(root string, args []string, out, errw io.Writer) int {
 		return 1
 	}
 	if len(notizen) > 0 {
-		fmt.Fprint(out, "## Notizen des Hasen\n\n")
+		fmt.Fprint(out, "## Notes from the Hase\n\n")
 		for _, n := range notizen {
 			fmt.Fprintf(out, "- %s — %s\n", n.Written.Local().Format("15:04:05"), n.Text)
 		}
@@ -713,7 +713,7 @@ func fetchTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *
 		if da {
 			var t opencode.Trace
 			if err := json.Unmarshal(roh, &t); err != nil {
-				return nil, fmt.Errorf("hasenbau dig: abgelegter Trace von Lauf %d ist unlesbar: %w", l.ID, err)
+				return nil, fmt.Errorf("hasenbau dig: stored trace of Lauf %d is unreadable: %w", l.ID, err)
 			}
 			return &t, nil
 		}
@@ -737,7 +737,7 @@ func fetchTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *
 	if !live {
 		if roh, err := json.Marshal(trace); err == nil {
 			if err := st.WriteTrace(l.ID, l.SessionID, roh); err != nil {
-				logger.Printf("Trace von Lauf %d nicht nachgetragen: %v", l.ID, err)
+				logger.Printf("trace of Lauf %d not backfilled: %v", l.ID, err)
 			}
 		}
 	}
@@ -749,17 +749,17 @@ func fetchTrace(root string, st *store.Store, l *store.Lauf, live bool, logger *
 // von selbst, sonst wäre die Isolation still unterlaufen.
 func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) int {
 	if len(args) == 0 || args[0] != "fetch" {
-		fmt.Fprintln(errw, "Aufruf: hasenbau provider fetch [-yes] <provider-id>")
+		fmt.Fprintln(errw, "Usage: hasenbau provider fetch [-yes] <provider-id>")
 		return 2
 	}
 	fs := flag.NewFlagSet("provider fetch", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	ja := fs.Bool("yes", false, "ohne Rückfrage schreiben")
+	ja := fs.Bool("yes", false, "write without asking")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau provider fetch [-yes] <provider-id>")
+		fmt.Fprintln(errw, "Usage: hasenbau provider fetch [-yes] <provider-id>")
 		return 2
 	}
 	id := fs.Arg(0)
@@ -788,21 +788,21 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		return 1
 	}
 
-	fmt.Fprintf(out, "%s: %d Modelle von %s\n\n", id, len(modelle), baseURL)
+	fmt.Fprintf(out, "%s: %d models from %s\n\n", id, len(modelle), baseURL)
 	ae := conf.Merge(id, modelle)
 	if ae.Empty() {
-		fmt.Fprintln(out, "Bau-Config ist auf Stand, nichts zu tun")
+		fmt.Fprintln(out, "Bau config is up to date, nothing to do")
 		return 0
 	}
 	fmt.Fprint(out, ae.Report())
 
 	if !*ja {
-		fmt.Fprintf(out, "\n%s schreiben? [j/N] ", conf.Pfad)
+		fmt.Fprintf(out, "\nWrite %s? [y/N] ", conf.Pfad)
 		antwort, _ := bufio.NewReader(in).ReadString('\n')
 		switch strings.ToLower(strings.TrimSpace(antwort)) {
 		case "j", "ja", "y", "yes":
 		default:
-			fmt.Fprintln(out, "abgebrochen, nichts geschrieben")
+			fmt.Fprintln(out, "aborted, nothing written")
 			return 0
 		}
 	}
@@ -810,7 +810,7 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	fmt.Fprintf(out, "geschrieben: %s\n", conf.Pfad)
+	fmt.Fprintf(out, "written: %s\n", conf.Pfad)
 	return 0
 }
 
@@ -860,10 +860,10 @@ func cmdStatus(root string, out, errw io.Writer) int {
 			}
 		}
 		entwuerfe, _ := filepath.Glob(filepath.Join(root, "gaenge", "entwurf", "*"))
-		fmt.Fprintf(out, "Kennt: %d Aufträge, %d Hasen, %d Gänge",
+		fmt.Fprintf(out, "Knows: %d Aufträge, %d Hasen, %d Gänge",
 			len(auftraege), len(hasen), gaenge)
 		if len(entwuerfe) > 0 {
-			fmt.Fprintf(out, ", %d Entwürfe (ungeprüft, nicht aktiv)", len(entwuerfe))
+			fmt.Fprintf(out, ", %d drafts (unreviewed, not active)", len(entwuerfe))
 		}
 		fmt.Fprintln(out)
 	}
@@ -872,7 +872,7 @@ func cmdStatus(root string, out, errw io.Writer) int {
 	for _, n := range counts {
 		total += n
 	}
-	fmt.Fprintf(out, "Läufe: %d gesamt", total)
+	fmt.Fprintf(out, "Läufe: %d total", total)
 	for _, s := range []string{"running", "ok", "failed", "aborted"} {
 		if counts[s] > 0 {
 			fmt.Fprintf(out, ", %d %s", counts[s], s)
@@ -881,11 +881,11 @@ func cmdStatus(root string, out, errw io.Writer) int {
 	fmt.Fprintln(out)
 
 	if len(states) == 0 {
-		fmt.Fprintln(out, "Aufträge: noch keine gelaufen")
+		fmt.Fprintln(out, "Aufträge: none have run yet")
 		return 0
 	}
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "AUFTRAG\tLETZTER LAUF\tLETZTER OK\tFEHLERSERIE")
+	fmt.Fprintln(w, "AUFTRAG\tLAST LAUF\tLAST OK\tFAILURE STREAK")
 	fmtTime := func(t *time.Time) string {
 		if t == nil {
 			return "-"
@@ -920,9 +920,9 @@ func cmdStatus(root string, out, errw io.Writer) int {
 	// Die jüngsten Läufe gehören dazu: „was ist passiert" heißt selten
 	// „wie viele", meistens „welche".
 	if laeufe, err := st.RecentLaeufe(5); err == nil && len(laeufe) > 0 {
-		fmt.Fprint(out, "\nDie letzten Läufe\n")
+		fmt.Fprint(out, "\nThe most recent Läufe\n")
 		writeLaufTable(out, laeufe)
 	}
-	fmt.Fprintln(out, "\nIst der Bau in Ordnung? `hasenbau describe bau`")
+	fmt.Fprintln(out, "\nIs the Bau in order? `hasenbau describe bau`")
 	return 0
 }

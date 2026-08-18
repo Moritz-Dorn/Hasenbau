@@ -262,7 +262,7 @@ func TestBaseURLFehlerpfade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conf.BaseURL("anthropic"); err == nil || !strings.Contains(err.Error(), "Gerüst") {
+	if _, err := conf.BaseURL("anthropic"); err == nil || !strings.Contains(err.Error(), "scaffold") {
 		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 

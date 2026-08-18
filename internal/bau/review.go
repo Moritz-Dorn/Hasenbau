@@ -62,15 +62,15 @@ const (
 func (z Zustand) Erklaerung() string {
 	switch z {
 	case Actual:
-		return "gelesen, gelaufen, und ein Mensch hat die Ausgabe für richtig befunden"
+		return "read, run, and a human found the output to be right"
 	case Hypothetical:
-		return "gelesen, aber noch nicht als richtig bestätigt"
+		return "read, but not yet confirmed as right"
 	case Invalid:
-		return "der Probelauf ist gescheitert"
+		return "the trial run failed"
 	case Outdated:
-		return "seit dem Review geändert — Review gilt nicht mehr"
+		return "changed since the review — the review no longer holds"
 	default:
-		return "vom Schmied geschrieben, ungelesen"
+		return "written by the Schmied, unread"
 	}
 }
 
@@ -304,7 +304,7 @@ func parseReviewBlock(block []string) Review {
 		}
 	}
 	if len(fehlend) > 0 {
-		r.Fehler = "unvollständig, es fehlt: " + strings.Join(fehlend, ", ")
+		r.Fehler = "incomplete, missing: " + strings.Join(fehlend, ", ")
 	}
 	_ = reihenfolge
 	return r

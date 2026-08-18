@@ -85,14 +85,14 @@ func TestLadeConfigFehler(t *testing.T) {
 		erwarte string
 	}{
 		{"unbekanntes Feld", "farbe: braun\n", "erlaubt: log_level, baumeister, sandbox, requests, throttle"},
-		{"throttle.max ohne per", "throttle:\n  max: 20\n", "max ohne per"},
-		{"throttle.per ohne max", "throttle:\n  per: 1h\n", "per ohne max"},
-		{"throttle leer", "throttle: {}\n", "throttle ist leer"},
-		{"throttle.max negativ", "throttle:\n  max: -1\n  per: 1h\n", "muss > 0 sein"},
+		{"throttle.max without per", "throttle:\n  max: 20\n", "max without per"},
+		{"throttle.per without max", "throttle:\n  per: 1h\n", "per without max"},
+		{"throttle leer", "throttle: {}\n", "throttle is empty"},
+		{"throttle.max negativ", "throttle:\n  max: -1\n  per: 1h\n", "has to be > 0"},
 		{"throttle.per keine Dauer", "throttle:\n  max: 5\n  per: bald\n", "keine Dauer"},
 		{"throttle.per null", "throttle:\n  max: 5\n  per: 0s\n", "kein Fenster"},
 		{"log_level ungültig", "log_level: laut\n", "erlaubt: debug, info, warn, error"},
-		{"baumeister mit Pfad", "baumeister: ../fremd\n", "kein gültiger Auftrags-Name"},
+		{"baumeister mit Pfad", "baumeister: ../fremd\n", "is not a valid Auftrag name"},
 		{"kaputtes YAML", "log_level: [\n", ConfigFile},
 	}
 	for _, f := range faelle {

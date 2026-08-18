@@ -13,22 +13,22 @@ import (
 // nächste Satz, den jemand sagen will.
 func (r Report) Markdown() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Befunde zu %s\n\n", r.Auftrag)
+	fmt.Fprintf(&b, "# Findings for %s\n\n", r.Auftrag)
 	if r.Laeufe == 0 {
-		fmt.Fprintf(&b, "Keine ausgewerteten Läufe. Ein Lauf zählt erst, wenn seine\n"+
-			"Werkzeuge aufgezeichnet sind — bei Altläufen holt `hasenbau dig <id>`\n"+
-			"den Trace nach, danach zieht der nächste Start die Aufrufe mit.\n")
+		fmt.Fprintf(&b, "No evaluated Läufe. A Lauf only counts once its tools are\n"+
+			"recorded — for older Läufe `hasenbau dig <id>` fetches the trace,\n"+
+			"and the next start pulls the calls along.\n")
 		return b.String()
 	}
 	if r.Laeufe == 1 {
-		b.WriteString("Grundlage: ein einziger ausgewerteter Lauf — daraus ist nicht\n" +
-			"entscheidbar, was Parameter und was Konstante war (PLAN.md §8).\n\n")
+		b.WriteString("Based on a single evaluated Lauf — that cannot decide what was a\n" +
+			"parameter and what was a constant (PLAN.md §8).\n\n")
 	} else {
-		fmt.Fprintf(&b, "Grundlage: %d ausgewertete Läufe.\n\n", r.Laeufe)
+		fmt.Fprintf(&b, "Based on %d evaluated Läufe.\n\n", r.Laeufe)
 	}
 	if len(r.Findings) == 0 {
-		fmt.Fprintf(&b, "Nichts gefunden. Das ist ein Ergebnis: kein wiederkehrendes\n"+
-			"Muster, keine Reibung, keine Ausreißer.\n")
+		fmt.Fprintf(&b, "Nothing found. That is a result too: no recurring pattern,\n"+
+			"no friction, no outliers.\n")
 		return b.String()
 	}
 
@@ -36,9 +36,9 @@ func (r Report) Markdown() string {
 		b.WriteString(f.Markdown(i + 1))
 		b.WriteString("\n")
 	}
-	b.WriteString("Nichts davon ist beschlossen. Wer einen Befund ausarbeiten lassen\n" +
-		"will, setzt den Baumeister auf einen der genannten Läufe an; er\n" +
-		"schreibt einen Entwurf, eingetragen wird er von Hand (PLAN.md §8/§10).\n")
+	b.WriteString("None of this is decided. To have a finding worked out, point the\n" +
+		"Baumeister at one of the Läufe listed; it writes a draft, and a\n" +
+		"human enters it (PLAN.md §8/§10).\n")
 	return b.String()
 }
 

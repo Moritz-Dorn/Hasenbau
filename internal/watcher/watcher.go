@@ -201,7 +201,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 			anzulegen = a.WatchWurzel()
 		}
 		if err := os.MkdirAll(filepath.Join(w.root, anzulegen), 0o755); err != nil {
-			return fmt.Errorf("watcher: %s anlegen: %w", anzulegen, err)
+			return fmt.Errorf("watcher: creating %s: %w", anzulegen, err)
 		}
 		if err := w.beobachte(a, anzulegen); err != nil {
 			return err
@@ -253,7 +253,7 @@ func (w *Watcher) arbeite(ctx context.Context, arb *arbeiter) {
 			err := w.verarbeite(ctx, arb.a, rel)
 			arb.fertig()
 			if err != nil && ctx.Err() == nil {
-				w.logf("watcher: auftrag %s, input %s: %v", arb.a.Name, rel, err)
+				w.logf("watcher: Auftrag %s, input %s: %v", arb.a.Name, rel, err)
 			}
 			if ctx.Err() != nil {
 				return
@@ -285,7 +285,7 @@ func (w *Watcher) beobachte(a *auftrag.Auftrag, dir string) error {
 	abs := filepath.Join(w.root, dir)
 	if !a.WatchRekursiv() {
 		if err := w.fsw.Add(abs); err != nil {
-			return fmt.Errorf("watcher: %s beobachten: %w", dir, err)
+			return fmt.Errorf("watcher: watching %s: %w", dir, err)
 		}
 		return nil
 	}
@@ -294,14 +294,14 @@ func (w *Watcher) beobachte(a *auftrag.Auftrag, dir string) error {
 	// aufgeräumt hat. Gemeldet, nicht abgebrochen.
 	return filepath.WalkDir(abs, func(pfad string, d fs.DirEntry, err error) error {
 		if err != nil {
-			w.logf("watcher: %s nicht gelesen: %v", pfad, err)
+			w.logf("watcher: %s not read: %v", pfad, err)
 			return nil
 		}
 		if !d.IsDir() {
 			return nil
 		}
 		if err := w.fsw.Add(pfad); err != nil {
-			w.logf("watcher: %s nicht beobachtet: %v", pfad, err)
+			w.logf("watcher: %s not watched: %v", pfad, err)
 		}
 		return nil
 	})
@@ -318,7 +318,7 @@ func (w *Watcher) beobachte(a *auftrag.Auftrag, dir string) error {
 func (w *Watcher) holeNach(a *auftrag.Auftrag, dir string) error {
 	treffer, err := a.WatchTreffer(w.root, dir)
 	if err != nil {
-		return fmt.Errorf("watcher: %s durchsehen: %w", dir, err)
+		return fmt.Errorf("watcher: scanning %s: %w", dir, err)
 	}
 	for _, rel := range treffer {
 		w.arbeiter[a.Name].melde(rel)
@@ -382,7 +382,7 @@ func (w *Watcher) neuesVerzeichnis(rel string) {
 			w.logf("watcher: %v", err)
 		}
 		if err := w.holeNach(a, rel); err != nil {
-			w.logf("watcher: %s nachlesen: %v", rel, err)
+			w.logf("watcher: rescanning %s: %v", rel, err)
 		}
 	}
 }
@@ -419,7 +419,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 		return err
 	}
 	if schon {
-		w.logf("watcher: auftrag %s, input %s: schon verarbeitet (gesehen-Backstop) — übersprungen", a.Name, rel)
+		w.logf("watcher: Auftrag %s, input %s: already processed (already-seen backstop) — skipped", a.Name, rel)
 		return nil
 	}
 
@@ -442,7 +442,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 	for {
 		if !w.lock.Acquire(a.Name) {
 			if !gemeldet {
-				w.logf("watcher: auftrag %s läuft noch — input %s wartet", a.Name, rel)
+				w.logf("watcher: Auftrag %s still running — input %s waiting", a.Name, rel)
 				gemeldet = true
 			}
 			select {
@@ -463,7 +463,7 @@ func (w *Watcher) verarbeite(ctx context.Context, a *auftrag.Auftrag, rel string
 		}
 		w.lock.Release(a.Name)
 		if !gemeldet {
-			w.logf("watcher: auftrag %s gedrosselt (%s) — input %s wartet %s",
+			w.logf("watcher: Auftrag %s throttled (%s) — input %s waits %s",
 				a.Name, a.Throttle, rel, warten.Round(time.Second))
 			gemeldet = true
 		}

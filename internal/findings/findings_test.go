@@ -35,7 +35,7 @@ func TestGangKandidatTrenntParameterVonKonstante(t *testing.T) {
 		t.Fatalf("kein Gang-Kandidat: %+v", r.Findings)
 	}
 	f := r.Findings[0]
-	if !strings.Contains(f.Title, "in 3 von 3") {
+	if !strings.Contains(f.Title, "in 3 of 3") {
 		t.Errorf("Titel = %q", f.Title)
 	}
 	if len(f.Laeufe) != 3 {
@@ -87,7 +87,7 @@ func TestGangKandidatBevorzugtHaeufigkeit(t *testing.T) {
 		t.Fatalf("kein Gang-Kandidat: %+v", f)
 	}
 	// read→write kommt in allen acht vor, glob→read→write→edit in drei.
-	if !strings.Contains(f.Title, "in 8 von 8") {
+	if !strings.Contains(f.Title, "in 8 of 8") {
 		t.Errorf("Titel = %q — erwartet das Muster aus allen Läufen", f.Title)
 	}
 }
@@ -111,7 +111,7 @@ func TestPermissionReibungGruppiert(t *testing.T) {
 	if f == nil {
 		t.Fatalf("keine Permission-Reibung: %+v", r.Findings)
 	}
-	if !strings.Contains(f.Title, "3x in 3 Läufen") {
+	if !strings.Contains(f.Title, "3x in 3 Läufe") {
 		t.Errorf("Titel = %q", f.Title)
 	}
 	if !strings.Contains(f.Detail, "permission denied") {
@@ -149,7 +149,7 @@ func TestKostenUndDauerNenntAusreisser(t *testing.T) {
 	if f == nil {
 		t.Fatal("kein Kosten-Befund")
 	}
-	if !strings.Contains(f.Title, "Median 1m0s") || !strings.Contains(f.Title, "30m0s") {
+	if !strings.Contains(f.Title, "median 1m0s") || !strings.Contains(f.Title, "30m0s") {
 		t.Errorf("Titel = %q", f.Title)
 	}
 	if !strings.Contains(f.Detail, "10 ct") {
@@ -174,27 +174,27 @@ func TestMarkdownNummeriertUndBelegt(t *testing.T) {
 	md := Analyze("pdf-einlagern", history, nil).Markdown()
 
 	for _, muss := range []string{
-		"# Befunde zu pdf-einlagern", "Grundlage: 3 ausgewertete Läufe",
+		"# Findings for pdf-einlagern", "Based on 3 evaluated Läufe",
 		"## 1. ", "Läufe: 3, 2, 1", "VARIIERT", "konstant",
 	} {
 		if !strings.Contains(md, muss) {
 			t.Errorf("Markdown ohne %q:\n%s", muss, md)
 		}
 	}
-	if !strings.Contains(md, "eingetragen wird er von Hand") {
+	if !strings.Contains(md, "human enters it (PLAN.md") {
 		t.Errorf("die Garantie aus §8/§10 fehlt:\n%s", md)
 	}
 }
 
 func TestMarkdownOhneMaterial(t *testing.T) {
 	md := Analyze("a", nil, nil).Markdown()
-	if !strings.Contains(md, "Keine ausgewerteten Läufe") || !strings.Contains(md, "hasenbau dig") {
+	if !strings.Contains(md, "No evaluated Läufe") || !strings.Contains(md, "hasenbau dig") {
 		t.Errorf("ohne Material soll der Weg dahin stehen:\n%s", md)
 	}
 
 	// Ein einziger Lauf: die Grenze aus §8 gehört dazugesagt.
 	md = Analyze("a", []store.LaufTools{lauf(1, "read", "{}")}, nil).Markdown()
-	if !strings.Contains(md, "ein einziger") {
+	if !strings.Contains(md, "a single evaluated Lauf") {
 		t.Errorf("bei einem Lauf fehlt der Vorbehalt:\n%s", md)
 	}
 }

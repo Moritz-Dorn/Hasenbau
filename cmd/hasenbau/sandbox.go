@@ -42,8 +42,8 @@ func cmdSandboxVorfall(root string, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("sandbox-vorfall", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	tool := fs.String("tool", "", "Name des gerufenen Werkzeugs")
-	session := fs.String("session", "", "opencode-Session des Aufrufs")
-	argsJSON := fs.String("args", "", "Argumente des Aufrufs (JSON)")
+	session := fs.String("session", "", "opencode session of the call")
+	argsJSON := fs.String("args", "", "arguments of the call (JSON)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -98,7 +98,7 @@ func verbucheVorfall(root, tool, session, argsJSON string, abweisen bool, errw i
 	case errors.Is(err, store.ErrAmbiguous):
 		// Mehrere Läufe: nicht raten, wem der Aufruf gehört (dieselbe
 		// Haltung wie im Rückkanal). Verloren geht die Meldung nicht.
-		fmt.Fprintf(errw, "hasenbau: Sandbox-Vorfall nicht zuzuordnen (%v) — %s\n", err, text)
+		fmt.Fprintf(errw, "hasenbau: sandbox incident cannot be attributed (%v) — %s\n", err, text)
 		return nil
 	case err != nil:
 		return err
@@ -128,5 +128,5 @@ func gekuerzt(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	return s[:max] + "… (gekürzt)"
+	return s[:max] + "… (truncated)"
 }

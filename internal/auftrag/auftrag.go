@@ -254,7 +254,7 @@ func (t Throttle) String() string {
 	if t.Max == 1 {
 		teile = append(teile, "1 Lauf je "+FormatDuration(t.Per))
 	} else if t.Max > 1 {
-		teile = append(teile, fmt.Sprintf("%d Läufe je %s", t.Max, FormatDuration(t.Per)))
+		teile = append(teile, fmt.Sprintf("%d Läufe per %s", t.Max, FormatDuration(t.Per)))
 	}
 	if t.Between != nil {
 		teile = append(teile, "nur "+t.Between.String())
@@ -359,7 +359,7 @@ func (w Window) Laenge() time.Duration {
 func parseWindow(s string) (*Window, error) {
 	von, bis, ok := strings.Cut(s, "-")
 	if !ok {
-		return nil, fmt.Errorf("braucht die Form \"HH:MM-HH:MM\", bekam %q", s)
+		return nil, fmt.Errorf("needs the form \"HH:MM-HH:MM\", got %q", s)
 	}
 	a, err := parseUhrzeit(strings.TrimSpace(von))
 	if err != nil {
@@ -372,7 +372,7 @@ func parseWindow(s string) (*Window, error) {
 	// Gleicher Anfang und gleiches Ende ist nicht zu entscheiden: leeres
 	// Fenster oder ganzer Tag? Lieber ablehnen als raten.
 	if a == b {
-		return nil, fmt.Errorf("Anfang und Ende sind gleich (%q) — leeres Fenster oder ganzer Tag? Feld weglassen für jederzeit", s)
+		return nil, fmt.Errorf("start and end are the same (%q) — empty window or whole day? Leave the field out for any time", s)
 	}
 	return &Window{From: a, To: b}, nil
 }
@@ -380,7 +380,7 @@ func parseWindow(s string) (*Window, error) {
 func parseUhrzeit(s string) (int, error) {
 	t, err := time.Parse("15:04", s)
 	if err != nil {
-		return 0, fmt.Errorf("ungültige Uhrzeit %q, erwartet HH:MM", s)
+		return 0, fmt.Errorf("invalid time %q, expected HH:MM", s)
 	}
 	return t.Hour()*60 + t.Minute(), nil
 }
@@ -417,7 +417,7 @@ var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 // prüft, bevor es eine Datei anlegt.
 func ValidName(name string) error {
 	if !namePattern.MatchString(name) {
-		return fmt.Errorf("ungültiger Name %q (erlaubt: Buchstaben, Ziffern, . _ -)", name)
+		return fmt.Errorf("invalid name %q (allowed: letters, digits, . _ -)", name)
 	}
 	return nil
 }
@@ -428,11 +428,11 @@ type duration time.Duration
 func (d *duration) UnmarshalYAML(node *yaml.Node) error {
 	var s string
 	if err := node.Decode(&s); err != nil {
-		return fmt.Errorf("dauer erwartet einen String wie \"5s\", Zeile %d", node.Line)
+		return fmt.Errorf("duration expects a string like \"5s\", line %d", node.Line)
 	}
 	v, err := time.ParseDuration(s)
 	if err != nil {
-		return fmt.Errorf("ungültige Dauer %q, Zeile %d", s, node.Line)
+		return fmt.Errorf("invalid duration %q, line %d", s, node.Line)
 	}
 	if v < 0 {
 		return fmt.Errorf("negative Dauer %q, Zeile %d", s, node.Line)
@@ -514,14 +514,14 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 			return nil, fehler("tools: %v", err)
 		}
 		if gesehenesTool[w] {
-			return nil, fehler("tools: %q steht zweimal", w)
+			return nil, fehler("tools: %q listed twice", w)
 		}
 		gesehenesTool[w] = true
 	}
 
 	// Trigger: genau eines von watch, cron oder manuell.
 	if fm.Trigger == nil {
-		return nil, fehler("trigger fehlt (watch, cron oder manuell)")
+		return nil, fehler("trigger missing (watch, cron or manual)")
 	}
 	a.Trigger = Trigger{
 		Watch:    fm.Trigger.Watch,
@@ -537,19 +537,19 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	}
 	switch {
 	case gesetzt == 0:
-		return nil, fehler("trigger braucht genau eines von watch, cron oder manuell")
+		return nil, fehler("trigger needs exactly one of watch, cron or manual")
 	case gesetzt > 1:
-		return nil, fehler("trigger: watch, cron und manuell schließen sich aus")
+		return nil, fehler("trigger: watch, cron and manual are mutually exclusive")
 	case a.Trigger.Manual:
 		if a.Trigger.Debounce != 0 {
-			return nil, fehler("debounce gilt nur für watch-Trigger")
+			return nil, fehler("debounce only applies to watch triggers")
 		}
 	case a.Trigger.Cron != "":
 		if _, err := cron.ParseStandard(a.Trigger.Cron); err != nil {
-			return nil, fehler("ungültiger cron-Ausdruck %q: %v", a.Trigger.Cron, err)
+			return nil, fehler("invalid cron expression %q: %v", a.Trigger.Cron, err)
 		}
 		if a.Trigger.Debounce != 0 {
-			return nil, fehler("debounce gilt nur für watch-Trigger")
+			return nil, fehler("debounce only applies to watch triggers")
 		}
 	default:
 		if err := pruefeWatchMuster(a.Trigger.Watch); err != nil {
@@ -560,7 +560,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		// stiller Rückfall auf den Bau-Root hieße, den ganzen Bau zu
 		// beobachten.
 		if a.Raeume[RolleInput] == "" {
-			return nil, fehler("watch-Trigger ohne Raum %q — der Eingang steht unter raeume: input:, watch: trägt nur das Muster", RolleInput)
+			return nil, fehler("watch trigger without Raum %q — the input lives under raeume: input:, watch: carries only the pattern", RolleInput)
 		}
 		if err := BauRelative(a.WatchGlob()); err != nil {
 			return nil, fehler("trigger.watch: %v", err)
@@ -569,7 +569,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 
 	// Hase: Pflicht; der Name landet im generierten Agent-Dateinamen.
 	if a.Hase == "" {
-		return nil, fehler("hase fehlt")
+		return nil, fehler("hase missing")
 	}
 	if err := ValidName(a.Hase); err != nil {
 		return nil, fehler("hase: %v", err)
@@ -579,7 +579,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	// — deshalb ein Fehler statt eines stillen Rückfalls auf die Vorgabe.
 	if fm.HaseTimeout != nil {
 		if *fm.HaseTimeout == 0 {
-			return nil, fehler("hase_timeout: 0 ist kein Zeitlimit — Feld weglassen für die Vorgabe des Runners")
+			return nil, fehler("hase_timeout: 0 is not a time limit — leave the field out for the runner default")
 		}
 		a.HaseTimeout = time.Duration(*fm.HaseTimeout)
 	}
@@ -592,15 +592,15 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 		t := fm.Throttle
 		switch {
 		case t.Max < 0:
-			return nil, fehler("throttle: max muss > 0 sein (throttle: weglassen für ungedrosselt)")
+			return nil, fehler("throttle: max has to be > 0 (leave throttle: out for unthrottled)")
 		case t.Max > 0 && t.Per == nil:
-			return nil, fehler("throttle: max ohne per — höchstens %d Läufe je … was?", t.Max)
+			return nil, fehler("throttle: max without per — at most %d Läufe per … what?", t.Max)
 		case t.Max == 0 && t.Per != nil:
-			return nil, fehler("throttle: per ohne max — das Fenster deckelt nichts")
+			return nil, fehler("throttle: per without max — the window caps nothing")
 		case t.Max > 0 && *t.Per == 0:
-			return nil, fehler("throttle: per: 0 ist kein Fenster — Feld weglassen für ungedrosselt")
+			return nil, fehler("throttle: per: 0 is not a window — leave the field out for unthrottled")
 		case t.Max == 0 && t.Between == "":
-			return nil, fehler("throttle: leer — Feld weglassen für ungedrosselt")
+			return nil, fehler("throttle: empty — leave the field out for unthrottled")
 		}
 		a.Throttle = Throttle{Max: t.Max}
 		if t.Per != nil {
@@ -620,12 +620,12 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	// Permissions dorthin (§4, §11.5). Deshalb ist cwd: kein stilles
 	// No-op, sondern ein Ladefehler.
 	if fm.CWD != "" {
-		return nil, fehler("cwd wird nicht unterstützt — Sessions ankern immer am Bau-Root (PLAN.md §4)")
+		return nil, fehler("cwd is not supported — sessions always anchor at the Bau root (PLAN.md §4)")
 	}
 
 	for rolle, pfad := range a.Raeume {
 		if rolle == "" || pfad == "" {
-			return nil, fehler("raeume: Rolle und Pfad dürfen nicht leer sein")
+			return nil, fehler("raeume: role and path must not be empty")
 		}
 		if err := BauRelative(pfad); err != nil {
 			return nil, fehler("raum %s: %v", rolle, err)
@@ -635,10 +635,10 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	gesehen := map[string]bool{}
 	for i, g := range fm.Gaenge {
 		if g.Name == "" {
-			return nil, fehler("gang %d: name fehlt", i+1)
+			return nil, fehler("Gang %d: name missing", i+1)
 		}
 		if g.Run == "" {
-			return nil, fehler("gang %q: run fehlt", g.Name)
+			return nil, fehler("Gang %q: run missing", g.Name)
 		}
 		if gesehen[g.Name] {
 			return nil, fehler("gang %q: Name doppelt", g.Name)
@@ -650,11 +650,11 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	for i, k := range fm.Context {
 		switch {
 		case k.File != "" && k.LastSummaries != nil:
-			return nil, fehler("kontext %d: file und last_summaries schließen sich aus", i+1)
+			return nil, fehler("context %d: file and last_summaries are mutually exclusive", i+1)
 		case k.File == "" && k.LastSummaries == nil:
-			return nil, fehler("kontext %d: braucht file oder last_summaries", i+1)
+			return nil, fehler("context %d: needs file or last_summaries", i+1)
 		case k.LastSummaries != nil && *k.LastSummaries <= 0:
-			return nil, fehler("kontext %d: letzte_summaries muss > 0 sein", i+1)
+			return nil, fehler("context %d: last_summaries has to be > 0", i+1)
 		case k.LastSummaries != nil:
 			a.Context = append(a.Context, Context{LastSummaries: *k.LastSummaries})
 		default:
@@ -683,7 +683,7 @@ func Parse(name string, src []byte) (*Auftrag, error) {
 	}
 
 	if a.Body == "" {
-		return nil, fehler("body fehlt — der Markdown-Teil ist der Prompt-Kern")
+		return nil, fehler("body missing — the Markdown part is the prompt core")
 	}
 	return a, nil
 }
@@ -750,17 +750,17 @@ func pruefeAusloeserVariablen(kind, text string) error {
 		switch name {
 		case VarInput:
 			if gebunden == "" {
-				return fmt.Errorf("$INPUT gibt es nicht mehr, und ein %s-Auftrag hat keinen Auslöser — der Bezug muss aus einem Raum kommen ($RAUM_<rolle>)", kind)
+				return fmt.Errorf("$INPUT no longer exists, and a %s Auftrag has no trigger file — the reference has to come from a Raum ($RAUM_<role>)", kind)
 			}
-			return fmt.Errorf("$INPUT heißt jetzt $%s (%s-Trigger)", gebunden, kind)
+			return fmt.Errorf("$INPUT is now called $%s (%s trigger)", gebunden, kind)
 		case VarTriggerFile, VarTriggerArg:
 			if name == gebunden {
 				continue
 			}
 			if gebunden == "" {
-				return fmt.Errorf("$%s ist bei einem %s-Auftrag nicht gebunden — cron hat keinen Auslöser", name, kind)
+				return fmt.Errorf("$%s is not bound for a %s Auftrag — cron has no trigger file", name, kind)
 			}
-			return fmt.Errorf("$%s ist bei einem %s-Auftrag nicht gebunden, hier gilt $%s", name, kind, gebunden)
+			return fmt.Errorf("$%s is not bound for a %s Auftrag, use $%s here", name, kind, gebunden)
 		}
 	}
 	return nil
@@ -788,7 +788,7 @@ func Load(root string) ([]*Auftrag, error) {
 		}
 		vorlage := filepath.Join(root, "hasen", a.Hase+".md")
 		if _, err := os.Stat(vorlage); err != nil {
-			return nil, fmt.Errorf("auftrag %s: unbekannter Hase %q — kein Template hasen/%s.md", name, a.Hase, a.Hase)
+			return nil, fmt.Errorf("Auftrag %s: unknown Hase %q — no template hasen/%s.md", name, a.Hase, a.Hase)
 		}
 		auftraege = append(auftraege, a)
 	}
@@ -799,7 +799,7 @@ func Load(root string) ([]*Auftrag, error) {
 // Pfade dürfen Variablen enthalten; substituiert wird erst im Runner.
 func parseAfter(schritt map[string]string) (After, error) {
 	if len(schritt) != 1 {
-		return After{}, fmt.Errorf("genau eine Aktion pro Schritt (move, copy oder delete)")
+		return After{}, fmt.Errorf("exactly one action per step (move, copy or delete)")
 	}
 	for aktion, wert := range schritt {
 		switch aktion {
@@ -807,12 +807,12 @@ func parseAfter(schritt map[string]string) (After, error) {
 			von, nach, ok := strings.Cut(wert, "->")
 			von, nach = strings.TrimSpace(von), strings.TrimSpace(nach)
 			if !ok || von == "" || nach == "" {
-				return After{}, fmt.Errorf("%s braucht die Form \"VON -> NACH\", bekam %q", aktion, wert)
+				return After{}, fmt.Errorf("%s needs the form \"FROM -> TO\", got %q", aktion, wert)
 			}
 			return After{Action: aktion, From: von, To: nach}, nil
 		case "delete":
 			if strings.TrimSpace(wert) == "" {
-				return After{}, fmt.Errorf("delete braucht einen Pfad")
+				return After{}, fmt.Errorf("delete needs a path")
 			}
 			return After{Action: aktion, From: strings.TrimSpace(wert)}, nil
 		default:
@@ -848,18 +848,18 @@ const globMeta = `*?[{`
 // unter dem input-Raum rekursiv, und die Sperre fällt.
 func pruefeWatchMuster(muster string) error {
 	if filepath.IsAbs(muster) {
-		return fmt.Errorf("muster %q muss relativ zum input-Raum sein, nicht absolut", muster)
+		return fmt.Errorf("pattern %q has to be relative to the input Raum, not absolute", muster)
 	}
 	if strings.HasPrefix(muster, "raeume/") {
-		return fmt.Errorf("muster %q sieht aus wie ein Bau-relativer Pfad — watch: trägt nur noch das Muster, der Eingang steht unter raeume: input:", muster)
+		return fmt.Errorf("pattern %q looks like a Bau-relative path — watch: carries only the pattern now, the input lives under raeume: input:", muster)
 	}
 	for _, teil := range strings.Split(filepath.ToSlash(muster), "/") {
 		if teil == ".." {
-			return fmt.Errorf("muster %q darf den input-Raum nicht verlassen (..)", muster)
+			return fmt.Errorf("pattern %q must not leave the input Raum (..)", muster)
 		}
 	}
 	if !doublestar.ValidatePattern(filepath.ToSlash(muster)) {
-		return fmt.Errorf("muster %q ist kein gültiges Glob-Muster", muster)
+		return fmt.Errorf("pattern %q is not a valid glob pattern", muster)
 	}
 	return nil
 }
@@ -868,11 +868,11 @@ func pruefeWatchMuster(muster string) error {
 // Aufträgen bleiben im Bau — relativ, ohne Ausbruch nach oben.
 func BauRelative(p string) error {
 	if filepath.IsAbs(p) {
-		return fmt.Errorf("pfad %q muss Bau-relativ sein, nicht absolut", p)
+		return fmt.Errorf("path %q has to be Bau-relative, not absolute", p)
 	}
 	for _, teil := range strings.Split(filepath.ToSlash(p), "/") {
 		if teil == ".." {
-			return fmt.Errorf("pfad %q darf den Bau nicht verlassen (..)", p)
+			return fmt.Errorf("path %q must not leave the Bau (..)", p)
 		}
 	}
 	return nil

@@ -124,7 +124,7 @@ func LoadConfig(root string) (*Config, error) {
 	}
 	if d.Baumeister != nil {
 		if !namePattern.MatchString(*d.Baumeister) {
-			return nil, fmt.Errorf("bau: %s: baumeister %q ist kein gültiger Auftrags-Name (erlaubt: Buchstaben, Ziffern, . _ -)", ConfigFile, *d.Baumeister)
+			return nil, fmt.Errorf("bau: %s: baumeister %q is not a valid Auftrag name (allowed: letters, digits, . _ -)", ConfigFile, *d.Baumeister)
 		}
 		c.Baumeister = *d.Baumeister
 	}
@@ -148,13 +148,13 @@ func LoadConfig(root string) (*Config, error) {
 		t := d.Throttle
 		switch {
 		case t.Max < 0:
-			return nil, fmt.Errorf("bau: %s: throttle.max muss > 0 sein (throttle: weglassen für ungedrosselt)", ConfigFile)
+			return nil, fmt.Errorf("bau: %s: throttle.max has to be > 0 (leave throttle: out for unthrottled)", ConfigFile)
 		case t.Max > 0 && t.Per == nil:
-			return nil, fmt.Errorf("bau: %s: throttle.max ohne per — höchstens %d Läufe je … was?", ConfigFile, t.Max)
+			return nil, fmt.Errorf("bau: %s: throttle.max without per — at most %d Läufe per … what?", ConfigFile, t.Max)
 		case t.Max == 0 && t.Per != nil:
-			return nil, fmt.Errorf("bau: %s: throttle.per ohne max — das Fenster deckelt nichts", ConfigFile)
+			return nil, fmt.Errorf("bau: %s: throttle.per without max — the window caps nothing", ConfigFile)
 		case t.Max == 0 && t.Per == nil:
-			return nil, fmt.Errorf("bau: %s: throttle ist leer — Feld weglassen für ungedrosselt", ConfigFile)
+			return nil, fmt.Errorf("bau: %s: throttle is empty — leave the field out for unthrottled", ConfigFile)
 		}
 		per, err := time.ParseDuration(*t.Per)
 		if err != nil {

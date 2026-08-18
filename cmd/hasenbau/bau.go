@@ -23,7 +23,7 @@ import (
 
 func describeBau(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "Aufruf: hasenbau describe bau")
+		fmt.Fprintln(errw, "Usage: hasenbau describe bau")
 		return 2
 	}
 
@@ -40,7 +40,7 @@ func describeBau(root string, args []string, out, errw io.Writer) int {
 	for _, c := range checks {
 		zeichen := "ok  "
 		if !c.OK {
-			zeichen = "PRÜFEN"
+			zeichen = "CHECK"
 			offen++
 		}
 		w.field(zeichen, "%-14s %s", c.Name, c.Detail)
@@ -52,11 +52,11 @@ func describeBau(root string, args []string, out, errw io.Writer) int {
 
 	fmt.Fprintln(out)
 	if offen == 0 {
-		fmt.Fprintln(out, "Nichts zu tun.")
+		fmt.Fprintln(out, "Nothing to do.")
 		return 0
 	}
-	fmt.Fprintf(out, "%d Punkt(e) zum Nachsehen. Was hier steht, merkt man sonst erst\n"+
-		"an einem Lauf, der komisch aussieht.\n", offen)
+	fmt.Fprintf(out, "%d point(s) to look into. What is listed here is otherwise only noticed\n"+
+		"in a Lauf that looks odd.\n", offen)
 	// Kein Exit-Code ≠ 0: die Diagnose ist eine Auskunft, kein Test.
 	// Ein Bau ohne Baumeister-Eintrag ist nicht kaputt, er kann nur
 	// eines nicht.
@@ -70,11 +70,11 @@ func checkAgenten(root string) bau.Check {
 	auftraege, err := auftrag.Load(root)
 	if err != nil {
 		return bau.Check{Name: "Definitionen", Detail: kurzeZeile(err.Error()),
-			Hint: "solange die nicht laden, geht kein Lauf und kein `get`"}
+			Hint: "while these do not load, no Lauf and no `get` works"}
 	}
 	if len(auftraege) == 0 {
-		return bau.Check{Name: "Agenten", OK: true, Detail: "keine Aufträge",
-			Hint: "`hasenbau new auftrag <name> -hase <hase>` legt einen an"}
+		return bau.Check{Name: "Agents", OK: true, Detail: "no Aufträge",
+			Hint: "`hasenbau new auftrag <name> -hase <hase>` creates one"}
 	}
 	var fehlt []string
 	for _, a := range auftraege {
@@ -85,10 +85,10 @@ func checkAgenten(root string) bau.Check {
 	}
 	if len(fehlt) > 0 {
 		sort.Strings(fehlt)
-		return bau.Check{Name: "Agenten", Detail: "nicht generiert: " + strings.Join(fehlt, ", "),
-			Hint: "der nächste Daemon- oder Lauf-Start schreibt sie"}
+		return bau.Check{Name: "Agents", Detail: "not generated: " + strings.Join(fehlt, ", "),
+			Hint: "the next daemon or Lauf start writes them"}
 	}
-	return bau.Check{Name: "Agenten", OK: true, Detail: fmt.Sprintf("%d generiert", len(auftraege))}
+	return bau.Check{Name: "Agents", OK: true, Detail: fmt.Sprintf("%d generated", len(auftraege))}
 }
 
 // laufendeLaeufe sammelt die IDs der Läufe, die gerade arbeiten. Ihre
@@ -129,7 +129,7 @@ func laufIDAusWork(name string) string {
 func checkWorkReste(root string, laufend map[string]bool) bau.Check {
 	auftraege, err := auftrag.Load(root)
 	if err != nil {
-		return bau.Check{Name: "$WORK-Reste", OK: true, Detail: "nicht prüfbar (Definitionen laden nicht)"}
+		return bau.Check{Name: "$WORK leftovers", OK: true, Detail: "not checkable (definitions do not load)"}
 	}
 	raeume := map[string]bool{}
 	for _, a := range auftraege {
@@ -150,7 +150,7 @@ func checkWorkReste(root string, laufend map[string]bool) bau.Check {
 		}
 	}
 	if len(reste) == 0 {
-		return bau.Check{Name: "$WORK-Reste", OK: true, Detail: "keine"}
+		return bau.Check{Name: "$WORK leftovers", OK: true, Detail: "none"}
 	}
 	sort.Strings(reste)
 	zeige := reste
@@ -161,8 +161,8 @@ func checkWorkReste(root string, laufend map[string]bool) bau.Check {
 	if len(zeige) < len(reste) {
 		detail += ", …"
 	}
-	return bau.Check{Name: "$WORK-Reste", Detail: detail,
-		Hint: "Nachlass gescheiterter Läufe — ansehen, dann löschen (`hasenbau get laeufe` sagt, welche)"}
+	return bau.Check{Name: "$WORK leftovers", Detail: detail,
+		Hint: "leftovers of failed Läufe — look at them, then delete (`hasenbau get laeufe` says which)"}
 }
 
 func kurzeZeile(s string) string {

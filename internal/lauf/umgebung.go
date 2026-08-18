@@ -57,16 +57,16 @@ func Neue(root string, a *auftrag.Auftrag, laufID, ausloeser string) (*Environme
 	}
 
 	if !filepath.IsAbs(root) {
-		return nil, fehler("bau-Root %q muss absolut sein", root)
+		return nil, fehler("Bau root %q has to be absolute", root)
 	}
 	if !laufIDPattern.MatchString(laufID) {
-		return nil, fehler("ungültige Lauf-ID %q", laufID)
+		return nil, fehler("invalid Lauf ID %q", laufID)
 	}
 	switch {
 	case a.Trigger.Watch != "" && ausloeser == "":
-		return nil, fehler("watch-Trigger ohne Auslöser — die auslösende Datei fehlt ($TRIGGER_FILE)")
+		return nil, fehler("watch trigger without a trigger file — $TRIGGER_FILE is missing")
 	case a.Trigger.Cron != "" && ausloeser != "":
-		return nil, fehler("cron-Trigger mit Auslöser %q — woher kommt der?", ausloeser)
+		return nil, fehler("cron trigger with a trigger file %q — where does that come from?", ausloeser)
 	}
 	if err := checkAusloeser(ausloeser); err != nil {
 		return nil, fehler("%v", err)
@@ -129,12 +129,12 @@ const shellUnsafe = "\"'`$\\"
 // in echten Dateinamen und sind in "$TRIGGER_FILE" harmlos.
 func checkAusloeser(ausloeser string) error {
 	if i := strings.IndexAny(ausloeser, shellUnsafe); i >= 0 {
-		return fmt.Errorf("auslöser %q enthält %q — solche Zeichen brechen aus der Gang-Zeile aus (%s sind verboten); die Datei umbenennen",
+		return fmt.Errorf("trigger %q contains %q — such characters break out of the Gang line (%s are forbidden); rename the file",
 			ausloeser, string(ausloeser[i]), shellUnsafe)
 	}
 	for _, r := range ausloeser {
 		if r < 0x20 || r == 0x7f {
-			return fmt.Errorf("auslöser %q enthält ein Steuerzeichen (%U) — die Datei umbenennen", ausloeser, r)
+			return fmt.Errorf("trigger %q contains a control character (%U) — rename the file", ausloeser, r)
 		}
 	}
 	return nil
@@ -158,13 +158,13 @@ func (u *Environment) Substitute(s string) (string, error) {
 			return u.Bau
 		case name == auftrag.VarTriggerFile:
 			if u.TriggerFile == "" {
-				fehler = append(fehler, "$TRIGGER_FILE ist nur bei watch-Triggern gebunden")
+				fehler = append(fehler, "$TRIGGER_FILE is only bound for watch triggers")
 				return treffer
 			}
 			return u.TriggerFile
 		case name == auftrag.VarTriggerArg:
 			if u.TriggerArg == "" {
-				fehler = append(fehler, "$TRIGGER_ARG ist nur bei manual-Läufen mit Argument gebunden")
+				fehler = append(fehler, "$TRIGGER_ARG is only bound for manual Läufe with an argument")
 				return treffer
 			}
 			return u.TriggerArg
@@ -172,17 +172,17 @@ func (u *Environment) Substitute(s string) (string, error) {
 			// Der Parser fängt das beim Laden ab; hier landet nur, was
 			// nie durch ihn ging. Trotzdem der Wegweiser statt
 			// „unbekannte Variable".
-			fehler = append(fehler, "$INPUT gibt es nicht mehr — $TRIGGER_FILE (watch) oder $TRIGGER_ARG (manual)")
+			fehler = append(fehler, "$INPUT no longer exists — use $TRIGGER_FILE (watch) or $TRIGGER_ARG (manual)")
 			return treffer
 		case name == "HASENBAU":
 			if u.Hasenbau == "" {
-				fehler = append(fehler, "$HASENBAU: eigener Programmpfad nicht bestimmbar")
+				fehler = append(fehler, "$HASENBAU: cannot determine own program path")
 				return treffer
 			}
 			return u.Hasenbau
 		case name == "WORK":
 			if u.Work == "" {
-				fehler = append(fehler, "$WORK braucht einen Raum mit Rolle work")
+				fehler = append(fehler, "$WORK needs a Raum with role work")
 				return treffer
 			}
 			return u.Work
@@ -190,12 +190,12 @@ func (u *Environment) Substitute(s string) (string, error) {
 			rolle := name[len("RAUM_"):]
 			pfad, ok := u.Raeume[rolle]
 			if !ok {
-				fehler = append(fehler, fmt.Sprintf("$%s: Auftrag definiert keinen Raum %q", name, rolle))
+				fehler = append(fehler, fmt.Sprintf("$%s: the Auftrag defines no Raum %q", name, rolle))
 				return treffer
 			}
 			return pfad
 		default:
-			fehler = append(fehler, fmt.Sprintf("unbekannte Variable $%s (erlaubt: $BAU, $TRIGGER_FILE, $TRIGGER_ARG, $WORK, $RAUM_<rolle>, $HASENBAU)", name))
+			fehler = append(fehler, fmt.Sprintf("unknown variable $%s (allowed: $BAU, $TRIGGER_FILE, $TRIGGER_ARG, $WORK, $RAUM_<rolle>, $HASENBAU)", name))
 			return treffer
 		}
 	})

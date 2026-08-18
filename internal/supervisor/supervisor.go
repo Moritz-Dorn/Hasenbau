@@ -71,19 +71,19 @@ type Supervisor struct {
 // Server unbemerkt mit der Alltags-Config des Nutzers.
 func New(cfg Config) (*Supervisor, error) {
 	if cfg.BauDir == "" {
-		return nil, errors.New("supervisor: BauDir fehlt")
+		return nil, errors.New("supervisor: BauDir missing")
 	}
 	abs, err := filepath.Abs(cfg.BauDir)
 	if err != nil {
-		return nil, fmt.Errorf("supervisor: BauDir auflösen: %w", err)
+		return nil, fmt.Errorf("supervisor: resolving BauDir: %w", err)
 	}
 	cfg.BauDir = abs
 	if fi, err := os.Stat(cfg.BauDir); err != nil || !fi.IsDir() {
-		return nil, fmt.Errorf("supervisor: BauDir %q ist kein Verzeichnis", cfg.BauDir)
+		return nil, fmt.Errorf("supervisor: BauDir %q is not a directory", cfg.BauDir)
 	}
 	confJSON := filepath.Join(cfg.BauDir, ".opencode-home", "opencode", "opencode.json")
 	if _, err := os.Stat(confJSON); err != nil {
-		return nil, fmt.Errorf("supervisor: isolierte Config fehlt (%s): %w", confJSON, err)
+		return nil, fmt.Errorf("supervisor: isolated config missing (%s): %w", confJSON, err)
 	}
 	// AGENTS.md-Leckage (§3): Liegt eine Agent-Instruktionsdatei im
 	// BauDir, ist das ein Code-Repo, kein Bau — der Server liefe mit
@@ -91,7 +91,7 @@ func New(cfg Config) (*Supervisor, error) {
 	// `hasenbau init` legt solche Dateien nie an.
 	for _, marker := range []string{"AGENTS.md", "CLAUDE.md"} {
 		if _, err := os.Stat(filepath.Join(cfg.BauDir, marker)); err == nil {
-			return nil, fmt.Errorf("supervisor: BauDir %q enthält %s — das ist ein Code-Repo, kein Bau (PLAN.md §3)", cfg.BauDir, marker)
+			return nil, fmt.Errorf("supervisor: BauDir %q contains %s — that is a code repo, not a Bau (PLAN.md §3)", cfg.BauDir, marker)
 		}
 	}
 	if cfg.Binary == "" {
@@ -122,7 +122,7 @@ func (s *Supervisor) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if s.proc != nil {
 		s.mu.Unlock()
-		return errors.New("supervisor: Server läuft bereits")
+		return errors.New("supervisor: server already running")
 	}
 	s.mu.Unlock()
 
@@ -193,7 +193,7 @@ func (s *Supervisor) awaitListen(ctx context.Context, p *proc, urlCh <-chan stri
 	case <-p.done:
 		return "", fmt.Errorf("supervisor: Server endete vor dem Listen: %v", p.waitErr)
 	case <-time.After(s.cfg.HealthTimeout):
-		return "", errors.New("supervisor: Timeout beim Warten auf die Listen-Zeile")
+		return "", errors.New("supervisor: timed out waiting for the listen line")
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
@@ -208,7 +208,7 @@ func (s *Supervisor) awaitHealthy(ctx context.Context, p *proc, baseURL string) 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-p.done:
-			return fmt.Errorf("supervisor: Server endete vor dem Health-Check: %v", p.waitErr)
+			return fmt.Errorf("supervisor: server exited before the health check: %v", p.waitErr)
 		default:
 		}
 		resp, err := client.Get(baseURL + "/config")
@@ -220,7 +220,7 @@ func (s *Supervisor) awaitHealthy(ctx context.Context, p *proc, baseURL string) 
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return fmt.Errorf("supervisor: Health-Check auf %s/config nicht bestanden", baseURL)
+	return fmt.Errorf("supervisor: health check on %s/config failed", baseURL)
 }
 
 // Stop beendet den Server sauber: SIGTERM an die Prozessgruppe, nach
@@ -277,7 +277,7 @@ func (s *Supervisor) waitExit(ctx context.Context) error {
 	p := s.proc
 	s.mu.Unlock()
 	if p == nil {
-		return errors.New("supervisor: kein laufender Server")
+		return errors.New("supervisor: no running server")
 	}
 	select {
 	case <-p.done:

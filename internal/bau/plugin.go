@@ -103,7 +103,7 @@ func EnsurePlugin(root string) (bool, error) {
 	pfad := filepath.Join(root, OpencodeConfig)
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
-		return false, fmt.Errorf("bau: keine Bau-Config unter %s — `hasenbau init` läuft lassen", pfad)
+		return false, fmt.Errorf("bau: no Bau config at %s — run `hasenbau init`", pfad)
 	}
 	if err != nil {
 		return false, fmt.Errorf("bau: %s lesen: %w", pfad, err)

@@ -132,7 +132,7 @@ func TestFakeTimeoutOhneListenZeile(t *testing.T) {
 		StopTimeout:   3 * time.Second,
 	})
 	err := s.Start(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "Timeout beim Warten auf die Listen-Zeile") {
+	if err == nil || !strings.Contains(err.Error(), "timed out waiting for the listen line") {
 		t.Fatalf("erwartet Listen-Timeout, bekam: %v", err)
 	}
 }

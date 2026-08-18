@@ -56,10 +56,10 @@ func TestNeueValidiert(t *testing.T) {
 	root := t.TempDir()
 	cronAuftrag := &auftrag.Auftrag{Name: "morgenpost", Hase: "melder", Trigger: auftrag.Trigger{Cron: "0 7 * * *"}}
 
-	if _, err := Neue(root, watchAuftrag(), "lauf-001", ""); err == nil || !strings.Contains(err.Error(), "auslösende Datei fehlt") {
+	if _, err := Neue(root, watchAuftrag(), "lauf-001", ""); err == nil || !strings.Contains(err.Error(), "$TRIGGER_FILE is missing") {
 		t.Errorf("watch ohne input: %v", err)
 	}
-	if _, err := Neue(root, cronAuftrag, "lauf-001", "x.pdf"); err == nil || !strings.Contains(err.Error(), "cron-Trigger mit Auslöser") {
+	if _, err := Neue(root, cronAuftrag, "lauf-001", "x.pdf"); err == nil || !strings.Contains(err.Error(), "cron trigger with a trigger file") {
 		t.Errorf("cron mit input: %v", err)
 	}
 	if _, err := Neue(root, watchAuftrag(), "../boese", "x.pdf"); err == nil {
@@ -149,8 +149,8 @@ func TestErsetzeFehler(t *testing.T) {
 	}
 
 	faelle := []struct{ eingabe, erwarte string }{
-		{"echo $HOME", "unbekannte Variable $HOME"},
-		{"cp $RAUM_lager x", `keinen Raum "lager"`},
+		{"echo $HOME", "unknown variable $HOME"},
+		{"cp $RAUM_lager x", `defines no Raum "lager"`},
 	}
 	for _, f := range faelle {
 		if _, err := u.Substitute(f.eingabe); err == nil || !strings.Contains(err.Error(), f.erwarte) {
@@ -174,10 +174,10 @@ func TestErsetzeUngebundeneVariablen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := u.Substitute("lies $TRIGGER_FILE"); err == nil || !strings.Contains(err.Error(), "nur bei watch-Triggern gebunden") {
+	if _, err := u.Substitute("lies $TRIGGER_FILE"); err == nil || !strings.Contains(err.Error(), "only bound for watch triggers") {
 		t.Errorf("$TRIGGER_FILE bei cron: %v", err)
 	}
-	if _, err := u.Substitute("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "Rolle work") {
+	if _, err := u.Substitute("schreib nach $WORK"); err == nil || !strings.Contains(err.Error(), "role work") {
 		t.Errorf("$WORK ohne work-Raum: %v", err)
 	}
 }

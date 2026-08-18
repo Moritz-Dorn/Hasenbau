@@ -170,7 +170,7 @@ func (s *Store) BackfillToolCalls(parse TraceParser) (int, error) {
 		WHERE l.tool_signature IS NULL
 		ORDER BY t.lauf`)
 	if err != nil {
-		return 0, fmt.Errorf("store: Läufe ohne Tool-Calls suchen: %w", err)
+		return 0, fmt.Errorf("store: looking for Läufe without tool calls: %w", err)
 	}
 	type offen struct {
 		lauf int64
@@ -181,13 +181,13 @@ func (s *Store) BackfillToolCalls(parse TraceParser) (int, error) {
 		var o offen
 		if err := rows.Scan(&o.lauf, &o.roh); err != nil {
 			rows.Close()
-			return 0, fmt.Errorf("store: Läufe ohne Tool-Calls suchen: %w", err)
+			return 0, fmt.Errorf("store: looking for Läufe without tool calls: %w", err)
 		}
 		todo = append(todo, o)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return 0, fmt.Errorf("store: Läufe ohne Tool-Calls suchen: %w", err)
+		return 0, fmt.Errorf("store: looking for Läufe without tool calls: %w", err)
 	}
 	rows.Close()
 

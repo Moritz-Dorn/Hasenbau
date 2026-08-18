@@ -175,7 +175,7 @@ func TestDiagnoseMeldetRequestsRaum(t *testing.T) {
 		[]byte("log_level: info\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if detail := suche(Diagnose(root)); !strings.Contains(detail, "kein requests-Raum") {
+	if detail := suche(Diagnose(root)); !strings.Contains(detail, "no requests Raum") {
 		t.Errorf("ohne requests-Raum meldet die Diagnose %q — der Hinweis fehlt", detail)
 	}
 

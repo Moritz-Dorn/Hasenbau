@@ -362,7 +362,7 @@ func TestFuehreAusEndeUeberStatusabfrage(t *testing.T) {
 	defer mu.Unlock()
 	gefunden := false
 	for _, z := range logZeilen {
-		if strings.Contains(z, "Statusabfrage") && strings.Contains(z, "fertig") {
+		if strings.Contains(z, "status query") && strings.Contains(z, "done") {
 			gefunden = true
 		}
 	}
@@ -393,7 +393,7 @@ func TestStatusabfrageBeendetKeinenLaufOhneBusy(t *testing.T) {
 		HaseTimeout:    600 * time.Millisecond, Logf: t.Logf,
 	}
 	_, err := r.Execute(ctx, a, "manual", "")
-	if err == nil || !strings.Contains(err.Error(), "Zeitlimit") {
+	if err == nil || !strings.Contains(err.Error(), "time limit") {
 		t.Fatalf("erwartet: Lauf läuft in den Timeout statt sich fertig zu glauben, bekam %v", err)
 	}
 }
@@ -422,7 +422,7 @@ func TestAuftragsZeitlimitSchlaegtVorgabe(t *testing.T) {
 	// Auf die Erklärung prüfen, nicht nur auf die Zahl: die alte Fassung
 	// lieferte je nach Zufall „prompt: context deadline exceeded" und
 	// damit weder das eine noch das andere (Hasenbau-eav).
-	if err == nil || !strings.Contains(err.Error(), "300ms") || !strings.Contains(err.Error(), "Zeitlimit") {
+	if err == nil || !strings.Contains(err.Error(), "300ms") || !strings.Contains(err.Error(), "time limit") {
 		t.Fatalf("erwartet: Abbruch nach dem Limit des Auftrags, bekam %v", err)
 	}
 }
@@ -442,7 +442,7 @@ func TestZeitlimitFehlerUnterscheidetTimeoutVonAbbruch(t *testing.T) {
 	if err == nil {
 		t.Fatal("kein Fehler bei abgelaufenem Zeitlimit")
 	}
-	for _, muss := range []string{"Zeitlimit", "30m", "ses_1", "2s"} {
+	for _, muss := range []string{"time limit", "30m", "ses_1", "2s"} {
 		if !strings.Contains(err.Error(), muss) {
 			t.Errorf("Meldung ohne %q: %v", muss, err)
 		}
@@ -506,7 +506,7 @@ Sortiere ein.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Status != "failed" || !strings.Contains(l.Error, "brechen aus der Gang-Zeile aus") {
+	if l.Status != "failed" || !strings.Contains(l.Error, "break out of the Gang line") {
 		t.Errorf("Lauf = %+v", l)
 	}
 }

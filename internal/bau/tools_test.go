@@ -68,15 +68,15 @@ func TestLadeToolsTrenntEntwurfVonFreigegeben(t *testing.T) {
 func TestLadeToolsLehntKaputteManifesteAb(t *testing.T) {
 	faelle := map[string]struct{ manifest, erwartet string }{
 		"kein JSON":            {`{nope`, "manifest"},
-		"description fehlt":    {`{"script": "zaehlen.py"}`, "description fehlt"},
+		"description missing":    {`{"script": "zaehlen.py"}`, "description missing"},
 		"script fehlt":         {`{"description": "x"}`, "script fehlt"},
 		"unbekanntes Feld":     {`{"description": "x", "script": "zaehlen.py", "farbe": "rot"}`, "manifest"},
-		"arg ohne Typ":         {`{"description": "x", "script": "zaehlen.py", "args": [{"name": "a", "description": "b"}]}`, "erlaubt sind string, number, boolean"},
-		"arg ohne description": {`{"description": "x", "script": "zaehlen.py", "args": [{"name": "a", "type": "string"}]}`, "description fehlt"},
+		"arg ohne Typ":         {`{"description": "x", "script": "zaehlen.py", "args": [{"name": "a", "description": "b"}]}`, "allowed are string, number, boolean"},
+		"arg ohne description": {`{"description": "x", "script": "zaehlen.py", "args": [{"name": "a", "type": "string"}]}`, "description missing"},
 		// Das Skript laeuft im SERVER-Prozess, nicht in der Sandbox des
 		// Hasen. Ein Pfad im script-Feld waere ein Weg aus dem Bau
 		// heraus, und zwar an allen Permissions vorbei.
-		"script mit Pfad": {`{"description": "x", "script": "../../etc/passwd"}`, "enthält einen Pfad"},
+		"script mit Pfad": {`{"description": "x", "script": "../../etc/passwd"}`, "contains a path"},
 	}
 	for name, f := range faelle {
 		t.Run(name, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestLadeToolsOhneVerzeichnis(t *testing.T) {
 func TestDiagnoseMeldetSchmiedAmFalschenBriefkasten(t *testing.T) {
 	werkzeugCheck := func(root string) Check {
 		for _, c := range Diagnose(root) {
-			if c.Name == "Werkzeuge" {
+			if c.Name == "Tools" {
 				return c
 			}
 		}
@@ -188,7 +188,7 @@ func TestDiagnoseMeldetLahmgelegteWerkzeuge(t *testing.T) {
 	// einsatzbereit.
 	var check Check
 	for _, c := range Diagnose(root) {
-		if c.Name == "Werkzeuge" {
+		if c.Name == "Tools" {
 			check = c
 		}
 	}

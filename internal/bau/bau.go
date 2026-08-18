@@ -139,7 +139,7 @@ var files = map[string]string{
 // Bau ab dem ersten Lauf schmutzig zu machen.
 func Init(root, exe string) ([]string, error) {
 	if fi, err := os.Stat(root); err == nil && !fi.IsDir() {
-		return nil, fmt.Errorf("bau: %s existiert und ist kein Verzeichnis", root)
+		return nil, fmt.Errorf("bau: %s exists and is not a directory", root)
 	}
 
 	var created []string
@@ -166,7 +166,7 @@ func Init(root, exe string) ([]string, error) {
 			return created, fmt.Errorf("bau: %s schreiben: %w", rel, err)
 		}
 		if err := f.Close(); err != nil {
-			return created, fmt.Errorf("bau: %s schließen: %w", rel, err)
+			return created, fmt.Errorf("bau: closing %s: %w", rel, err)
 		}
 		created = append(created, rel)
 	}
@@ -205,7 +205,7 @@ func Init(root, exe string) ([]string, error) {
 // Projekt-ID in die Läufe.
 func gitSicherstellen(root string) (bool, error) {
 	if _, err := exec.LookPath("git"); err != nil {
-		return false, fmt.Errorf("bau: git nicht gefunden — ein Bau muss ein Git-Repo sein (PLAN.md §11.5)")
+		return false, fmt.Errorf("bau: git not found — a Bau has to be a git repo (PLAN.md §11.5)")
 	}
 
 	// Auf root/.git prüfen, nicht per rev-parse: das würde bei einem Bau

@@ -82,7 +82,7 @@ func TestSperreVerhindertOverlapUndLoggt(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(logs) == 0 || !strings.Contains(logs[0], "übersprungen") {
+	if len(logs) == 0 || !strings.Contains(logs[0], "tick skipped") {
 		t.Errorf("übersprungener Tick nicht geloggt: %v", logs)
 	}
 	close(blockiere)

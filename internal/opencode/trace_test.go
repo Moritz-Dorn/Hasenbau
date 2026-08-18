@@ -124,10 +124,10 @@ func TestGekuerztKapptUndSagtEs(t *testing.T) {
 		t.Error("Truncated hat das Original verändert")
 	}
 	if !strings.HasPrefix(k.Steps[0].Output, strings.Repeat("x", 20)) ||
-		!strings.Contains(k.Steps[0].Output, "gekürzt, 100 Bytes") {
+		!strings.Contains(k.Steps[0].Output, "truncated, 100 bytes") {
 		t.Errorf("Output = %q", k.Steps[0].Output)
 	}
-	if !strings.Contains(k.Steps[1].Error, "gekürzt") {
+	if !strings.Contains(k.Steps[1].Error, "truncated") {
 		t.Errorf("Fehler = %q", k.Steps[1].Error)
 	}
 	// Kurze Felder und Texte bleiben, wie sie sind — der Trace soll

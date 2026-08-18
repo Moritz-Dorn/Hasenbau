@@ -101,7 +101,7 @@ func (r *Runner) Dispose(ctx context.Context) error {
 	defer r.laufMu.Unlock()
 	url := r.BaseURL()
 	if url == "" {
-		return fmt.Errorf("dispose: kein opencode-Server erreichbar")
+		return fmt.Errorf("dispose: no opencode server reachable")
 	}
 	return opencode.DisposeInstance(ctx, opencode.New(url))
 }
@@ -137,7 +137,7 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 		return 0, err
 	}
 	laufID := fmt.Sprintf("%s-%d", time.Now().UTC().Format("20060102-150405"), id)
-	logf("lauf %s: auftrag %s (%s) beginnt", laufID, a.Name, trigger)
+	logf("Lauf %s: Auftrag %s (%s) begins", laufID, a.Name, trigger)
 
 	// scheitere beendet den Lauf als 'fehler'. Session-Daten, die bis
 	// dahin angefallen sind (Tokens kosten auch bei Fehlläufen), gehen
@@ -151,10 +151,10 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 		e.Error = grund.Error()
 		r.storeTrace(id, erg, logf)
 		if err := r.Store.EndLauf(id, e); err != nil {
-			logf("lauf %s: %v", laufID, err)
+			logf("Lauf %s: %v", laufID, err)
 		}
-		logf("lauf %s: %s — %v", laufID, e.Status, grund)
-		return fmt.Errorf("lauf %s (%s): %w", laufID, a.Name, grund)
+		logf("Lauf %s: %s — %v", laufID, e.Status, grund)
+		return fmt.Errorf("Lauf %s (%s): %w", laufID, a.Name, grund)
 	}
 
 	u, err := lauf.Neue(r.Root, a, laufID, input)
@@ -179,7 +179,7 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 
 	if u.Work != "" {
 		if err := os.RemoveAll(filepath.Join(r.Root, u.Work)); err != nil {
-			logf("lauf %s: $WORK aufräumen: %v", laufID, err)
+			logf("Lauf %s: cleaning up $WORK: %v", laufID, err)
 		}
 	}
 	erg.Status = "ok"
@@ -187,7 +187,7 @@ func (r *Runner) Execute(ctx context.Context, a *auftrag.Auftrag, trigger, input
 	if err := r.Store.EndLauf(id, erg.alsErgebnis()); err != nil {
 		return id, err
 	}
-	logf("lauf %s: ok — %s", laufID, erg.Summary)
+	logf("Lauf %s: ok — %s", laufID, erg.Summary)
 	return id, nil
 }
 
@@ -237,7 +237,7 @@ func zeitlimitFehler(ctx, oben context.Context, begonnen time.Time, timeout time
 	if !errors.Is(ctx.Err(), context.DeadlineExceeded) || oben.Err() != nil {
 		return nil
 	}
-	return fmt.Errorf("hase: nach %s abgebrochen — das Zeitlimit für den LLM-Schritt ist %s (Session %s lief noch)",
+	return fmt.Errorf("Hase: aborted after %s — the time limit for the LLM step is %s (session %s was still running)",
 		time.Since(begonnen).Round(time.Second), auftrag.FormatDuration(timeout), sessionID)
 }
 
@@ -259,7 +259,7 @@ func (r *Runner) runHase(ctx context.Context, a *auftrag.Auftrag, laufID, prompt
 
 	url := r.BaseURL()
 	if url == "" {
-		return haseResult{}, fmt.Errorf("kein opencode-Server erreichbar")
+		return haseResult{}, fmt.Errorf("no opencode server reachable")
 	}
 	client := opencode.New(url)
 
@@ -313,17 +313,17 @@ warten:
 				return erg, fmt.Errorf("session %s: %s", sess.ID, ev.Error)
 			case ev.Tool != nil:
 				gesehen = true
-				zeile := fmt.Sprintf("lauf %s: tool %s [%s] %s", laufID, ev.Tool.Name, ev.Tool.CallID, ev.Tool.Status)
+				zeile := fmt.Sprintf("Lauf %s: tool %s [%s] %s", laufID, ev.Tool.Name, ev.Tool.CallID, ev.Tool.Status)
 				if ev.Tool.Error != "" {
 					zeile += " — " + ev.Tool.Error
 				}
 				logf("%s", zeile)
 			case ev.Reconnected:
-				logf("lauf %s: Event-Stream neu verbunden — ein verlorenes idle fängt die Statusabfrage", laufID)
+				logf("Lauf %s: event stream reconnected — a lost idle is caught by the status query", laufID)
 			}
 		case err := <-promptFehler:
 			if err == nil {
-				grund = "den Prompt-Call"
+				grund = "the prompt call"
 				break warten // synchroner Call kam sauber zurück
 			}
 			// Zuerst: war es das eigene Zeitlimit? Der Prompt-Call hängt
@@ -343,7 +343,7 @@ warten:
 			}
 			// Reconnected bei laufender Session (Spike-Befund) — der Stream
 			// bleibt die Wahrheitsquelle, der Timeout der Backstop.
-			logf("lauf %s: prompt-Call riss ab (%v) — warte auf session.idle", laufID, err)
+			logf("Lauf %s: prompt call broke off (%v) — waiting for session.idle", laufID, err)
 			promptFehler = nil
 		case <-nachfragen.C:
 			busy, err := opencode.SessionBusy(ctx, client, sess.ID)
@@ -361,13 +361,13 @@ warten:
 				// der gerade arbeitet (Hasenbau-0f4).
 				if time.Since(letzteMeldung) >= progressInterval {
 					letzteMeldung = time.Now()
-					logf("lauf %s: der Hase arbeitet noch (seit %s)", laufID,
+					logf("Lauf %s: the Hase is still working (for %s)", laufID,
 						time.Since(begonnen).Round(time.Second))
 				}
 				continue
 			}
 			if warBusy {
-				grund = "die Statusabfrage (session.idle kam nie an)"
+				grund = "the status query (session.idle never arrived)"
 				break warten
 			}
 		case <-ctx.Done():
@@ -377,7 +377,7 @@ warten:
 			return erg, fmt.Errorf("hase: %w", ctx.Err())
 		}
 	}
-	logf("lauf %s: der Hase ist fertig — beendet durch %s", laufID, grund)
+	logf("Lauf %s: the Hase is done — finished by %s", laufID, grund)
 
 	// Auswertung auch dann, wenn ctx gleich abläuft: eigener kurzer
 	// Kontext, die Daten liegen ja schon beim Server.
@@ -406,10 +406,10 @@ func (r *Runner) storeTrace(id int64, erg haseResult, logf func(string, ...any))
 		err = r.Store.WriteTrace(id, erg.SessionID, roh)
 	}
 	if err != nil {
-		logf("lauf %d: Trace nicht abgelegt: %v", id, err)
+		logf("Lauf %d: trace not stored: %v", id, err)
 	}
 	if err := r.Store.WriteToolCalls(id, toolCalls(erg.Trace)); err != nil {
-		logf("lauf %d: Tool-Calls nicht abgelegt: %v", id, err)
+		logf("Lauf %d: tool calls not stored: %v", id, err)
 	}
 }
 

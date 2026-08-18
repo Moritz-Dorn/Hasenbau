@@ -170,7 +170,7 @@ func TestLadeLehntAllowUndAskAb(t *testing.T) {
 			if err == nil {
 				t.Fatal("Template mit allow/ask muss scheitern")
 			}
-			if !strings.Contains(err.Error(), "nur deny") {
+			if !strings.Contains(err.Error(), "only set deny") {
 				t.Errorf("Fehler = %q", err)
 			}
 		})
@@ -326,9 +326,9 @@ func TestWissenFehlerpfade(t *testing.T) {
 		wissen  string
 		erwarte string
 	}{
-		{"Datei fehlt", "  - doku/gibtsnicht.md", "keine Datei gefunden"},
-		{"verlässt den Bau", "  - ../geheim.md", "darf den Bau nicht verlassen"},
-		{"absolut", "  - /etc/passwd", "nicht absolut"},
+		{"Datei fehlt", "  - doku/gibtsnicht.md", "no file found"},
+		{"verlässt den Bau", "  - ../geheim.md", "must not leave the Bau"},
+		{"absolut", "  - /etc/passwd", "not absolute"},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {

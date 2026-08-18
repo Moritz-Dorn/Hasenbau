@@ -37,7 +37,7 @@ func EnsureMCP(root, exe string) (MCPUpdate, error) {
 	pfad := filepath.Join(root, OpencodeConfig)
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {
-		return MCPUpdate{}, fmt.Errorf("bau: keine Bau-Config unter %s — `hasenbau init` läuft lassen", pfad)
+		return MCPUpdate{}, fmt.Errorf("bau: no Bau config at %s — run `hasenbau init`", pfad)
 	}
 	if err != nil {
 		return MCPUpdate{}, fmt.Errorf("bau: %s lesen: %w", pfad, err)

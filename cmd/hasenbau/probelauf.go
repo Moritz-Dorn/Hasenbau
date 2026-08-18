@@ -78,11 +78,11 @@ func probeCommand(ctx context.Context, root, skript string, argv []string, erlau
 	}
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
-		return blank("bwrap liegt nicht im PATH")
+		return blank("bwrap is not in the PATH")
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return blank("der Bau-Pfad ließ sich nicht auflösen: " + err.Error())
+		return blank("the Bau path could not be resolved: " + err.Error())
 	}
 
 	// Die Reihenfolge trägt die Bedeutung: bwrap wendet die Mounts von

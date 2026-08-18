@@ -35,7 +35,7 @@ func New(auftraege []*auftrag.Auftrag, lock *lauf.Lock, ausfuehren ExecFunc, log
 		a := a
 		_, err := s.cron.AddFunc(a.Trigger.Cron, func() {
 			if !lock.Acquire(a.Name) {
-				s.logf("scheduler: auftrag %s läuft noch — Tick übersprungen", a.Name)
+				s.logf("scheduler: Auftrag %s still running — tick skipped", a.Name)
 				return
 			}
 			defer lock.Release(a.Name)

@@ -164,7 +164,7 @@ func (f *Funnel) sende(sessionID string, e SessionEvent) {
 		select {
 		case ch <- e:
 		default:
-			f.logf("funnel: Abonnent der Session %s hängt — Ereignis verworfen", sessionID)
+			f.logf("funnel: subscriber of session %s is stuck — event dropped", sessionID)
 		}
 	}
 }
@@ -179,7 +179,7 @@ func (f *Funnel) meldeAbriss() {
 			select {
 			case ch <- SessionEvent{Reconnected: true}:
 			default:
-				f.logf("funnel: Abonnent der Session %s hängt — Reconnected verworfen", id)
+				f.logf("funnel: subscriber of session %s is stuck — reconnect dropped", id)
 			}
 		}
 	}

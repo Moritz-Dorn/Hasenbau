@@ -14,8 +14,8 @@ import (
 // einer läuft. Beide Fälle sind für den Hasen sichtbare Fehler, nie
 // ein geratener Schreibvorgang.
 var (
-	ErrNoActiveLauf = errors.New("store: kein aktiver Lauf")
-	ErrAmbiguous    = errors.New("store: mehrere aktive Läufe")
+	ErrNoActiveLauf = errors.New("store: no active Lauf")
+	ErrAmbiguous    = errors.New("store: several active Läufe")
 )
 
 // ActiveLauf liefert den einzigen Lauf mit status='running'. Bei keinem
@@ -32,7 +32,7 @@ func (s *Store) ActiveLauf() (*Lauf, error) {
 		       pid, pid_started
 		FROM laeufe WHERE status = 'running' ORDER BY started, id`)
 	if err != nil {
-		return nil, fmt.Errorf("store: aktive Läufe lesen: %w", err)
+		return nil, fmt.Errorf("store: reading active Läufe: %w", err)
 	}
 	defer rows.Close()
 
@@ -105,7 +105,7 @@ func (s *Store) WriteSummary(lauf int64, text string) error {
 		return fmt.Errorf("store: Summary zu Lauf %d: %w", lauf, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("store: kein Lauf mit ID %d", lauf)
+		return fmt.Errorf("store: no Lauf with ID %d", lauf)
 	}
 	return nil
 }

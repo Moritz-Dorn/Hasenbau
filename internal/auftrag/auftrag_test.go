@@ -121,7 +121,7 @@ func TestParseThrottle(t *testing.T) {
 	if a.Throttle.Max != 5 || a.Throttle.Per != time.Hour {
 		t.Errorf("Throttle = %+v", a.Throttle)
 	}
-	if !a.Throttle.An() || a.Throttle.String() != "5 Läufe je 1h" {
+	if !a.Throttle.An() || a.Throttle.String() != "5 Läufe per 1h" {
 		t.Errorf("An=%v String=%q", a.Throttle.An(), a.Throttle)
 	}
 
@@ -135,11 +135,11 @@ func TestParseThrottle(t *testing.T) {
 	}
 
 	fehlerfaelle := []struct{ block, erwartet string }{
-		{"throttle:\n  max: 5\n", "max ohne per"},
-		{"throttle:\n  per: 1h\n", "per ohne max"},
-		{"throttle:\n  max: 5\n  per: 0s\n", "per: 0 ist kein Fenster"},
-		{"throttle:\n  max: -1\n  per: 1h\n", "max muss > 0 sein"},
-		{"throttle:\n  max: 0\n", "leer"},
+		{"throttle:\n  max: 5\n", "max without per"},
+		{"throttle:\n  per: 1h\n", "per without max"},
+		{"throttle:\n  max: 5\n  per: 0s\n", "per: 0 is not a window"},
+		{"throttle:\n  max: -1\n  per: 1h\n", "max has to be > 0"},
+		{"throttle:\n  max: 0\n", "empty"},
 	}
 	for _, f := range fehlerfaelle {
 		_, err := Parse("einlagern", kopf(f.block))
@@ -242,15 +242,15 @@ func TestParseThrottleBetween(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if beides.Throttle.String() != "5 Läufe je 1h, nur 22:00-06:00" {
+	if beides.Throttle.String() != "5 Läufe per 1h, nur 22:00-06:00" {
 		t.Errorf("String = %q", beides.Throttle)
 	}
 
 	fehlerfaelle := []struct{ block, erwartet string }{
 		{"throttle:\n  between: \"22:00\"\n", "HH:MM-HH:MM"},
-		{"throttle:\n  between: \"25:00-06:00\"\n", "ungültige Uhrzeit"},
-		{"throttle:\n  between: \"22:00-22:00\"\n", "Anfang und Ende sind gleich"},
-		{"throttle:\n  between: \"abends-morgens\"\n", "ungültige Uhrzeit"},
+		{"throttle:\n  between: \"25:00-06:00\"\n", "invalid time"},
+		{"throttle:\n  between: \"22:00-22:00\"\n", "start and end are the same"},
+		{"throttle:\n  between: \"abends-morgens\"\n", "invalid time"},
 	}
 	for _, f := range fehlerfaelle {
 		_, err := Parse("einlagern", kopf(f.block))
@@ -416,44 +416,44 @@ func TestParseFehler(t *testing.T) {
 		src     string
 		erwarte string // Substring der Fehlermeldung
 	}{
-		{"kein Frontmatter", "kein frontmatter", "muss mit \"---\" beginnen"},
-		{"Frontmatter offen", "---\nhase: x\nkein Ende", "nicht geschlossen"},
-		{"Trigger fehlt", ersetze(t, "trigger:\n  watch: \"*.pdf\"\n  debounce: 5s", "trigger:"), "trigger fehlt"},
-		{"watch und cron", ersetze(t, "  debounce: 5s", "  cron: \"0 7 * * *\""), "schließen sich aus"},
-		{"ungültiger Cron", ersetze(t, "watch: \"*.pdf\"\n  debounce: 5s", "cron: \"99 99 * * *\""), "ungültiger cron-Ausdruck"},
-		{"debounce bei cron", ersetze(t, "watch: \"*.pdf\"", "cron: \"0 7 * * *\""), "debounce gilt nur für watch"},
-		{"hase fehlt", ersetze(t, "hase: archivar\n", ""), "hase fehlt"},
+		{"kein Frontmatter", "kein frontmatter", "must start with \"---\""},
+		{"Frontmatter offen", "---\nhase: x\nkein Ende", "not closed"},
+		{"Trigger fehlt", ersetze(t, "trigger:\n  watch: \"*.pdf\"\n  debounce: 5s", "trigger:"), "trigger missing"},
+		{"watch und cron", ersetze(t, "  debounce: 5s", "  cron: \"0 7 * * *\""), "are mutually exclusive"},
+		{"ungültiger Cron", ersetze(t, "watch: \"*.pdf\"\n  debounce: 5s", "cron: \"99 99 * * *\""), "invalid cron expression"},
+		{"debounce bei cron", ersetze(t, "watch: \"*.pdf\"", "cron: \"0 7 * * *\""), "debounce only applies to watch"},
+		{"hase missing", ersetze(t, "hase: archivar\n", ""), "hase missing"},
 		{"unbekanntes Feld", ersetze(t, "hase: archivar", "hase: archivar\nfarbe: braun"), "farbe"},
-		{"body fehlt", beispiel[:strings.LastIndex(beispiel, "---")+4], "body fehlt"},
-		{"cwd abgelehnt", ersetze(t, "hase: archivar", "hase: archivar\ncwd: raeume/laderampe/"), "cwd wird nicht unterstützt"},
-		{"raum verlässt Bau", ersetze(t, "out:   raeume/lager/", "out:   ../draussen/"), "darf den Bau nicht verlassen"},
-		{"watch absolut", ersetze(t, "watch: \"*.pdf\"", "watch: /tmp/*.pdf"), "muss relativ zum input-Raum sein"},
-		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$TRIGGER_FILE\" --out \"$WORK/extrakt.md\"\n", ""), "run fehlt"},
-		{"ungültige Dauer", ersetze(t, "timeout: 120s", "timeout: zwei Minuten"), "ungültige Dauer"},
-		{"kontext leer", ersetze(t, "- file: $WORK/extrakt.md", "- {}"), "braucht file oder last_summaries"},
-		{"kontext doppelt", ersetze(t, "- file: $WORK/extrakt.md", "- {file: x, last_summaries: 2}"), "schließen sich aus"},
-		{"summaries null", ersetze(t, "last_summaries: 3", "last_summaries: 0"), "muss > 0 sein"},
-		{"nachher ohne Pfeil", ersetze(t, "- move: $TRIGGER_FILE -> raeume/archiv/", "- move: $TRIGGER_FILE raeume/archiv/"), "VON -> NACH"},
+		{"body missing", beispiel[:strings.LastIndex(beispiel, "---")+4], "body missing"},
+		{"cwd abgelehnt", ersetze(t, "hase: archivar", "hase: archivar\ncwd: raeume/laderampe/"), "cwd is not supported"},
+		{"raum verlässt Bau", ersetze(t, "out:   raeume/lager/", "out:   ../draussen/"), "must not leave the Bau"},
+		{"watch absolut", ersetze(t, "watch: \"*.pdf\"", "watch: /tmp/*.pdf"), "has to be relative to the input Raum"},
+		{"gang ohne run", ersetze(t, "    run: gaenge/pdf_to_md.py \"$TRIGGER_FILE\" --out \"$WORK/extrakt.md\"\n", ""), "run missing"},
+		{"invalid duration", ersetze(t, "timeout: 120s", "timeout: zwei Minuten"), "invalid duration"},
+		{"kontext leer", ersetze(t, "- file: $WORK/extrakt.md", "- {}"), "needs file or last_summaries"},
+		{"kontext doppelt", ersetze(t, "- file: $WORK/extrakt.md", "- {file: x, last_summaries: 2}"), "are mutually exclusive"},
+		{"summaries null", ersetze(t, "last_summaries: 3", "last_summaries: 0"), "has to be > 0"},
+		{"nachher ohne Pfeil", ersetze(t, "- move: $TRIGGER_FILE -> raeume/archiv/", "- move: $TRIGGER_FILE raeume/archiv/"), "FROM -> TO"},
 		{"nachher unbekannt", ersetze(t, "- move: $TRIGGER_FILE -> raeume/archiv/", "- verbrenne: $TRIGGER_FILE"), "unbekannte Aktion"},
-		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "hase: ungültiger Name"},
-		{"hase_timeout null", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 0s"), "0 ist kein Zeitlimit"},
+		{"hase ungültig", ersetze(t, "hase: archivar", "hase: archi/var"), "hase: invalid name"},
+		{"hase_timeout null", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: 0s"), "0 is not a time limit"},
 		{"hase_timeout negativ", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: -5m"), "negative Dauer"},
-		{"hase_timeout kaputt", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: eine Stunde"), "ungültige Dauer"},
-		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manual: true"), "schließen sich aus"},
-		{"debounce bei manuell", ersetze(t, "watch: \"*.pdf\"", "manual: true"), "debounce gilt nur für watch"},
+		{"hase_timeout kaputt", ersetze(t, "hase: archivar", "hase: archivar\nhase_timeout: eine Stunde"), "invalid duration"},
+		{"watch und manuell", ersetze(t, "  debounce: 5s", "  manual: true"), "are mutually exclusive"},
+		{"debounce bei manuell", ersetze(t, "watch: \"*.pdf\"", "manual: true"), "debounce only applies to watch"},
 		// Der Auslöser muss zur Trigger-Art passen: bei manual gibt es
 		// $TRIGGER_FILE nicht, dort heißt er $TRIGGER_ARG (Hasenbau-d6d).
 		{"manual mit $TRIGGER_FILE", ersetze(t,
 			"trigger:\n  watch: \"*.pdf\"\n  debounce: 5s",
-			"trigger:\n  manual: true"), "$TRIGGER_FILE ist bei einem manual-Auftrag nicht gebunden"},
-		{"watch ohne input-Raum", ersetze(t, "  input: raeume/laderampe/sources/\n", ""), "watch-Trigger ohne Raum"},
-		{"watch mit Bau-Pfad", ersetze(t, "watch: \"*.pdf\"", "watch: raeume/laderampe/sources/*.pdf"), "sieht aus wie ein Bau-relativer Pfad"},
+			"trigger:\n  manual: true"), "$TRIGGER_FILE is not bound for a manual Auftrag"},
+		{"watch ohne input-Raum", ersetze(t, "  input: raeume/laderampe/sources/\n", ""), "watch trigger without Raum"},
+		{"watch mit Bau-Pfad", ersetze(t, "watch: \"*.pdf\"", "watch: raeume/laderampe/sources/*.pdf"), "looks like a Bau-relative path"},
 		// Platzhalter im Verzeichnis-Anteil sind seit Hasenbau-5xv erlaubt
 		// (siehe TestWatchRekursiv). Abgelehnt wird jetzt, was der Matcher
 		// nicht lesen kann — beim Laden, nicht als Trigger, der nie feuert.
-		{"watch mit kaputtem Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"[a-.pdf\""), "kein gültiges Glob-Muster"},
-		{"watch mit .. im Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"../*.pdf\""), "darf den input-Raum nicht verlassen"},
-		{"$INPUT gibt es nicht mehr", ersetze(t, "$TRIGGER_FILE -> raeume/archiv/", "$INPUT -> raeume/archiv/"), "$INPUT heißt jetzt $TRIGGER_FILE"},
+		{"watch mit kaputtem Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"[a-.pdf\""), "is not a valid glob pattern"},
+		{"watch mit .. im Muster", ersetze(t, "watch: \"*.pdf\"", "watch: \"../*.pdf\""), "must not leave the input Raum"},
+		{"$INPUT gibt es nicht mehr", ersetze(t, "$TRIGGER_FILE -> raeume/archiv/", "$INPUT -> raeume/archiv/"), "$INPUT is now called $TRIGGER_FILE"},
 	}
 
 	for _, f := range faelle {
@@ -501,13 +501,13 @@ Lies das.
 		{"watch bindet TRIGGER_FILE", "  watch: \"*.pdf\"", "$TRIGGER_FILE", ""},
 		{"manual bindet TRIGGER_ARG", "  manual: true", "$TRIGGER_ARG", ""},
 		{"watch kennt TRIGGER_ARG nicht", "  watch: \"*.pdf\"", "$TRIGGER_ARG",
-			"$TRIGGER_ARG ist bei einem watch-Auftrag nicht gebunden, hier gilt $TRIGGER_FILE"},
+			"$TRIGGER_ARG is not bound for a watch Auftrag, use $TRIGGER_FILE here"},
 		{"manual kennt TRIGGER_FILE nicht", "  manual: true", "$TRIGGER_FILE",
-			"$TRIGGER_FILE ist bei einem manual-Auftrag nicht gebunden, hier gilt $TRIGGER_ARG"},
+			"$TRIGGER_FILE is not bound for a manual Auftrag, use $TRIGGER_ARG here"},
 		{"cron bindet keines", "  cron: \"0 7 * * *\"", "$TRIGGER_FILE",
-			"cron hat keinen Auslöser"},
+			"cron has no trigger file"},
 		{"$INPUT bekommt den Wegweiser", "  watch: \"*.pdf\"", "$INPUT",
-			"$INPUT heißt jetzt $TRIGGER_FILE"},
+			"$INPUT is now called $TRIGGER_FILE"},
 	}
 	for _, f := range faelle {
 		t.Run(f.name, func(t *testing.T) {
@@ -604,7 +604,7 @@ func TestLoadUnbekannterHase(t *testing.T) {
 	if err == nil {
 		t.Fatal("unbekannter Hase muss Load scheitern lassen")
 	}
-	if !strings.Contains(err.Error(), "unbekannter Hase") || !strings.Contains(err.Error(), "archivar") {
+	if !strings.Contains(err.Error(), "unknown Hase") || !strings.Contains(err.Error(), "archivar") {
 		t.Errorf("Fehler = %q", err)
 	}
 }
