@@ -388,3 +388,43 @@ func TestReviewNaechsterOhneKandidat(t *testing.T) {
 		})
 	}
 }
+
+// TestEntwurfslisteEmpfiehltNurWasGeht: die Liste zeigt ALLE Entwuerfe,
+// auch die schon gelesenen — der Tipp darunter galt aber unbedingt und
+// nannte `tool review --next`, das nur generated und outdated findet.
+// Wer nur Gelesenes vor sich hatte, bekam eine Liste mit Eintraegen und
+// einen Befehl, der sagt, es gebe nichts (Hasenbau-xp9). Gemeldet von
+// Moritz, und der Tipp war die Ursache, nicht sein Vorgehen.
+func TestEntwurfslisteEmpfiehltNurWasGeht(t *testing.T) {
+	t.Run("alles gelesen", func(t *testing.T) {
+		root := bauMitWerkzeug(t, "gelesen", skriptHeil, true)
+		var out, errw strings.Builder
+		if code := run([]string{"-bau", root, "get", "tools", "-drafts"}, &out, &errw); code != 0 {
+			t.Fatalf("exit %d — %s", code, errw.String())
+		}
+		if !strings.Contains(out.String(), "gelesen") {
+			t.Fatalf("der Entwurf fehlt in der Liste:\n%s", out.String())
+		}
+		// Geprueft wird die BEFEHLSZEILE, nicht das Wort: der Text darf
+		// --next erwaehnen ("dort ist nichts mehr zu tun"), nur nicht
+		// als naechsten Schritt hinstellen.
+		if strings.Contains(out.String(), "\n  hasenbau tool review --next") {
+			t.Errorf("empfiehlt --next, obwohl es dort nichts zu tun gibt:\n%s", out.String())
+		}
+		// Und der Nutzer darf nicht ohne naechsten Schritt dastehen.
+		if !strings.Contains(out.String(), "tool test") {
+			t.Errorf("nennt die naechste Stufe nicht:\n%s", out.String())
+		}
+	})
+
+	t.Run("ungelesen", func(t *testing.T) {
+		root := bauMitWerkzeug(t, "ungelesen", skriptHeil, false)
+		var out, errw strings.Builder
+		if code := run([]string{"-bau", root, "get", "tools", "-drafts"}, &out, &errw); code != 0 {
+			t.Fatalf("exit %d — %s", code, errw.String())
+		}
+		if !strings.Contains(out.String(), "\n  hasenbau tool review --next") {
+			t.Errorf("verschweigt --next, obwohl ein Entwurf ungelesen ist:\n%s", out.String())
+		}
+	})
+}

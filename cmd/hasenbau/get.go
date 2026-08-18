@@ -475,7 +475,7 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 // getToolEntwuerfe ist die Arbeitsliste: was hat der Schmied
 // geschrieben, das noch niemand gelesen hat?
 func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
-	var zeilen int
+	var zeilen, ungelesen int
 	w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tSTATE\tLINES\tREAD BY")
 	for _, t := range werkzeuge {
@@ -483,6 +483,9 @@ func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
 			continue
 		}
 		zeilen++
+		if t.Zustand == bau.Generated || t.Zustand == bau.Outdated {
+			ungelesen++
+		}
 		von := t.Review.By
 		if von == "" {
 			von = "—  (" + t.Zustand.Erklaerung() + ")"
@@ -496,8 +499,20 @@ func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
 		fmt.Fprintln(out, "Nothing is waiting for review.")
 		return 0
 	}
-	fmt.Fprintln(out, "\nA draft is code a model wrote and nobody read.")
-	fmt.Fprintln(out, "  hasenbau tool review --next")
+	// Der Tipp hängt an der LAGE, nicht an der Liste. `--next` findet nur
+	// generated und outdated; wer ihn unbedingt ausgibt, schickt jemanden
+	// mit einer nicht-leeren Liste zu einem Befehl, der sagt, es gebe
+	// nichts (Hasenbau-xp9). Ein Entwurf verlässt diese Liste erst mit
+	// der Freigabe — gelesen zu sein reicht nicht.
+	if ungelesen > 0 {
+		fmt.Fprintf(out, "\nA draft is code a model wrote and nobody read (%d unread).\n", ungelesen)
+		fmt.Fprintln(out, "  hasenbau tool review --next")
+		return 0
+	}
+	fmt.Fprintln(out, "\nEvery draft has been read — there is nothing left for `tool review --next`.")
+	fmt.Fprintln(out, "What is missing is the stage after reading, one draft at a time:")
+	fmt.Fprintln(out, "  hasenbau tool test <name> …    a trial run; its output is what you judge")
+	fmt.Fprintln(out, "  hasenbau tool release <name>   once you have seen that output and it was right")
 	return 0
 }
 

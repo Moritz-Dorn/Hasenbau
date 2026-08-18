@@ -30,6 +30,12 @@ hasenbau tool test <name> --…      # ausführen und zeigen, was kommt
 hasenbau tool release <name>       # Ausgabe bestätigen, nach tools/ verschieben
 ```
 
+`--next` nimmt den nächsten **ungelesenen** Entwurf. Ein bereits
+gelesener bleibt in `get tools -drafts` stehen, bis er freigegeben ist —
+er wartet auf den Probelauf, nicht auf eine zweite Lesung. Wer ihn
+trotzdem noch einmal lesen will, nennt ihn beim Namen:
+`hasenbau tool review <name>`.
+
 ## Die Zustände
 
 Der Zustand dazwischen heißt nach der Intentionssemantik des IRS

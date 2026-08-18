@@ -30,6 +30,11 @@ hasenbau tool test <name> --…      # run it and show what comes out
 hasenbau tool release <name>       # confirm the output, move it to tools/
 ```
 
+`--next` takes the next **unread** draft. One that has already been read
+stays in `get tools -drafts` until it is released — it is waiting for the
+trial run, not for another reading. To read it again anyway, name it:
+`hasenbau tool review <name>`.
+
 ## The states
 
 The state in between is named after the intention semantics of the IRS
