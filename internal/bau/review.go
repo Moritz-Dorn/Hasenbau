@@ -327,12 +327,14 @@ func BodyHash(body string) string {
 // 0 heißt „es lief", nicht „es stimmt". Ob die Ausgabe der Realität
 // entspricht, sieht nur ein Mensch, und der sagt es beim Freigeben.
 //
-// DIESE REGEL STEHT ZWEIMAL DA: hier und als `reviewPruefung` in
-// vorlagen/plugin/hasenbau.js, weil das Plugin im opencode-Prozess läuft
-// und den Hasenbau nicht rufen kann. Wer hier etwas ändert, ändert dort
-// mit — sonst registriert das Plugin, was der Generator verbietet, und
-// genau das ist schon einmal passiert (Hasenbau-7or). Beide Fassungen
-// gegeneinander laufen lässt plugin_jsseite_test.go.
+// DIESE REGEL STEHT NUR NOCH HIER. Sie stand einmal zweimal da — hier
+// und als `reviewPruefung` im Bau-Plugin —, und sie ist prompt
+// abgedriftet: das Plugin registrierte, was der Generator verbot
+// (Hasenbau-7or). Seit Hasenbau-cko ruft das Plugin `hasenbau tool
+// state <name>` und tut, was der Exit-Code sagt; die JS-Fassung und der
+// Differenz-Test dagegen sind weg. Wer die Regel hier ändert, ändert
+// sie überall — und wer sie im Plugin nachbauen will, liest erst
+// PLAN §3.
 func LeiteZustandAb(r Review, body string) Zustand {
 	if r.Hash == "" || r.Fehler != "" {
 		return Generated
