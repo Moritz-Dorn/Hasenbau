@@ -17,8 +17,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,22 +191,25 @@ func (w *Watcher) Start(ctx context.Context) error {
 	}
 	w.fsw = fsw
 
-	verzeichnisse := map[string][]*auftrag.Auftrag{}
 	for _, a := range w.auftraege {
-		dir := filepath.Dir(a.WatchGlob())
-		if err := os.MkdirAll(filepath.Join(w.root, dir), 0o755); err != nil {
-			return fmt.Errorf("watcher: %s anlegen: %w", dir, err)
+		// Angelegt wird bei einem flachen Muster das Verzeichnis, in dem
+		// die Dateien liegen sollen (also samt fester Unterverzeichnisse),
+		// bei einem rekursiven nur die Wurzel — was darunter entsteht,
+		// benennt der Auftrag ja gerade nicht.
+		anzulegen := filepath.Dir(a.WatchGlob())
+		if a.WatchRekursiv() {
+			anzulegen = a.WatchWurzel()
 		}
-		verzeichnisse[dir] = append(verzeichnisse[dir], a)
-	}
-	for dir := range verzeichnisse {
-		if err := fsw.Add(filepath.Join(w.root, dir)); err != nil {
-			return fmt.Errorf("watcher: %s beobachten: %w", dir, err)
+		if err := os.MkdirAll(filepath.Join(w.root, anzulegen), 0o755); err != nil {
+			return fmt.Errorf("watcher: %s anlegen: %w", anzulegen, err)
+		}
+		if err := w.beobachte(a, anzulegen); err != nil {
+			return err
 		}
 	}
 
 	w.wg.Add(1)
-	go w.lausche(ctx, verzeichnisse)
+	go w.lausche(ctx)
 
 	// Nachholen: vorhandene Dateien als Trigger behandeln (§7).
 	//
@@ -215,16 +220,8 @@ func (w *Watcher) Start(ctx context.Context) error {
 	// Rückstaus hinge daran, wie schnell die Schleife hier ist. Der
 	// Wecker ist gepuffert, das Signal geht dabei nicht verloren.
 	for _, a := range w.auftraege {
-		treffer, err := filepath.Glob(filepath.Join(w.root, a.WatchGlob()))
-		if err != nil {
-			return fmt.Errorf("watcher: glob %s: %w", a.WatchGlob(), err)
-		}
-		for _, abs := range treffer {
-			rel, err := filepath.Rel(w.root, abs)
-			if err != nil {
-				continue
-			}
-			w.arbeiter[a.Name].melde(rel)
+		if err := w.holeNach(a, a.WatchWurzel()); err != nil {
+			return err
 		}
 	}
 
@@ -277,7 +274,59 @@ func (w *Watcher) Stop() {
 	w.wg.Wait()
 }
 
-func (w *Watcher) lausche(ctx context.Context, verzeichnisse map[string][]*auftrag.Auftrag) {
+// beobachte registriert ein Verzeichnis bei fsnotify — bei einem
+// rekursiven Muster samt allem, was darunter schon liegt.
+//
+// Symlinks werden dabei NICHT verfolgt: WalkDir tut es von sich aus
+// nicht, und das bleibt so. Ein Link, der auf einen Vorfahren zeigt,
+// ergäbe sonst eine Schleife, und ein Link aus dem Bau heraus machte den
+// Eingang zu einem Fenster in fremde Verzeichnisse (§3).
+func (w *Watcher) beobachte(a *auftrag.Auftrag, dir string) error {
+	abs := filepath.Join(w.root, dir)
+	if !a.WatchRekursiv() {
+		if err := w.fsw.Add(abs); err != nil {
+			return fmt.Errorf("watcher: %s beobachten: %w", dir, err)
+		}
+		return nil
+	}
+	// Ein Verzeichnis, das zwischen WalkDir und Add verschwindet, ist kein
+	// Fehler des Baus — es kann ein anderer Lauf gewesen sein, der
+	// aufgeräumt hat. Gemeldet, nicht abgebrochen.
+	return filepath.WalkDir(abs, func(pfad string, d fs.DirEntry, err error) error {
+		if err != nil {
+			w.logf("watcher: %s nicht gelesen: %v", pfad, err)
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if err := w.fsw.Add(pfad); err != nil {
+			w.logf("watcher: %s nicht beobachtet: %v", pfad, err)
+		}
+		return nil
+	})
+}
+
+// holeNach meldet alles, was unter dir schon liegt und zum Muster passt.
+//
+// Zwei Aufgaben in einer Bewegung: beim Start ist es das Nachholen aus
+// §7 (was im Eingang liegt, wurde nie verarbeitet oder blieb nach einem
+// Crash), zur Laufzeit ist es das Gegenmittel gegen das Rennen beim
+// Nachregistrieren. `mv ordner/ raeume/eingang/` ist EIN Rename: der
+// Ordner ist mit Inhalt sofort da, und für die Dateien darin hat nie
+// jemand ein Event gehört. Doppelmeldungen hält melde() ohnehin fern.
+func (w *Watcher) holeNach(a *auftrag.Auftrag, dir string) error {
+	treffer, err := a.WatchTreffer(w.root, dir)
+	if err != nil {
+		return fmt.Errorf("watcher: %s durchsehen: %w", dir, err)
+	}
+	for _, rel := range treffer {
+		w.arbeiter[a.Name].melde(rel)
+	}
+	return nil
+}
+
+func (w *Watcher) lausche(ctx context.Context) {
 	defer w.wg.Done()
 	for {
 		select {
@@ -294,8 +343,22 @@ func (w *Watcher) lausche(ctx context.Context, verzeichnisse map[string][]*auftr
 			if err != nil {
 				continue
 			}
-			for _, a := range verzeichnisse[filepath.Dir(rel)] {
-				if passt, _ := filepath.Match(a.WatchGlob(), rel); passt {
+			// Ein neues Verzeichnis unter einer rekursiven Wurzel wird
+			// nachregistriert — und danach einmal durchgesehen, denn
+			// zwischen seinem Entstehen und dem Add liegt ein Fenster, in
+			// dem Events niemand hört.
+			if ev.Has(fsnotify.Create) {
+				if fi, err := os.Stat(ev.Name); err == nil && fi.IsDir() {
+					w.neuesVerzeichnis(rel)
+					continue
+				}
+			}
+			// Zugeordnet wird über das Muster, nicht über eine Tabelle
+			// „Verzeichnis → Aufträge": mit rekursiven Wurzeln stünden dort
+			// Verzeichnisse, die es beim Start noch gar nicht gab. Es sind
+			// wenige Aufträge, und der Match ist billig.
+			for _, a := range w.auftraege {
+				if a.WatchTrifft(rel) {
 					w.arbeiter[a.Name].melde(rel)
 				}
 			}
@@ -306,6 +369,31 @@ func (w *Watcher) lausche(ctx context.Context, verzeichnisse map[string][]*auftr
 			w.logf("watcher: %v", err)
 		}
 	}
+}
+
+// neuesVerzeichnis registriert einen frisch entstandenen Ordner für jeden
+// Auftrag, unter dessen Wurzel er liegt, und liest ihn einmal durch.
+func (w *Watcher) neuesVerzeichnis(rel string) {
+	for _, a := range w.auftraege {
+		if !a.WatchRekursiv() || !unterhalb(a.WatchWurzel(), rel) {
+			continue
+		}
+		if err := w.beobachte(a, rel); err != nil {
+			w.logf("watcher: %v", err)
+		}
+		if err := w.holeNach(a, rel); err != nil {
+			w.logf("watcher: %s nachlesen: %v", rel, err)
+		}
+	}
+}
+
+// unterhalb sagt, ob rel im Baum unter wurzel liegt.
+func unterhalb(wurzel, rel string) bool {
+	imRaum, err := filepath.Rel(wurzel, rel)
+	if err != nil {
+		return false
+	}
+	return imRaum != ".." && !strings.HasPrefix(imRaum, ".."+string(filepath.Separator))
 }
 
 // verarbeite führt einen einzelnen Input aus: Größenstabilität abwarten,

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Moritz-Dorn/Hasenbau/internal/frontmatter"
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
@@ -116,6 +118,97 @@ func (a *Auftrag) WatchGlob() string {
 		return ""
 	}
 	return filepath.Join(a.Raeume[RolleInput], a.Trigger.Watch)
+}
+
+// WatchWurzel ist das Verzeichnis, unter dem der Watcher sucht: der
+// input-Raum, Bau-relativ. Er steht fest, seit `watch:` nur noch das
+// Muster trägt (Hasenbau-d6d) — deshalb braucht es kein Zerlegen des
+// Musters, um die Wurzel zu finden, und ein Verzeichnis namens `*`
+// bringt niemanden mehr durcheinander (Hasenbau-h64).
+func (a *Auftrag) WatchWurzel() string {
+	if a.Trigger.Watch == "" {
+		return ""
+	}
+	return a.Raeume[RolleInput]
+}
+
+// WatchTrifft sagt, ob ein Bau-relativer Pfad diesen Trigger auslöst.
+//
+// Gematcht wird gegen das Muster, nicht gegen den zusammengesetzten
+// Pfad: nur so bedeutet `**` „unter dem input-Raum" und nicht „irgendwo
+// im Bau". Der Doppelstern steht dabei für NULL oder mehr
+// Verzeichnisse — `**/*.pdf` trifft also auch eine PDF, die direkt im
+// Eingang liegt.
+func (a *Auftrag) WatchTrifft(rel string) bool {
+	wurzel := a.WatchWurzel()
+	if wurzel == "" {
+		return false
+	}
+	imRaum, err := filepath.Rel(wurzel, rel)
+	if err != nil || imRaum == ".." || strings.HasPrefix(imRaum, ".."+string(filepath.Separator)) {
+		return false
+	}
+	passt, err := doublestar.Match(filepath.ToSlash(a.Trigger.Watch), filepath.ToSlash(imRaum))
+	return err == nil && passt
+}
+
+// WatchTreffer listet, was unter `unter` liegt und den Trigger auslösen
+// würde — Bau-relativ und sortiert. `unter` ist Bau-relativ; leer heißt
+// der ganze input-Raum.
+//
+// Diese Funktion gibt es, weil `filepath.Glob` den Doppelstern nicht
+// kennt und ihn als einfachen Stern liest: `describe auftrag` zählte
+// damit stillschweigend die falschen Dateien (eine statt zwei), und
+// `findings` ebenso. Ein Zähler, der etwas anderes zählt als der
+// Watcher auslöst, ist schlimmer als keiner.
+func (a *Auftrag) WatchTreffer(root, unter string) ([]string, error) {
+	wurzel := a.WatchWurzel()
+	if wurzel == "" {
+		return nil, nil
+	}
+	if unter == "" {
+		unter = wurzel
+	}
+	var treffer []string
+	err := filepath.WalkDir(filepath.Join(root, unter), func(pfad string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// Ein Verzeichnis, das gerade verschwindet, ist kein Fehler
+			// des Auftrags — der Rest wird trotzdem gelesen.
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, pfad)
+		if err != nil || !a.WatchTrifft(rel) {
+			return nil
+		}
+		treffer = append(treffer, rel)
+		return nil
+	})
+	sort.Strings(treffer)
+	return treffer, err
+}
+
+// WatchRekursiv sagt, ob das Muster in Unterverzeichnisse greift und der
+// Watcher den Baum deshalb rekursiv registrieren muss.
+//
+// Entschieden wird am Verzeichnis-Anteil, nicht am Doppelstern allein:
+// auch `*/eingang/*.pdf` nennt Verzeichnisse, deren Namen erst zur
+// Laufzeit feststehen. Wer nur `*.pdf` schreibt, bekommt weiterhin genau
+// einen inotify-Watch — rekursiv ist ein Opt-in, kein neues
+// Standardverhalten.
+func (a *Auftrag) WatchRekursiv() bool {
+	if a.Trigger.Watch == "" {
+		return false
+	}
+	segmente := strings.Split(filepath.ToSlash(a.Trigger.Watch), "/")
+	for _, teil := range segmente[:max(len(segmente)-1, 0)] {
+		if strings.ContainsAny(teil, globMeta) {
+			return true
+		}
+	}
+	return false
 }
 
 // Throttle ist der Deckel eines Auftrags: höchstens Max Läufe je Per
@@ -729,8 +822,11 @@ func parseAfter(schritt map[string]string) (After, error) {
 	return After{}, fmt.Errorf("leerer Schritt")
 }
 
-// globMeta sind die Zeichen, die filepath.Match als Muster liest.
-const globMeta = `*?[`
+// globMeta sind die Zeichen, die ein Muster zum Muster machen. `{` steht
+// dabei, seit doublestar matcht: es liest `{a,b}` als Alternative, und
+// damit ist eine Klammer im Verzeichnis-Anteil genauso wenig ein
+// wörtlicher Name wie ein Stern.
+const globMeta = `*?[{`
 
 // pruefeWatchMuster nimmt das Muster ohne den Raum davor. Zwei Formen
 // werden abgelehnt, beide mit Absicht ausführlich:
@@ -740,11 +836,16 @@ const globMeta = `*?[`
 // klaglos an den input-Raum gehängt und ergäbe raeume/eingang/raeume/…,
 // also einen Auftrag, der nie feuert.
 //
-// Ein Meta-Zeichen vor einem Schrägstrich hieße, in Unterverzeichnisse
-// zu greifen, deren Namen erst zur Laufzeit feststehen. Das ist
-// Hasenbau-5xv und noch nicht gebaut; bis dahin ist ein Ladefehler
-// ehrlicher als ein Glob, der beim Start einmal trifft und danach nie
-// wieder (Hasenbau-h64).
+// Ein Muster, das der Matcher nicht lesen kann (eine offene Klammer
+// etwa), wird beim LADEN abgelehnt statt im Watcher stillschweigend nie
+// zu treffen. Ein Auftrag lädt entweder, oder er lädt mit Begründung
+// nicht — ein Trigger, der nie feuert, ist die schlechteste der drei
+// Möglichkeiten (Hasenbau-h64).
+//
+// Platzhalter im Verzeichnis-Anteil waren bis Hasenbau-5xv verboten,
+// weil der Watcher nur ein festes Verzeichnis beobachtete: der Glob traf
+// beim Start einmal und danach nie wieder. Jetzt registriert er den Baum
+// unter dem input-Raum rekursiv, und die Sperre fällt.
 func pruefeWatchMuster(muster string) error {
 	if filepath.IsAbs(muster) {
 		return fmt.Errorf("muster %q muss relativ zum input-Raum sein, nicht absolut", muster)
@@ -752,14 +853,13 @@ func pruefeWatchMuster(muster string) error {
 	if strings.HasPrefix(muster, "raeume/") {
 		return fmt.Errorf("muster %q sieht aus wie ein Bau-relativer Pfad — watch: trägt nur noch das Muster, der Eingang steht unter raeume: input:", muster)
 	}
-	segmente := strings.Split(filepath.ToSlash(muster), "/")
-	for i, teil := range segmente {
+	for _, teil := range strings.Split(filepath.ToSlash(muster), "/") {
 		if teil == ".." {
 			return fmt.Errorf("muster %q darf den input-Raum nicht verlassen (..)", muster)
 		}
-		if i < len(segmente)-1 && strings.ContainsAny(teil, globMeta) {
-			return fmt.Errorf("muster %q hat ein Platzhalter-Zeichen im Verzeichnis-Anteil (%q) — das gibt es noch nicht", muster, teil)
-		}
+	}
+	if !doublestar.ValidatePattern(filepath.ToSlash(muster)) {
+		return fmt.Errorf("muster %q ist kein gültiges Glob-Muster", muster)
 	}
 	return nil
 }

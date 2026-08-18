@@ -260,7 +260,10 @@ func describeAuftrag(root string, args []string, out, errw io.Writer) int {
 	ab.field("Datei", "auftraege/%s.md", a.Name)
 	ab.field("Trigger", "%s", triggerShort(a))
 	if a.Trigger.Watch != "" {
-		if n, err := filepath.Glob(filepath.Join(root, a.WatchGlob())); err == nil {
+		// Gezählt wird mit derselben Regel, mit der der Watcher auslöst
+		// (WatchTreffer) — filepath.Glob läse den Doppelstern als
+		// einfachen Stern und zählte etwas anderes, als hier passiert.
+		if n, err := a.WatchTreffer(root, ""); err == nil {
 			ab.field("", "%d Datei(en) liegen gerade im Glob", len(n))
 		}
 		if a.Trigger.Debounce > 0 {

@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -227,7 +226,7 @@ func drosselStand(root string, st *store.Store, auftraege []*auftrag.Auftrag) []
 		}
 		d := drossel{Auftrag: a.Name, Throttle: a.Throttle}
 		if a.Trigger.Watch != "" {
-			if treffer, err := filepath.Glob(filepath.Join(root, a.WatchGlob())); err == nil {
+			if treffer, err := a.WatchTreffer(root, ""); err == nil {
 				d.Eingang = len(treffer)
 			}
 		}
