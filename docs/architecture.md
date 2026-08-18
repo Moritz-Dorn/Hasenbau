@@ -101,6 +101,13 @@ Everything else `init` writes is yours and is never overwritten:
 **next to** it as separate files, entered in the `plugin:` block of the
 Bau config — the directory stays yours, only that one file does not.
 
+A Bau created before that change has the file in its git, and a
+`.gitignore` line does not catch up with a tracked file. It then shows
+up as a change after every upgrade, without anyone having touched it.
+`describe bau` says so and names the way out (`git rm --cached …`); it
+does not do it for you, since that would reach into the history of your
+repository.
+
 ## Providers in a Bau
 
 That a Bau brings its own custom providers follows from the same

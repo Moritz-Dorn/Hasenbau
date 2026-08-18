@@ -105,6 +105,13 @@ Plugins gehören als eigene Dateien **daneben**, eingetragen im
 `plugin:`-Block der Bau-Config — das Verzeichnis bleibt deins, nur diese
 eine Datei nicht.
 
+Ein Bau, der vor dieser Umstellung angelegt wurde, hat die Datei in
+seinem Git, und eine `.gitignore`-Zeile holt eine getrackte Datei nicht
+mehr ein. Sie steht dann nach jedem Upgrade als Änderung da, ohne dass
+jemand sie angefasst hätte. `describe bau` sagt das und nennt den Weg
+(`git rm --cached …`) — getan wird es nicht für dich, das griffe in die
+Historie deines Repos.
+
 ## Provider im Bau
 
 Dass ein Bau seine custom Provider selbst mitbringt, folgt aus derselben

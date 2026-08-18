@@ -283,11 +283,38 @@ func checkWaechter(root string) Check {
 		return Check{Name: name, Detail: "present, but not listed in the plugin: block",
 			Hint: "opencode will not load it like this — `hasenbau fix` adds it"}
 	}
+	detail := "active, sandbox: deny"
 	conf, err := LoadConfig(root)
 	if err == nil && conf.Sandbox == SandboxWarn {
-		return Check{Name: name, OK: true, Detail: "active, sandbox: warn (calls are reported, not refused)"}
+		detail = "active, sandbox: warn (calls are reported, not refused)"
 	}
-	return Check{Name: name, OK: true, Detail: "active, sandbox: deny"}
+	// Ein Bau, der vor Hasenbau-uei angelegt wurde, hat die Datei in
+	// seinem Git — und eine .gitignore-Zeile holt eine getrackte Datei
+	// nicht mehr ein. Seither wird sie bei jedem Start neu geschrieben,
+	// steht also nach jedem Upgrade als geänderte Datei da, ohne dass
+	// jemand sie angefasst hätte.
+	//
+	// Gemeldet und nicht repariert: `git rm --cached` griffe in die
+	// Historie eines fremden Repos, und das tut der Hasenbau nicht
+	// (Hasenbau-610). Der Check bleibt deshalb OK — es ist Rauschen,
+	// kein Defekt.
+	if pluginGetrackt(root) {
+		return Check{Name: name, OK: true, Detail: detail,
+			Hint: "generated, but tracked in your Bau's git — `git rm --cached " + PluginDatei + "`\n" +
+				"                       otherwise it shows up as a change after every upgrade"}
+	}
+	return Check{Name: name, OK: true, Detail: detail}
+}
+
+// pluginGetrackt sagt, ob die generierte Datei im Git des Baus liegt.
+// Ohne git im PATH und ohne Repo ist die Antwort nein — dann gibt es
+// nichts zu melden, und checkGit sagt ohnehin schon, was fehlt.
+func pluginGetrackt(root string) bool {
+	if _, err := exec.LookPath("git"); err != nil {
+		return false
+	}
+	cmd := exec.Command("git", "-C", root, "ls-files", "--error-unmatch", filepath.ToSlash(PluginDatei))
+	return cmd.Run() == nil
 }
 
 func checkHasenbauYAML(root string) Check {

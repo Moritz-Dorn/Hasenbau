@@ -2,7 +2,9 @@ package bau
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -112,5 +114,50 @@ func TestPluginAktuellSiehtDieAlteFassung(t *testing.T) {
 	}
 	if aktuell, err := PluginAktuell(root); err != nil || aktuell {
 		t.Errorf("alte Fassung: aktuell = %v, err = %v", aktuell, err)
+	}
+}
+
+// TestDiagnoseMeldetGetracktesPlugin: ein Bau, der vor Hasenbau-uei
+// angelegt wurde, hat die generierte Datei in seinem Git. Eine
+// .gitignore-Zeile holt das nicht mehr ein — und seit die Datei bei
+// jedem Start neu geschrieben wird, steht sie nach jedem Upgrade als
+// Änderung da, ohne dass jemand sie angefasst hat.
+//
+// Gemeldet wird das und nicht repariert: `git rm --cached` griffe in
+// die Historie eines fremden Repos (Hasenbau-610).
+func TestDiagnoseMeldetGetracktesPlugin(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("ohne git nicht prüfbar")
+	}
+	root := filepath.Join(t.TempDir(), "bau")
+	if _, err := Init(root, "/opt/hasenbau"); err != nil {
+		t.Fatal(err)
+	}
+	waechter := func() Check {
+		for _, c := range Diagnose(root) {
+			if c.Name == "Sandbox guard" {
+				return c
+			}
+		}
+		t.Fatal("kein Sandbox-Check in der Diagnose")
+		return Check{}
+	}
+
+	// Frischer Bau: die Datei ist ignoriert, es gibt nichts zu melden.
+	if h := waechter().Hint; strings.Contains(h, "git rm --cached") {
+		t.Errorf("frischer Bau bekommt den Hinweis: %q", h)
+	}
+
+	// Der alte Zustand: die Datei liegt im Index, trotz .gitignore.
+	cmd := exec.Command("git", "-C", root, "add", "-f", PluginDatei)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v: %s", err, out)
+	}
+	c := waechter()
+	if !c.OK {
+		t.Errorf("getrackte Datei ist kein Defekt, nur Rauschen: %+v", c)
+	}
+	if !strings.Contains(c.Hint, "git rm --cached") || !strings.Contains(c.Hint, PluginDatei) {
+		t.Errorf("Hinweis nennt den Weg nicht: %q", c.Hint)
 	}
 }
