@@ -320,13 +320,19 @@ func BodyHash(body string) string {
 }
 
 // LeiteZustandAb rechnet den ValIntent-Wert aus Block und Body aus.
-// LeiteZustandAb rechnet den ValIntent-Wert aus Block und Body aus.
 //
 // Die Reihenfolge trägt die Bedeutung, und die Asymmetrie in der Mitte
 // ist der Kern: ein FEHLGESCHLAGENER Probelauf widerlegt die Behauptung
 // des Reviewers (`invalid`) — ein bestandener bestätigt sie NICHT. Exit
 // 0 heißt „es lief", nicht „es stimmt". Ob die Ausgabe der Realität
 // entspricht, sieht nur ein Mensch, und der sagt es beim Freigeben.
+//
+// DIESE REGEL STEHT ZWEIMAL DA: hier und als `reviewPruefung` in
+// vorlagen/plugin/hasenbau.js, weil das Plugin im opencode-Prozess läuft
+// und den Hasenbau nicht rufen kann. Wer hier etwas ändert, ändert dort
+// mit — sonst registriert das Plugin, was der Generator verbietet, und
+// genau das ist schon einmal passiert (Hasenbau-7or). Beide Fassungen
+// gegeneinander laufen lässt plugin_jsseite_test.go.
 func LeiteZustandAb(r Review, body string) Zustand {
 	if r.Hash == "" || r.Fehler != "" {
 		return Generated

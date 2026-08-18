@@ -197,6 +197,9 @@ function reviewPruefung(quelle) {
   // Ab hier dieselbe Ableitung wie LeiteZustandAb auf der Go-Seite
   // (internal/bau/review.go) — beide Stellen muessen denselben Zustand
   // ausrechnen, sonst registriert das Plugin, was der Generator verbietet.
+  // Dass sie es tun, prueft plugin_jsseite_test.go: er schneidet diese
+  // Funktion heraus und laesst sie ueber dieselben Skripte laufen wie die
+  // Go-Fassung. Wer sie umbenennt, macht den Test rot, nicht wirkungslos.
   const exit = /^\s*(?:#|\/\/)\s*verified-exit:\s*(-?\d+)\s*$/m.exec(block)?.[1]
   if (exit !== undefined && exit !== "0") {
     return { ok: false, grund: `Probelauf gescheitert, exit ${exit} (invalid)` }
