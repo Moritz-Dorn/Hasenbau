@@ -20,14 +20,13 @@ go test ./...        # Integrationstests skippen sich ohne opencode im PATH
 
 `-race` braucht cgo und gcc (fehlt derzeit im Nix-Profil).
 
-Der JS-Anteil (die Zustands-Ableitung im Bau-Plugin) wird mitgetestet,
-ohne dass node oder bun im PATH liegen müssten: `opencode` ist ein
-bun-kompiliertes Einzelbinary, und `BUN_BE_BUN=1 opencode datei.js`
-macht es zur bun-CLI (verifiziert 2026-08-18, Bun 1.3.14). Der Test gatet
-deshalb auf dasselbe `opencode` wie die übrigen Integrationstests. Das
-ist eine Eigenschaft von bun, keine Zusage von opencode — hört das
-Binary auf, JavaScript auszuführen, skippt der Test laut, statt still
-durchzugehen.
+JavaScript lässt sich hier ausführen, obwohl weder node noch bun im PATH
+liegen: `opencode` ist ein bun-kompiliertes Einzelbinary, und
+`BUN_BE_BUN=1 opencode datei.js` macht es zur bun-CLI (verifiziert
+2026-08-18, Bun 1.3.14). Nützlich, um das Bau-Plugin nach einer Änderung
+wirklich laden zu lassen statt es nur zu lesen. Es ist eine Eigenschaft
+von bun, keine Zusage von opencode — ein Test, der darauf baut, muss
+sauber skippen, wenn das Binary nicht mitspielt.
 
 Der End-zu-End-Smoke-Test kostet einen echten LLM-Call und ist deshalb
 doppelt gegated:

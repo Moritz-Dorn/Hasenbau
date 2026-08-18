@@ -74,8 +74,10 @@ import argparse
 
 This binds the review to exactly the content that was read: change one
 line and it no longer holds, not even towards the reviewer themselves.
-The plugin checks the hash at every server start and only registers what
-passes.
+At every server start the plugin asks Hasenbau about each tool
+(`hasenbau tool state <name>`) and registers only what comes back as
+released. The rule lives in one place — the binary — and the plugin does
+what the exit code says.
 
 `#` and `//` are both allowed, but only one of them within a block, and
 `hasenbau-review-end` has to close it. Both rules come from one failure

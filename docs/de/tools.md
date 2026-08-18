@@ -74,8 +74,10 @@ import argparse
 
 Damit ist das Review an genau den Inhalt gebunden, der gelesen wurde:
 eine Zeile geändert, und es gilt nicht mehr, auch dem Reviewer selbst
-gegenüber. Das Plugin prüft den Hash bei jedem Server-Start und
-registriert nur, was durchgeht.
+gegenüber. Bei jedem Server-Start fragt das Plugin den Hasenbau
+zu jedem Werkzeug (`hasenbau tool state <name>`) und registriert nur,
+was als freigegeben zurückkommt. Die Regel steht an einer Stelle — im
+Binary —, und das Plugin tut, was der Exit-Code sagt.
 
 `#` und `//` sind beide erlaubt, innerhalb eines Blocks aber nur eines
 davon, und `hasenbau-review-end` muss ihn abschließen. Beide Regeln

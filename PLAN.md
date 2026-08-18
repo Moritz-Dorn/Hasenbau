@@ -547,29 +547,28 @@ Disziplin:
   nicht einsatzbereit ist. Genannt ist nicht gelesen.
 - **`tool test`** verlangt ein Review, bevor er ausführt.
 
-Die Ableitung steht damit zweimal da: in Go (`LeiteZustandAb`) und in
-JavaScript im Bau-Plugin, das im opencode-Prozess läuft und den Hasenbau
-nicht rufen kann. Zwei Fassungen derselben Regel driften — und sie taten
-es: bis zum 2026-08-13 registrierte das Plugin schon, was den Probelauf
-bestanden hatte, während die Go-Seite längst die Freigabe verlangte. Der
-Generator hätte es einem Hasen trotzdem verboten, aber die zweite Grenze
-war offen. Wer eine Stelle ändert, muss die andere mitziehen.
+Die Ableitung stand deshalb eine Zeit lang ZWEIMAL da: in Go
+(`LeiteZustandAb`) und als `reviewPruefung` im Bau-Plugin. Zwei Fassungen
+derselben Regel driften — und sie taten es: bis zum 2026-08-13
+registrierte das Plugin schon, was den Probelauf bestanden hatte, während
+die Go-Seite längst die Freigabe verlangte. Der Generator hätte es einem
+Hasen trotzdem verboten, aber die zweite Grenze war offen.
 
-Seit Hasenbau-7or hängt das nicht mehr am Erinnern: ein Differenz-Test
-(`plugin_jsseite_test.go`) schickt dieselben Skripte durch beide
-Fassungen und vergleicht das Urteil der JS-Seite mit dem, was Go
-ausrechnet — die Erwartung steht also nicht im Test, sondern entsteht
-aus der maßgeblichen Implementierung. Gegen die gedriftete Fassung ist
-er rot, mit genau dem historischen Befund („Go sagt hypothetical, das
-Plugin sagt ok").
+Erst kam ein Differenz-Test dagegen (Hasenbau-7or), dann die eigentliche
+Antwort: **seit Hasenbau-cko rechnet das Plugin gar nichts mehr aus.** Es
+ruft `hasenbau tool state <name>` und tut, was der Exit-Code sagt — 0
+registrieren, alles andere nicht, ein gescheiterter Aufruf eingeschlossen
+(fail-closed). Damit gilt für die Review-Prüfung dasselbe wie für den
+Sandbox-Wächter daneben, und das ist keine Kür: der Absatz oben schreibt
+es diesem Plugin ausdrücklich vor („die Regel steht NICHT hier"). Die
+Prüfung war die eine Stelle, an der es sich nicht daran hielt.
 
-Dass das ohne neue Abhängigkeit geht, ist ein Nebenprodukt: in dieser
-Umgebung liegt keine JS-Runtime im PATH, aber `opencode` ist ein
-bun-kompiliertes Einzelbinary, und `BUN_BE_BUN=1` macht es zur bun-CLI.
-Der Test gatet damit auf dasselbe `opencode` wie die übrige
-Integrationsschicht. Was bleibt: die Doppelung selbst. Sie zu beseitigen
-— das Plugin aus einer gemeinsamen Quelle zu erzeugen — wäre teurer und
-steht weiter offen; abgesichert ist sie jetzt.
+Der Preis ist ein Prozessstart je Werkzeug — beim Server-Start, nicht je
+Aufruf. Dafür fallen 82 Zeilen JavaScript weg, samt eigenem Blockparser
+und eigenem Hash, und mit ihnen der Differenz-Test: er verglich zwei
+Fassungen, und es gibt nur noch eine. Was bleibt, sichert ein Test, der
+das Plugin auf seinen Inhalt festnagelt — wer dort wieder anfängt,
+`released-by` selbst zu lesen, wird rot.
 
 Der Zustand wird dabei **abgeleitet, nicht gespeichert** — aus Block,
 Hash und vermerktem Probelauf. So kann ihn jedes Werkzeug ausrechnen,
