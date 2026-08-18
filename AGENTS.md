@@ -138,11 +138,11 @@ stehen englisch in der DB und in der Ausgabe.
 **Die Meldungstexte der CLI sind seit 2026-08-18 englisch**
 (Hasenbau-ucu): eine Sprache für die Oberfläche, nicht lokalisiert. Das
 Vokabular oben bleibt auch darin deutsch — eine Meldung sagt „3 Läufe",
-nicht „3 runs". Zwei Grenzen: modellgerichteter Text bleibt deutsch (der
+nicht „3 runs". Eine Grenze: modellgerichteter Text bleibt deutsch — der
 Rückkanal beschreibt seine Werkzeuge dem Hasen, `runner/prompt.go` baut
-den Prompt), und Dateien, die in einen Bau geschrieben werden (das
-Gerüst von `hasenbau new`, `beispiele/`, die Sonder-Hasen) ebenfalls —
-das ist eine eigene Kategorie, siehe Hasenbau-tzl.
+den Prompt, und die Sonder-Hasen in `internal/bau/vorlagen/` sind
+Prompts. Was ein Nutzer dagegen als Vorlage bekommt, ist englisch: das
+Gerüst von `hasenbau new` und alles unter `beispiele/` (Hasenbau-tzl).
 
 **Die Nutzer-Doku ist die Ausnahme von der Ausnahme**: `README.md`,
 `docs/` und `beispiele/README.md` sind englisch, weil GitHub `README.md`

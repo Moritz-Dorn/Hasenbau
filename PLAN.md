@@ -43,13 +43,21 @@ deutsche Fassung sagt dazu, warum dort englische Ausgabe in deutscher
 Prosa steht. Deutsch bleibt alles andere an Prosa: Kommentare, PLAN.md,
 AGENTS.md, Beads, Testfunktionsnamen.
 
-Zwei Grenzen dazu, beide bewusst gezogen: **modellgerichteter Text**
-bleibt deutsch, weil er nicht zur Oberfläche gehört — der Rückkanal
+Eine Grenze dazu, bewusst gezogen: **modellgerichteter Text** bleibt
+deutsch, weil er nicht zur Oberfläche gehört — der Rückkanal
 (`internal/backchannel/`) beschreibt seine Werkzeuge dem Hasen, und der
-Prompt-Aufbau (`runner/prompt.go`) redet mit ihm. Und **Dateien, die in
-einen Bau geschrieben werden** — das Gerüst von `hasenbau new`,
-`beispiele/`, die Sonder-Hasen — sind eine eigene Kategorie und noch
-deutsch (Hasenbau-tzl).
+Prompt-Aufbau (`runner/prompt.go`) redet mit ihm.
+
+**Was ein Nutzer als Vorlage in die Hand bekommt, ist ebenfalls
+englisch** (Hasenbau-tzl, Entscheidung Moritz vom 2026-08-18): das
+Gerüst von `hasenbau new` und alles unter `beispiele/`. Der Grund ist
+der Bruch, den es sonst gäbe — der Befehl sagt „Next: 1. Write the
+Markdown part", und die Datei, die er gerade geschrieben hat, redet
+deutsch. Die Sonder-Hasen in `internal/bau/vorlagen/` sind davon
+ausgenommen: das sind Prompts, und deren Sprache ist eine Modellfrage.
+Der Block unten in diesem Paragrafen bleibt deutsch, weil er zum Spec
+gehört und nicht ausgeliefert wird; die ausgelieferte Fassung steht in
+`beispiele/auftraege/pdf-einlagern.md`.
 
 | Begriff | Technisch |
 |---|---|
