@@ -40,7 +40,9 @@ func TestInitLegtLayoutAn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(created) != len(dirs)+len(files)+1 { // +1: .git/
+	// +2: .git/ und das Bau-Plugin, das keine Vorlage mehr ist und
+	// deshalb nicht in files steht (SchreibePlugin).
+	if len(created) != len(dirs)+len(files)+2 {
 		t.Errorf("created = %v", created)
 	}
 	for _, p := range []string{

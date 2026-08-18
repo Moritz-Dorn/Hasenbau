@@ -243,6 +243,89 @@ func TestFixStelltWaechterWiederHer(t *testing.T) {
 	}
 }
 
+// TestVeralteterWaechterWirdGemeldetUndErsetzt: der leisere Fall von
+// Hasenbau-uei. Die Datei fehlt nicht, sie ist nur alt — und dann
+// meldet der Wächter zwar noch, hat aber die Zusagen nicht, die seither
+// dazugekommen sind (Review-Gate der Werkzeuge, Sandkasten samt
+// Raum-Grenze). Gemessen an ~/SRC/meinHasenbau: 72 Zeilen gegen 359,
+// und nichts sagte es.
+func TestVeralteterWaechterWirdGemeldetUndErsetzt(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+	waechter := filepath.Join(bauDir, ".opencode-home", "opencode", "plugin", "hasenbau.js")
+	ausgeliefert, err := os.ReadFile(waechter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const alt = "// alte Fassung ohne Review-Gate\nexport const SandboxWaechter = async () => ({})\n"
+	if err := os.WriteFile(waechter, []byte(alt), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	run([]string{"-bau", bauDir, "describe", "bau"}, &out, &errw)
+	if !strings.Contains(out.String(), "Sandbox-Wächter") || !strings.Contains(out.String(), "veraltet") {
+		t.Errorf("Diagnose meldet den veralteten Wächter nicht:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := run([]string{"-bau", bauDir, "fix"}, &out, &errw); code != 0 {
+		t.Fatalf("fix: %d, %s", code, errw.String())
+	}
+	nachher, err := os.ReadFile(waechter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(nachher) != string(ausgeliefert) {
+		t.Error("fix hat die alte Fassung stehen lassen")
+	}
+	// Und es muss dabeistehen: ein Befehl, der eine Sicherheitsdatei
+	// tauscht und „nichts zu tun" meldet, verbirgt genau das, was dieser
+	// Bead sichtbar machen soll.
+	if !strings.Contains(out.String(), "ersetzt") {
+		t.Errorf("fix schweigt über den Tausch:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "nichts zu tun") {
+		t.Errorf("fix meldet trotz Tausch, es sei nichts zu tun:\n%s", out.String())
+	}
+}
+
+// TestStartZiehtDasPluginNach: der Weg, auf dem eine Härtung einen
+// bestehenden Bau OHNE Zutun erreicht. `fix` zu tippen ist die Ausnahme;
+// die Regel ist, dass Daemon-Start und Lauf über loadAndGenerate gehen —
+// dieselbe Runde, in der auch die Agenten und die Raum-Grenzen
+// entstehen. Läge das Plugin nicht darin, hinge die Zusage weiter daran,
+// dass jemand an sie denkt.
+func TestStartZiehtDasPluginNach(t *testing.T) {
+	bauDir := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bauDir, "init", bauDir}, &out, &errw); code != 0 {
+		t.Fatalf("init: %d, %s", code, errw.String())
+	}
+	waechter := filepath.Join(bauDir, ".opencode-home", "opencode", "plugin", "hasenbau.js")
+	ausgeliefert, err := os.ReadFile(waechter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(waechter, []byte("// alte Fassung\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadAndGenerate(bauDir); err != nil {
+		t.Fatalf("loadAndGenerate: %v", err)
+	}
+	nachher, err := os.ReadFile(waechter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(nachher) != string(ausgeliefert) {
+		t.Error("der Start hat die alte Fassung stehen lassen")
+	}
+}
+
 // TestWaechterOhneEintragWirdGemeldet: die Datei allein nützt nichts —
 // ohne den plugin:-Eintrag lädt opencode sie nie. Ein Wächter, der
 // daliegt und schweigt, sähe aus wie einer, der nichts zu melden hat.
