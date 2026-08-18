@@ -361,3 +361,30 @@ func TestPluginRechnetDieRegelNichtSelbstNach(t *testing.T) {
 		}
 	}
 }
+
+// TestReviewNaechsterOhneKandidat: der aufgeraeumte Normalfall, und
+// genau der ist abgestuerzt (Hasenbau-4rh). waehleFuerReview hat drei
+// Ausgaenge, aber nur zwei Sorten Rueckgabe: "nichts wartet" ist kein
+// Fehler, also kam (nil, 0) zurueck — und der Aufrufer prueft den Code,
+// nicht den Zeiger. Die Meldung erschien noch, dann paniert es.
+//
+// Zwei Lagen, weil beide dieselbe Antwort verlangen: ein Bau ohne jedes
+// Werkzeug, und einer, in dem alles schon gelesen ist.
+func TestReviewNaechsterOhneKandidat(t *testing.T) {
+	faelle := map[string]string{
+		"leerer Bau":          t.TempDir(),
+		"alles schon gelesen": bauMitWerkzeug(t, "gelesen", skriptHeil, true),
+	}
+	for name, root := range faelle {
+		t.Run(name, func(t *testing.T) {
+			var out, errw strings.Builder
+			code := run([]string{"-bau", root, "tool", "review", "--next"}, &out, &errw)
+			if code != 0 {
+				t.Errorf("Exit = %d, erwartet 0 — nichts zu tun ist kein Fehler; stderr: %s", code, errw.String())
+			}
+			if !strings.Contains(out.String(), "Nothing is waiting for review") {
+				t.Errorf("die Meldung fehlt:\n%s", out.String())
+			}
+		})
+	}
+}

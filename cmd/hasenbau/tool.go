@@ -499,8 +499,12 @@ func toolReview(root string, args []string, in io.Reader, out, errw io.Writer) i
 		fmt.Fprintln(errw, err)
 		return 1
 	}
+	// Am ZEIGER hängt der Abbruch, nicht am Code: waehleFuerReview hat
+	// drei Ausgänge, aber nur zwei Sorten Rückgabe — "nichts wartet" ist
+	// kein Fehler und kommt als (nil, 0). Wer hier `code != 0` prüft,
+	// läuft mit einem nil-Zeiger weiter (Hasenbau-4rh).
 	t, code := waehleFuerReview(werkzeuge, args, out, errw)
-	if code != 0 {
+	if t == nil {
 		return code
 	}
 
