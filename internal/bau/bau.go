@@ -83,10 +83,15 @@ var (
 )
 
 // gitIgnore: Der Bau versioniert Definitionen (Aufträge, Hasen, Gänge,
-// Config), nicht Laufzeit-Material und nicht generierte Agenten.
+// Config), nicht Laufzeit-Material und nicht generierte Agenten. Das
+// Bau-Plugin steht aus demselben Grund dabei: es ist generiert, nicht
+// geschrieben (SchreibePlugin). Eigene Plugins daneben gehören dem Bau
+// und bleiben versioniert — deshalb die eine Datei, nicht das
+// Verzeichnis.
 const gitIgnore = `state/
 raeume/
 .opencode-home/opencode/agents/
+.opencode-home/opencode/plugin/hasenbau.js
 `
 
 // dirs sind die Verzeichnisse eines frischen Baus. raeume/ bleibt leer:
@@ -118,7 +123,8 @@ var files = map[string]string{
 	"hasen/baumeister.md":     haseBaumeister,
 	"auftraege/schmied.md":    auftragSchmied,
 	"hasen/schmied.md":        haseSchmied,
-	PluginDatei:               sandboxWaechter,
+	// Das Bau-Plugin steht bewusst NICHT hier: es ist keine Vorlage,
+	// sondern ein Artefakt, und SchreibePlugin hält es aktuell.
 }
 
 // Init legt das Layout unter root an. Vorhandenes bleibt unangetastet;
@@ -171,6 +177,15 @@ func Init(root, exe string) ([]string, error) {
 	}
 	if _, err := EnsurePlugin(root); err != nil {
 		return created, err
+	}
+	// Das Plugin selbst: hier, damit ein frischer Bau vollständig ist,
+	// ohne dass je ein Daemon lief. Gemeldet wird nur das Anlegen — eine
+	// ersetzte Fassung ist keine Ergänzung, und wer sie sehen will,
+	// bekommt sie beim Start (loadAndGenerate) und von `describe bau`.
+	if erg, err := SchreibePlugin(root); err != nil {
+		return created, err
+	} else if erg == PluginAngelegt {
+		created = append(created, PluginDatei)
 	}
 
 	initialisiert, err := gitSicherstellen(root)

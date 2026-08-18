@@ -266,6 +266,15 @@ func checkWaechter(root string) Check {
 		return Check{Name: name, Detail: PluginDatei + " fehlt",
 			Hint: "`hasenbau fix` legt ihn wieder an"}
 	}
+	// Veraltet ist der leisere, aber gefährlichere Fall: die Datei liegt
+	// da, der Wächter meldet auch etwas — nur fehlen ihr die Zusagen, die
+	// seither dazugekommen sind (Review-Gate, Werkzeug-Sandkasten). Ein
+	// Bau von 2026-07 trug 72 Zeilen gegen 359 und sagte nichts dazu
+	// (Hasenbau-uei).
+	if aktuell, err := PluginAktuell(root); err == nil && !aktuell {
+		return Check{Name: name, Detail: "veraltet — nicht die Fassung dieses Binaries",
+			Hint: "`hasenbau fix` oder der nächste Daemon-Start ersetzt ihn"}
+	}
 	eingetragen, err := PluginEingetragen(root)
 	if err != nil {
 		return Check{Name: name, Detail: "Bau-Config unlesbar"}

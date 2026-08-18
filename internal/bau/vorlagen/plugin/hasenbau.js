@@ -15,8 +15,13 @@
 //      ist der legale Weg aus Hasenbau-wiu, und genau deshalb ist die
 //      menschliche Freigabe hier die einzige Grenze.
 //
-// Ausgeliefert von `hasenbau init`/`fix`. Änderungen bleiben stehen,
-// aber eine gelöschte Datei wird wiederhergestellt.
+// GENERIERT vom Hasenbau — nicht von Hand ändern. Die Datei wird bei
+// jedem Start aus dem Binary geschrieben, sobald sie abweicht; eine
+// Änderung daran ist beim nächsten Lauf weg. Das ist Absicht: was hier
+// steht, ist eine Zusage des Hasenbaus (Review-Gate, Sandkasten,
+// Wächter), keine Einstellung des Baus. Wer eigene Hooks oder Werkzeuge
+// will, legt ein EIGENES Plugin daneben und trägt es im plugin:-Block
+// der Bau-Config ein — das Verzeichnis gehört weiterhin dem Bau.
 //
 // Die Regeln stehen NICHT hier. Das Plugin meldet an das Binary und tut,
 // was zurückkommt — sonst läge die Sandbox-Semantik in einer

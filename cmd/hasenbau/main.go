@@ -176,6 +176,13 @@ func cmdFix(pfad string, out, errw io.Writer) int {
 		fmt.Fprintf(errw, "hasenbau: eigenen Pfad bestimmen: %v\n", err)
 		return 1
 	}
+	// Vor Init nachsehen, denn Init ersetzt das Bau-Plugin still: es ist
+	// ein Artefakt, kein Ergänztes, und fiele sonst durch beide Meldungen
+	// (weder „ergänzt" noch der Log des Starts). Ein Befehl, der eine
+	// Sicherheitsdatei tauscht und „nichts zu tun" sagt, ist genau die
+	// Stille aus Hasenbau-uei.
+	pluginWarAktuell, pluginErr := bau.PluginAktuell(pfad)
+
 	ergaenzt, err := bau.Init(pfad, exe)
 	for _, c := range ergaenzt {
 		fmt.Fprintf(out, "ergänzt: %s\n", c)
@@ -184,10 +191,14 @@ func cmdFix(pfad string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, err)
 		return 1
 	}
+	ersetzt := pluginErr == nil && !pluginWarAktuell
+	if ersetzt {
+		fmt.Fprintf(out, "ersetzt: %s (war nicht die Fassung dieses Binaries)\n", bau.PluginDatei)
+	}
 	if _, err := loadAndGenerate(pfad); err != nil {
 		fmt.Fprintf(errw, "hasenbau fix: Agenten nicht generiert: %v\n", err)
 	}
-	if len(ergaenzt) == 0 {
+	if len(ergaenzt) == 0 && !ersetzt {
 		fmt.Fprintln(out, "Bau ist vollständig, nichts zu tun")
 	} else {
 		fmt.Fprintln(out, "Was davon inhaltlich stimmt, sagt `hasenbau describe bau`.")
@@ -440,6 +451,22 @@ func loadAndGenerate(root string) ([]*auftrag.Auftrag, error) {
 	// Datei beim Server-Start liest.
 	if err := hase.SchreibeGrenzen(root, auftraege); err != nil {
 		return nil, err
+	}
+	// Und das Plugin, das beides anwendet, gehört in dieselbe Runde: es
+	// ist ein Artefakt wie die Agenten, und nur hier erreicht eine
+	// gehärtete Fassung einen Bau, der vor Monaten angelegt wurde
+	// (Hasenbau-uei). Ein Fehler dabei ist kein Grund weiterzumachen —
+	// ohne das Plugin gibt es weder Wächter noch Werkzeug-Sandkasten.
+	erg, err := bau.SchreibePlugin(root)
+	if err != nil {
+		return nil, err
+	}
+	if erg == bau.PluginErsetzt {
+		// Laut sagen, was verschwunden ist: die Datei ist generiert, aber
+		// wer sie angefasst hatte, soll erfahren, warum seine Änderung weg
+		// ist — und wo sie hingehört.
+		log.Printf("%s war nicht die Fassung dieses Binaries und wurde ersetzt "+
+			"(die Datei ist generiert; eigene Hooks gehören in ein eigenes Plugin daneben)", bau.PluginDatei)
 	}
 	return auftraege, nil
 }
