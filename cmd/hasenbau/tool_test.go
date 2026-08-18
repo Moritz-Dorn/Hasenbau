@@ -296,3 +296,68 @@ func TestNurGelesenesDarfGetestetWerden(t *testing.T) {
 		t.Errorf("die Ablehnung nennt den naechsten Schritt nicht:\n%s", errw.String())
 	}
 }
+
+// TestToolStateAntwortetMitDemExitCode: der Befehl, den das Bau-Plugin
+// stellt, statt die Regel nachzurechnen (Hasenbau-cko). Er ist die
+// einzige Stelle, an der „darf registriert werden?" beantwortet wird —
+// vorher stand die Antwort zweimal da und ist abgedriftet.
+func TestToolStateAntwortetMitDemExitCode(t *testing.T) {
+	root := bauMitWerkzeug(t, "zaehlen", "#!/usr/bin/env python3\nprint(1)\n", true)
+	var out, errw strings.Builder
+
+	// Unbekannt: die Frage ergibt keinen Sinn, das ist nicht dasselbe wie
+	// „nein" — sonst saehe ein Tippfehler im Manifest aus wie ein
+	// ungelesenes Werkzeug.
+	if code := run([]string{"-bau", root, "tool", "state", "gibtsnicht"}, &out, &errw); code != 2 {
+		t.Errorf("unbekanntes Werkzeug: exit %d, erwartet 2", code)
+	}
+
+	// Entwurf, wenn auch gelesen: liegt da, ist aber nichts fuer einen
+	// Hasen — die Freigabe ist das Verschieben nach tools/.
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "state", "zaehlen"}, &out, &errw); code != 1 {
+		t.Errorf("Entwurf: exit %d, erwartet 1 (%s)", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "draft") {
+		t.Errorf("der Grund steht nicht auf stdout: %q", out.String())
+	}
+
+	// Freigegeben und bestaetigt: registrieren. Der Weg dahin ist der
+	// echte — Probelauf vermerken, dann release.
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "test", "zaehlen", "--datei", "x"}, &out, &errw); code != 0 {
+		t.Fatalf("test: exit %d, %s", code, errw.String())
+	}
+	out.Reset()
+	errw.Reset()
+	if code := runMitEingabe(strings.NewReader("j\n"), []string{"-bau", root, "tool", "release", "zaehlen"}, &out, &errw); code != 0 {
+		t.Fatalf("release: exit %d, %s", code, errw.String())
+	}
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "state", "zaehlen"}, &out, &errw); code != 0 {
+		t.Errorf("freigegeben: exit %d (%s), erwartet 0", code, errw.String())
+	}
+	if strings.TrimSpace(out.String()) != "actual" {
+		t.Errorf("Zustand = %q", out.String())
+	}
+}
+
+// TestPluginRechnetDieRegelNichtSelbstNach hält fest, was Hasenbau-cko
+// eigentlich hergestellt hat: die Ableitung steht nur noch an EINER
+// Stelle. Ein Plugin, das wieder anfängt, `released-by` selbst zu lesen,
+// ist die Doppelung von vorne — und die ist schon einmal still
+// auseinandergelaufen.
+func TestPluginRechnetDieRegelNichtSelbstNach(t *testing.T) {
+	quelle := bau.PluginQuelle()
+	if !strings.Contains(quelle, "tool state") {
+		t.Error("das Plugin fragt den Hasenbau nicht nach dem Zustand")
+	}
+	for _, verboten := range []string{"released-by", "verified-exit", "body-sha256", "createHash"} {
+		if strings.Contains(quelle, verboten) {
+			t.Errorf("das Plugin liest %q selbst — die Regel gehört ins Binary (PLAN §3)", verboten)
+		}
+	}
+}
