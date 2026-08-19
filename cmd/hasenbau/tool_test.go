@@ -661,3 +661,62 @@ func TestAltesReviewNenntSeinenGrund(t *testing.T) {
 		t.Errorf("die Tabelle nennt den Grund nicht:\n%s", out.String())
 	}
 }
+
+// TestFreigabeNachErneutemReview: die Sackgasse aus Hasenbau-sng. Ein
+// Werkzeug liegt schon in released/, ein neues Review hat aber den
+// released-by-Eintrag ersetzt — der Zustand ist damit hypothetical, kein
+// Hase bekommt es, und `tool release` fand es nicht, weil es nur unter
+// den ENTWUERFEN suchte.
+//
+// PLAN Paragraf 12 sagt, warum das falsch herum gedacht war: release ist
+// nicht das Verschieben, sondern die Frage. Das Verschieben ist die
+// Folge — und die kann eben schon passiert sein.
+func TestFreigabeNachErneutemReview(t *testing.T) {
+	root := bauMitBeispiel(t, "zaehlt", "3")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("Probelauf: %s", errw.String())
+	}
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("erste Freigabe: %s", errw.String())
+	}
+
+	// Jetzt das, was ein erneutes `tool review` tut: frischer Block,
+	// ohne released-by. Der Probelauf-Vermerk bleibt, sonst lehnte
+	// release mit "has never run" ab — und darum geht es hier nicht.
+	pfad := filepath.Join(root, bau.ToolsDir, "zaehlt", "zaehlt.py")
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, body := bau.LiesReview(roh)
+	review.ReleasedBy, review.ReleasedAt = "", ""
+	if err := os.WriteFile(pfad, []byte(bau.SchreibeReviewBlock(review, body)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Hypothetical || werkzeuge[0].Entwurf {
+		t.Fatalf("Vorbedingung: Zustand %q, Entwurf %v — erwartet hypothetical in released/",
+			werkzeuge[0].Zustand, werkzeuge[0].Entwurf)
+	}
+
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("zweite Freigabe: exit %d — %s", code, errw.String())
+	}
+	werkzeuge, err = bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Actual {
+		t.Errorf("Zustand = %q, erwartet actual — das Werkzeug kommt sonst nie wieder heraus", werkzeuge[0].Zustand)
+	}
+	if !werkzeuge[0].Einsatzbereit() {
+		t.Error("nicht einsatzbereit — kein Hase bekaeme es")
+	}
+}

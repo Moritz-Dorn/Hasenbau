@@ -790,14 +790,27 @@ func toolRelease(root, name string, ja bool, in io.Reader, out, errw io.Writer) 
 		fmt.Fprintln(errw, err)
 		return 1
 	}
+	// Gesucht wird über den NAMEN, nicht über den Ablageort. Der Entwurf
+	// hat Vorrang, wenn es beide gibt — aber ein Werkzeug, das schon in
+	// released/ liegt, muss ebenfalls freigegeben werden können.
+	//
+	// Der Grund steht in PLAN §12: release ist nicht das Verschieben,
+	// sondern die FRAGE; das Verschieben ist die Folge. Wer den Vorgang
+	// an den Ablageort bindet, sperrt genau den Fall aus, der ihn am
+	// nötigsten hat — ein neues Review ersetzt den released-by-Eintrag,
+	// und das Werkzeug steht dann in released/ auf `hypothetical`, für
+	// keinen Hasen sichtbar und ohne Weg zurück (Hasenbau-sng).
 	var t *bau.Tool
 	for i := range werkzeuge {
-		if werkzeuge[i].Name == name && werkzeuge[i].Entwurf {
+		if werkzeuge[i].Name != name {
+			continue
+		}
+		if t == nil || werkzeuge[i].Entwurf {
 			t = &werkzeuge[i]
 		}
 	}
 	if t == nil {
-		fmt.Fprintf(errw, "hasenbau tool release: no draft %q\n%s", name, vorhandene(werkzeuge))
+		fmt.Fprintf(errw, "hasenbau tool release: no tool %q\n%s", name, vorhandene(werkzeuge))
 		return 1
 	}
 	if t.Zustand != bau.Hypothetical {
@@ -839,7 +852,11 @@ func toolRelease(root, name string, ja bool, in io.Reader, out, errw io.Writer) 
 		switch strings.ToLower(strings.TrimSpace(antwort)) {
 		case "j", "ja", "y", "yes":
 		default:
-			fmt.Fprintln(out, "aborted, nothing moved")
+			if t.Entwurf {
+				fmt.Fprintln(out, "aborted, nothing moved")
+			} else {
+				fmt.Fprintln(out, "aborted, nothing confirmed — it stays hypothetical")
+			}
 			return 0
 		}
 	}
@@ -860,19 +877,26 @@ func toolRelease(root, name string, ja bool, in io.Reader, out, errw io.Writer) 
 	// gerade dann, wenn ein Werkzeug später `outdated` wird und jemand
 	// wissen will, was es einmal getan hat.
 	ziel := filepath.Join(bau.ToolsDir, t.Name)
-	if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
-		fmt.Fprintf(errw, "hasenbau tool release: %s is already there — nothing moved\n", ziel)
-		return 1
+	if t.Entwurf {
+		if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
+			fmt.Fprintf(errw, "hasenbau tool release: %s is already there — nothing moved\n", ziel)
+			return 1
+		}
+		if err := os.MkdirAll(filepath.Join(root, bau.ToolsDir), 0o755); err != nil {
+			fmt.Fprintln(errw, err)
+			return 1
+		}
+		if err := os.Rename(filepath.Join(root, t.Ordner), filepath.Join(root, ziel)); err != nil {
+			fmt.Fprintln(errw, err)
+			return 1
+		}
+		fmt.Fprintf(out, "moved: %s → %s\n", t.Ordner, ziel)
+	} else {
+		// Schon am Ziel — dann war dies eine reine Bestätigung, und die
+		// ist der eigentliche Vorgang. Sagen muss man es trotzdem, sonst
+		// wirkt der Befehl folgenlos.
+		fmt.Fprintf(out, "already in %s — confirmed, nothing moved\n", ziel)
 	}
-	if err := os.MkdirAll(filepath.Join(root, bau.ToolsDir), 0o755); err != nil {
-		fmt.Fprintln(errw, err)
-		return 1
-	}
-	if err := os.Rename(filepath.Join(root, t.Ordner), filepath.Join(root, ziel)); err != nil {
-		fmt.Fprintln(errw, err)
-		return 1
-	}
-	fmt.Fprintf(out, "moved: %s → %s\n", t.Ordner, ziel)
 	fmt.Fprintf(out, "\n%s is %s — %s\n", name, bau.Actual, bau.Actual.Erklaerung())
 	fmt.Fprintf(out, "It gets registered at the next server start —\n")
 	fmt.Fprintln(out, "and only if the hash still matches the review then.")
