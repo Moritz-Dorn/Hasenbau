@@ -80,6 +80,18 @@ func checkWerkzeuge(root string) Check {
 	}
 	detail := fmt.Sprintf("%d released, %d in draft", frei, entwuerfe)
 
+	// Das alte Layout (Hasenbau-lnk): Werkzeuge lagen als Dateipaar
+	// direkt unter tools/ bzw. tools/entwurf/. Ein Bau von damals wird
+	// hier sonst STILL leer — LadeTools findet nichts, `get tools` zeigt
+	// eine leere Tabelle, und nichts sagt, warum. Das ist genau der
+	// Fehler, den dieser Bau sonst überall vermeidet.
+	if alt := altesToolLayout(root); len(alt) > 0 {
+		return Check{Name: name, Detail: detail,
+			Hint: "old layout found: " + strings.Join(alt, ", ") + "\n" +
+				"                       A tool is a folder now: tools/drafts/<name>/ with tool.json and the script,\n" +
+				"                       released ones in tools/released/<name>/. Move them, then rename the manifest"}
+	}
+
 	// Ein freigegebenes Werkzeug, das nicht mehr einsatzbereit ist, ist
 	// der stillste Fall von allen: es liegt in tools/, `get tools`
 	// führt es, ein Auftrag nennt es womöglich — und trotzdem bekommt
@@ -351,4 +363,24 @@ func orDash(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// altesToolLayout findet Reste der Fassung vor Hasenbau-lnk: Manifeste,
+// die als lose Datei unter tools/ oder tools/entwurf/ liegen statt in
+// einem Werkzeug-Ordner. Zurück kommen die Pfade, die es zu verschieben
+// gilt — nichts wird angefasst, denn was ein Werkzeug ist, entscheidet
+// hier niemand automatisch.
+func altesToolLayout(root string) []string {
+	var gefunden []string
+	for _, dir := range []string{"tools", "tools/entwurf"} {
+		treffer, err := filepath.Glob(filepath.Join(root, dir, "*.json"))
+		if err != nil {
+			continue
+		}
+		for _, pfad := range treffer {
+			gefunden = append(gefunden, filepath.Join(dir, filepath.Base(pfad)))
+		}
+	}
+	sort.Strings(gefunden)
+	return gefunden
 }

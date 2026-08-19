@@ -3,15 +3,24 @@
 **English** · [Deutsch](de/tools.md)
 
 Besides the Gänge, which run before the Hase, there are tools that it
-calls during its Lauf. They live as a script plus a manifest under
-`tools/` and are registered by the Bau plugin when the server starts;
-the Schmied wrote them, a human released them.
+calls during its Lauf. Each one is a **folder** — the folder name is the
+tool name — and it is registered by the Bau plugin when the server
+starts; the Schmied wrote it, a human released it.
 
-The release is two-stage: first the file moves from `tools/entwurf/` to
-`tools/`, then an Auftrag names it in its `tools:`. Without that entry a
-Hase gets no tool. A newly built one should not end up with everybody
-just because nobody forbade it. `hasenbau get tools` shows what exists
-and who may call it.
+```
+tools/
+  drafts/zeilen_zaehlen/      what the Schmied wrote, never registered
+    tool.json                 the manifest
+    zeilen_zaehlen.py         the script
+    example/probe.txt         material for the one trial run
+  released/                   only what is in here reaches a Hase
+```
+
+The release is two-stage: first the folder moves from `tools/drafts/` to
+`tools/released/`, then an Auftrag names it in its `tools:`. Without that
+entry a Hase gets no tool. A newly built one should not end up with
+everybody just because nobody forbade it. `hasenbau get tools` shows what
+exists and who may call it.
 
 ## Why three stages at all
 
@@ -26,14 +35,37 @@ one:
 
 ```bash
 hasenbau tool review --next        # read it and take responsibility
-hasenbau tool test <name> --…      # run it and show what comes out
-hasenbau tool release <name>       # confirm the output, move it to tools/
+hasenbau tool test <name>          # run its example and check the prediction
+hasenbau tool release <name>       # confirm the output, move it to released/
 ```
 
 `--next` takes the next **unread** draft. One that has already been read
 stays in `get tools -drafts` until it is released — it is waiting for the
 trial run, not for another reading. To read it again anyway, name it:
 `hasenbau tool review <name>`.
+
+## The example is the Schmied's prediction
+
+`tool test` without arguments runs the example the Schmied put in the
+folder and compares the output against `example.expect` in the manifest.
+That answers a question a reviewer cannot answer alone: *which file goes
+in here?* Only the Hase that asked for the tool knows, and it is not in
+the room.
+
+```json
+"example": {"args": {"datei": "example/probe.txt"}, "expect": "3"}
+```
+
+A mismatch makes the tool `invalid` even when the script exits 0 — it ran
+and did the wrong thing, which means the model was wrong about its own
+code. A match proves nothing: the prediction and the script come from the
+same model. It stays `hypothetical` until a human confirms the output at
+`release`.
+
+The Schmied can predict at all because it may **not** run its script.
+Whoever can try things out may guess and patch; whoever cannot has to
+understand what they wrote. Paths inside `example` are relative to the
+tool folder, so they survive the move to `released/`.
 
 ## The states
 
@@ -48,9 +80,10 @@ Classification happens through verification; nobody can hand themselves
 The test run only counts in one direction: if it fails, it refutes the
 review (`invalid`); if it passes, it does not confirm it. Exit 0 means
 "it ran", not "it is right", and no exit code can see whether 24 was the
-correct line count. So a passing test run stays `hypothetical`, and
-`release` asks before it moves anything: was the output right? Whoever
-says yes is named in the file.
+correct line count. A run that contradicts the Schmied's `expect` refutes
+as well, even at exit 0 — that is the same direction, not a new one. So a
+passing test run stays `hypothetical`, and `release` asks before it moves
+anything: was the output right? Whoever says yes is named in the file.
 
 ## The review block
 
@@ -68,8 +101,9 @@ afterwards:
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
-# verified-with: --pfad eingang/probe.txt
+# verified-with: --pfad example/probe.txt
 # verified-exit: 0
+# verified-expect: match
 # released-by: Moritz Dorn
 # released-at: 2026-08-13T14:06:02+02:00
 # valintent: actual

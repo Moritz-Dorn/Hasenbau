@@ -319,7 +319,7 @@ hase: %[2]s
 
 # Schmied tools the Hase may call in THIS Auftrag. Without an entry it
 # gets none: the default is nothing, not everything. Named is the file
-# under tools/ without its extension; if there is none, the Auftrag does
+# the folder name under tools/released/; if there is none, the Auftrag does
 # not load. What the Bau has is shown by ` + "`hasenbau get tools`" + `.
 # tools:
 #   - zeilen_zaehlen

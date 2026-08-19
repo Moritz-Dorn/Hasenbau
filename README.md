@@ -212,12 +212,15 @@ stages, each requiring the previous one:
 
 ```bash
 hasenbau tool review --next        # read it and take responsibility
-hasenbau tool test <name> --…      # run it in the sandbox and show what comes out
+hasenbau tool test <name>          # run its example in the sandbox
 hasenbau tool release <name>       # confirm the output and release it
 ```
 
-A failed test run refutes, a passing one does not confirm: exit 0 means
-"it ran", not "it is right". How `generated → hypothetical → actual`
+A tool is a folder, and the Schmied puts an example into it along with
+the output it predicts — it may not run its own script, so it has to
+know. `tool test` fares that example: a mismatch refutes even at exit 0,
+a match confirms nothing, because prediction and script come from the
+same model. How `generated → hypothetical → actual`
 comes about, and why a tool in operation never gets more than the Hase
 calling it: [docs/tools.md](docs/tools.md).
 

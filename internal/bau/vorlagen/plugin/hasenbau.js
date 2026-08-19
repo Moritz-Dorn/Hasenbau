@@ -8,7 +8,7 @@
 //      permission-Block des generierten Agenten fehlt: greift der
 //      überhaupt?
 //   2. Schmied-Werkzeuge (Hasenbau-hcs). Beim Start liest es die
-//      Manifeste unter tools/ und registriert daraus je ein Werkzeug.
+//      Manifeste unter tools/released/ und registriert daraus je eines.
 //      Dessen `execute` läuft ebenfalls im Server-Prozess und darf
 //      deshalb ein Skript starten, obwohl der Hase kein `bash` hat —
 //      die Permissions gelten dem Agenten, nicht dem Server. Genau das
@@ -28,7 +28,7 @@
 // opencode-spezifischen Datei, und beim Wechsel des Backends (PLAN §6)
 // müsste man sie nachbauen. Aus demselben Grund erfindet es an den
 // Manifesten nichts: was ein Werkzeug ist, entscheidet der Hasenbau.
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { tool } from "@opencode-ai/plugin"
 
@@ -88,10 +88,12 @@ function sandkastenArgv(bau, grenze, skript, argv) {
   const flags = []
   for (const dir of SYSTEM) flags.push("--ro-bind-try", dir, dir)
   flags.push("--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp")
-  // Das Skript selbst: ohne tools/ gaebe es nichts auszufuehren. Lesend
-  // — ein Werkzeug, das sich selbst umschreibt, waere ein Weg an der
-  // Freigabe vorbei.
-  flags.push("--ro-bind", join(bau, "tools"), join(bau, "tools"))
+  // Das Skript selbst: ohne tools/released/ gaebe es nichts
+  // auszufuehren. Lesend — ein Werkzeug, das sich selbst umschreibt,
+  // waere ein Weg an der Freigabe vorbei. Und nur released/, nicht
+  // tools/ als Ganzes: die Entwuerfe daneben gehen ein laufendes
+  // Werkzeug nichts an.
+  flags.push("--ro-bind", join(bau, "tools/released"), join(bau, "tools/released"))
   for (const raum of grenze.read ?? []) flags.push("--ro-bind-try", join(bau, raum), join(bau, raum))
   for (const raum of grenze.write ?? []) flags.push("--bind-try", join(bau, raum), join(bau, raum))
   flags.push(
@@ -121,7 +123,7 @@ function binaryPfad(bau) {
   return "hasenbau"
 }
 
-// ladeWerkzeuge liest die Manifeste unter tools/ und baut daraus die
+// ladeWerkzeuge liest die Manifeste unter tools/released/ und baut daraus die
 // Werkzeug-Definitionen. Ein kaputtes Manifest wird ÜBERSPRUNGEN und
 // laut gemeldet, nicht geworfen: ein Plugin, das beim Laden wirft, ist
 // still weg — und mit ihm der Sandbox-Wächter oben. Ein Werkzeug zu
@@ -132,17 +134,23 @@ function binaryPfad(bau) {
 // verweigert dort den Start (internal/bau/tools.go). Diese Datei ist
 // die nachsichtige Hälfte eines Paares, dessen andere Hälfte streng ist.
 async function ladeWerkzeuge(bau, $) {
-  const dir = join(bau, "tools")
+  // Nur tools/released/ — Entwuerfe liegen daneben in tools/drafts/ und
+  // sind fuer diese Datei nicht vorhanden. Ein Werkzeug ist ein ORDNER
+  // mit tool.json darin; der Ordnername ist der Werkzeugname.
+  const dir = join(bau, "tools/released")
   // Derselbe Pfad, ueber den auch der Waechter meldet: das Binary, das
   // diesen Bau faehrt (Selbstreferenz im mcp-Block, Hasenbau-2nq/08u).
   const hasenbau = binaryPfad(bau)
-  let dateien = []
+  let namen = []
   try {
-    dateien = readdirSync(dir).filter((f) => f.endsWith(".json")).sort()
+    namen = readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "tool.json")))
+      .map((e) => e.name)
+      .sort()
   } catch {
-    return {} // kein tools/ — der Bau hat schlicht keine Werkzeuge
+    return {} // kein tools/released/ — der Bau hat schlicht keine Werkzeuge
   }
-  if (dateien.length === 0) return {}
+  if (namen.length === 0) return {}
 
   // FAIL-CLOSED, und hier anders als beim Probelauf: dort steht ein
   // Mensch am Terminal und liest eine Warnung, im Betrieb liest sie
@@ -152,7 +160,7 @@ async function ladeWerkzeuge(bau, $) {
   const hatBwrap = (await $`bwrap --version`.quiet().nothrow()).exitCode === 0
   if (!hatBwrap) {
     console.error(
-      `hasenbau: KEIN Schmied-Werkzeug registriert (${dateien.length} vorhanden) — bwrap fehlt.\n` +
+      `hasenbau: KEIN Schmied-Werkzeug registriert (${namen.length} vorhanden) — bwrap fehlt.\n` +
         "  Ein Werkzeug laeuft im Server-Prozess; ohne Sandkasten haette es mehr Rechte als der Hase, der es ruft.",
     )
     return {}
@@ -170,17 +178,17 @@ async function ladeWerkzeuge(bau, $) {
   const grenzen = ladeGrenzen(bau)
   if (grenzen === null) {
     console.error(
-      `hasenbau: KEIN Schmied-Werkzeug registriert (${dateien.length} vorhanden) — ${GRENZEN_DATEI} fehlt oder ist unlesbar.\n` +
+      `hasenbau: KEIN Schmied-Werkzeug registriert (${namen.length} vorhanden) — ${GRENZEN_DATEI} fehlt oder ist unlesbar.\n` +
         "  Sie entsteht beim Laden der Auftraege; ohne sie ist unbekannt, welche Raeume ein Werkzeug sehen darf.",
     )
     return {}
   }
 
   const werkzeuge = {}
-  for (const datei of dateien) {
-    const name = datei.slice(0, -".json".length)
+  for (const name of namen) {
+    const ordner = join(dir, name)
     try {
-      const m = JSON.parse(readFileSync(join(dir, datei), "utf8"))
+      const m = JSON.parse(readFileSync(join(ordner, "tool.json"), "utf8"))
       if (!m?.description || !m?.script) throw new Error("description oder script fehlt")
 
       // Vor allem anderen: hat ein Mensch genau diesen Inhalt gelesen?
@@ -222,7 +230,7 @@ async function ladeWerkzeuge(bau, $) {
             if (wert === undefined || wert === null) continue
             argv.push("--" + a.name, String(wert))
           }
-          const skript = join(dir, m.script)
+          const skript = join(ordner, m.script)
 
           // Wer ruft, entscheidet, was das Werkzeug sehen darf. Ist der
           // Agent unbekannt — ein Subagent, ein handgeschriebener Agent,

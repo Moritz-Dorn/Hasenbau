@@ -3,13 +3,22 @@
 [English](../tools.md) · **Deutsch**. Übersetzung; maßgeblich ist die englische Fassung.
 
 Neben den Gängen, die vor dem Hasen laufen, gibt es Werkzeuge, die er
-während seines Laufs ruft. Sie liegen als Skript plus Manifest unter
-`tools/` und werden vom Bau-Plugin beim Server-Start registriert;
-geschrieben hat sie der Schmied, freigegeben ein Mensch.
+während seines Laufs ruft. Jedes ist ein **Ordner** — der Ordnername ist
+der Werkzeugname — und wird vom Bau-Plugin beim Server-Start
+registriert; geschrieben hat es der Schmied, freigegeben ein Mensch.
 
-Die Freigabe ist zweistufig: erst wandert die Datei aus `tools/entwurf/`
-nach `tools/`, dann nennt ein Auftrag sie in seinem `tools:`. Ohne
-Eintrag bekommt ein Hase kein Werkzeug. Ein neu gebautes soll nicht
+```
+tools/
+  drafts/zeilen_zaehlen/      was der Schmied schrieb, nie registriert
+    tool.json                 das Manifest
+    zeilen_zaehlen.py         das Skript
+    example/probe.txt         Material für den einen Probelauf
+  released/                   nur was hier liegt, erreicht einen Hasen
+```
+
+Die Freigabe ist zweistufig: erst wandert der Ordner aus `tools/drafts/`
+nach `tools/released/`, dann nennt ein Auftrag ihn in seinem `tools:`.
+Ohne Eintrag bekommt ein Hase kein Werkzeug. Ein neu gebautes soll nicht
 dadurch bei allen landen, dass niemand es verboten hat. `hasenbau get
 tools` zeigt, was es gibt und wer es rufen darf.
 
@@ -26,8 +35,8 @@ voraus:
 
 ```bash
 hasenbau tool review --next        # lesen und verantworten
-hasenbau tool test <name> --…      # ausführen und zeigen, was kommt
-hasenbau tool release <name>       # Ausgabe bestätigen, nach tools/ verschieben
+hasenbau tool test <name>          # Beispiel fahren, Vorhersage prüfen
+hasenbau tool release <name>       # Ausgabe bestätigen, nach released/ verschieben
 ```
 
 `--next` nimmt den nächsten **ungelesenen** Entwurf. Ein bereits
@@ -35,6 +44,30 @@ gelesener bleibt in `get tools -drafts` stehen, bis er freigegeben ist —
 er wartet auf den Probelauf, nicht auf eine zweite Lesung. Wer ihn
 trotzdem noch einmal lesen will, nennt ihn beim Namen:
 `hasenbau tool review <name>`.
+
+## Das Beispiel ist die Vorhersage des Schmieds
+
+`tool test` ohne Argumente fährt das Beispiel, das der Schmied in den
+Ordner gelegt hat, und vergleicht die Ausgabe mit `example.expect` im
+Manifest. Das beantwortet eine Frage, die ein Prüfer allein nicht
+beantworten kann: *welche Datei gehört hier hinein?* Das weiß nur der
+Hase, der das Werkzeug angefordert hat, und der steht nicht daneben.
+
+```json
+"example": {"args": {"datei": "example/probe.txt"}, "expect": "3"}
+```
+
+Eine Abweichung macht das Werkzeug `invalid`, auch wenn das Skript mit
+Exit 0 endet — es lief und tat das Falsche, das Modell hat sich also
+über seinen eigenen Code geirrt. Eine Übereinstimmung beweist nichts:
+Vorhersage und Skript stammen vom selben Modell. Es bleibt
+`hypothetical`, bis ein Mensch die Ausgabe bei `release` bestätigt.
+
+Dass der Schmied überhaupt vorhersagen kann, liegt daran, dass er sein
+Skript **nicht** ausführen darf. Wer ausprobieren kann, darf raten und
+nachbessern; wer es nicht kann, muss überblicken, was er geschrieben
+hat. Pfade im `example`-Block sind relativ zum Werkzeug-Ordner und
+überstehen deshalb das Verschieben nach `released/`.
 
 ## Die Zustände
 
@@ -49,7 +82,9 @@ sich niemand selbst geben.
 Der Probelauf zählt nur in eine Richtung: scheitert er, widerlegt er das
 Review (`invalid`); besteht er, bestätigt er es nicht. Exit 0 heißt „es
 lief", nicht „es stimmt", und ob 24 die richtige Zeilenzahl war, sieht
-kein Exit-Code. Deshalb bleibt ein bestandener Probelauf `hypothetical`,
+kein Exit-Code. Ein Lauf, der dem `expect` des Schmieds widerspricht,
+widerlegt ebenfalls, auch bei Exit 0 — dieselbe Richtung, kein neuer
+Weg. Deshalb bleibt ein bestandener Probelauf `hypothetical`,
 und `release` fragt, bevor es verschiebt: War die Ausgabe richtig? Wer
 bejaht, steht mit Namen in der Datei.
 
@@ -69,8 +104,9 @@ ihre Zeilen nach:
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
-# verified-with: --pfad eingang/probe.txt
+# verified-with: --pfad example/probe.txt
 # verified-exit: 0
+# verified-expect: match
 # released-by: Moritz Dorn
 # released-at: 2026-08-13T14:06:02+02:00
 # valintent: actual

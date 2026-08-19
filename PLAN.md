@@ -376,9 +376,12 @@ bau/
 │   ├── pdf_to_md.py
 │   └── entwurf/             #   was der Baumeister schreibt — nie aktiv (§8)
 ├── tools/                   # Schmied-Werkzeuge, ruft der Hase WÄHREND des Laufs
-│   ├── zeilen_zaehlen.py    #   Skript …
-│   ├── zeilen_zaehlen.json  #   … und sein Manifest, immer als Paar
-│   └── entwurf/             #   was der Schmied schreibt — nie registriert
+│   ├── released/            #   freigegeben — nur das hier registriert das Plugin
+│   │   └── zeilen_zaehlen/  #     ein Werkzeug ist ein Ordner …
+│   │       ├── tool.json    #       … mit dem Manifest …
+│   │       ├── zeilen_zaehlen.py  # … dem Skript …
+│   │       └── example/     #       … und dem Material für den Probelauf
+│   └── drafts/              #   was der Schmied schreibt — nie registriert
 ├── raeume/                  # der eigentliche Materialfluss
 │   ├── laderampe/
 │   │   ├── sources/         #   Drop-Zone
@@ -399,15 +402,25 @@ gerufen. Der Unterschied zum Gang ist der Zeitpunkt — ein Gang läuft
 **vor** dem Hasen und deterministisch, ein Werkzeug **während** seines
 Laufs und weil er es will.
 
-Ein Werkzeug sind immer zwei Dateien nebeneinander: das Skript und ein
-Manifest (`description`, `script`, `args`). Das Manifest ist die
-Wahrheit — ein Skript ohne Manifest ist kein halbes Werkzeug, sondern
-keines. Registriert werden sie vom Bau-Plugin beim Server-Start; im Bau
-liegt deshalb kein generiertes TypeScript (§3, Hasenbau-hcs).
+**Ein Werkzeug ist ein Ordner** (Hasenbau-lnk). Darin `tool.json`, das
+Skript und optional `example/`. Der Ordnername ist der Werkzeugname —
+damit steht er genau einmal da. Das Manifest ist die Wahrheit; ein
+Skript ohne Manifest ist kein halbes Werkzeug, sondern keines.
+Registriert werden sie vom Bau-Plugin beim Server-Start; im Bau liegt
+deshalb kein generiertes TypeScript (§3, Hasenbau-hcs).
 
-`entwurf/` bedeutet hier dasselbe wie bei den Gängen: was dort liegt,
-hat ein Sonder-Hase geschrieben und noch kein Mensch angesehen. Es wird
-nicht registriert.
+`example/` ist die Antwort auf eine Frage, die beim Review sonst
+unbeantwortbar ist: **welche Datei gehört hier hinein?** Das weiß nur
+der Hase, der das Werkzeug angefordert hat, und der steht dabei nicht
+daneben. Der Schmied legt deshalb Eingabe und Vorhersage bei
+(`example.args` und `example.expect` im Manifest), und `tool test` ohne
+Argumente fährt genau das. Mehr dazu in §12.
+
+`drafts/` bedeutet hier dasselbe wie `entwurf/` bei den Gängen: was dort
+liegt, hat ein Sonder-Hase geschrieben und noch kein Mensch angesehen.
+Es wird nicht registriert. Die beiden Ordner liegen NEBENEINANDER, nicht
+ineinander — läge `drafts/` unter `released/`, wäre jede Regel über
+„alles unter released" um eine Ausnahme reicher.
 
 **Und es ist ungeprüfter Code — schärfer als bei den Gängen.** Der
 Schmied hat `bash: deny` wie jeder Hase und kann sein eigenes Skript
@@ -468,10 +481,27 @@ Mensch. Daraus die Asymmetrie, die den Ablauf trägt:
 - Ein **bestandener** bestätigt sie nicht. Das Werkzeug bleibt
   `hypothetical`; der Lauf ist ein Beleg, den ein Mensch beurteilt.
 
+Seit Hasenbau-lnk gibt es einen **zweiten Weg zu widerlegen**, und er
+fängt einen Fall, den der erste nicht sieht: das Skript läuft mit Exit 0
+durch und tut dabei etwas anderes, als sein Erbauer vorhergesagt hat
+(`example.expect` im Manifest, `verified-expect: mismatch` im Block) →
+ebenfalls `invalid`. Die Asymmetrie bleibt unangetastet, denn verglichen
+wird nicht mit dem Urteil eines Lesers, sondern mit der Behauptung des
+Schmieds über sein eigenes Skript. Eine Abweichung heißt: das Modell hat
+sich über seinen eigenen Code geirrt. Eine Übereinstimmung heißt
+weiterhin nichts — Vorhersage und Skript stammen aus derselben Feder.
+
+Dass der Schmied überhaupt vorhersagen *kann*, ist kein Zufall, sondern
+die Kehrseite einer Einschränkung: er darf sein Skript nicht ausführen
+(§3, Hasenbau-hiz). Wer probieren kann, darf raten und nachbessern; wer
+es nicht kann, muss überblicken. Die Vorhersage macht diese Kraft
+prüfbar, statt sie nur zu behaupten.
+
 `actual` entsteht erst bei `hasenbau tool release`: der Befehl zeigt die
 Ausgabe des Probelaufs und fragt, ob sie richtig war. Wer bejaht, steht
 mit Namen als `released-by` im Block. Deshalb ist `release` auch nicht
-bloß ein `mv` nach `tools/` — die Frage ist der eigentliche Vorgang, das
+bloß ein `mv` nach `tools/released/` — die Frage ist der eigentliche
+Vorgang, das
 Verschieben die Folge.
 
 **Das Review ist ein Artefakt, kein Befehl.** `hasenbau tool review`
@@ -490,8 +520,9 @@ Ergebnis eindeutig:
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
-# verified-with: --pfad eingang/probe.txt
+# verified-with: --pfad example/probe.txt
 # verified-exit: 0
+# verified-expect: match
 # released-by: Moritz Dorn
 # released-at: 2026-08-13T14:06:02+02:00
 # valintent: actual
@@ -501,7 +532,10 @@ import argparse
 
 Pflicht sind die fünf Felder bis `safe-because`; fehlt eines, ist der
 Block unbrauchbar. `verified-*` trägt der Probelauf ein, `released-*`
-die Freigabe. Der Shebang bleibt die erste Zeile — ein Block darüber
+die Freigabe. `verified-expect` steht bewusst NEBEN `verified-exit` und
+nicht darin: „lief durch" und „tat das Vorhergesagte" sind zwei
+Aussagen, und ein Skript kann tadellos mit Exit 0 das Falsche tun. Ohne
+Vorhersage im Manifest fehlt das Feld. Der Shebang bleibt die erste Zeile — ein Block darüber
 machte das Skript unstartbar.
 
 Als Kommentarzeichen gilt `#` (Python, Bash) ebenso wie `//`
@@ -1181,8 +1215,9 @@ Ein `tools:`-Eintrag ohne Werkzeug im Bau ist ein Ladefehler. Sonst
 merkt man den Tippfehler erst an einem Lauf, in dem der Hase sagt, er
 habe das Werkzeug nicht — und das sieht aus wie ein Modellfehler.
 
-Die Freigabe ist damit **zweistufig**: ein Mensch verschiebt die Datei
-aus `tools/entwurf/` nach `tools/`, und ein Auftrag nennt sie hier. Das
+Die Freigabe ist damit **zweistufig**: ein Mensch verschiebt den Ordner
+aus `tools/drafts/` nach `tools/released/`, und ein Auftrag nennt ihn
+hier. Das
 ist eher ein Vorzug als ein Umstand — ein Werkzeug darf existieren,
 ohne dass jeder Hase es sieht. `hasenbau get tools` zeigt beide Stufen
 in einer Tabelle.

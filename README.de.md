@@ -214,12 +214,16 @@ niemand gelesen hat, deshalb drei Stufen, jede setzt die vorige voraus:
 
 ```bash
 hasenbau tool review --next        # lesen und verantworten
-hasenbau tool test <name> --…      # im Sandkasten ausführen und zeigen, was kommt
+hasenbau tool test <name>          # sein Beispiel im Sandkasten fahren
 hasenbau tool release <name>       # Ausgabe bestätigen und freigeben
 ```
 
-Ein gescheiterter Probelauf widerlegt, ein bestandener bestätigt nicht:
-Exit 0 heißt „es lief", nicht „es stimmt". Wie daraus `generated →
+Ein Werkzeug ist ein Ordner, und der Schmied legt ein Beispiel hinein,
+samt der Ausgabe, die er vorhersagt — er darf sein Skript nicht
+ausführen, muss es also überblicken. `tool test` fährt genau das: eine
+Abweichung widerlegt, auch bei Exit 0; eine Übereinstimmung bestätigt
+nichts, denn Vorhersage und Skript stammen vom selben Modell. Wie daraus
+`generated →
 hypothetical → actual` wird und warum ein Werkzeug im Betrieb nie mehr
 darf als der Hase, der es ruft: [docs/de/tools.md](docs/de/tools.md).
 

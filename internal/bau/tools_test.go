@@ -7,16 +7,18 @@ import (
 	"testing"
 )
 
-// werkzeugAnlegen schreibt Skript und Manifest nebeneinander.
+// werkzeugAnlegen legt einen Werkzeug-Ordner an: tool.json und das
+// Skript darin, benannt nach dem Ordner (Hasenbau-lnk).
 func werkzeugAnlegen(t *testing.T, root, dir, name, manifest string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+	ordner := filepath.Join(root, dir, name)
+	if err := os.MkdirAll(ordner, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, dir, name+".py"), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(ordner, name+".py"), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, dir, name+".json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ordner, ToolManifest), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -97,10 +99,11 @@ func TestLadeToolsLehntKaputteManifesteAb(t *testing.T) {
 // halbes Werkzeug, sondern keines.
 func TestLadeToolsBrauchtDasSkript(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ToolsDir), 0o755); err != nil {
+	ordner := filepath.Join(root, ToolsDir, "zaehlen")
+	if err := os.MkdirAll(ordner, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ToolsDir, "zaehlen.json"), []byte(manifestOK), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ordner, ToolManifest), []byte(manifestOK), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := LadeTools(root)

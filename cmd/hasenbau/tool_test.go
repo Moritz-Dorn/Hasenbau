@@ -14,8 +14,19 @@ import (
 // so, wie ihn ein Mensch (oder eine GUI, oder `tool review`) hinterlaesst.
 func bauMitWerkzeug(t *testing.T, name, skript string, gelesen bool) string {
 	t.Helper()
+	manifest := `{"description": "Ein Testwerkzeug.", "script": "` + name + `.py",
+	  "args": [{"name": "datei", "type": "string", "description": "Pfad", "required": true}]}`
+	return bauMitManifest(t, name, skript, gelesen, manifest)
+}
+
+// bauMitManifest ist dasselbe, aber mit frei gewaehltem Manifest — fuer
+// alles, was am `example`-Block haengt.
+func bauMitManifest(t *testing.T, name, skript string, gelesen bool, manifest string) string {
+	t.Helper()
 	root := t.TempDir()
-	dir := filepath.Join(root, bau.ToolsEntwurfDir)
+	// Ein Werkzeug ist ein ORDNER (Hasenbau-lnk): tool.json und Skript
+	// darin, der Ordner traegt den Namen.
+	dir := filepath.Join(root, bau.ToolsEntwurfDir, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -31,9 +42,7 @@ func bauMitWerkzeug(t *testing.T, name, skript string, gelesen bool) string {
 	if err := os.WriteFile(filepath.Join(dir, name+".py"), []byte(inhalt), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"description": "Ein Testwerkzeug.", "script": "` + name + `.py",
-	  "args": [{"name": "datei", "type": "string", "description": "Pfad", "required": true}]}`
-	if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, bau.ToolManifest), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -157,7 +166,7 @@ func TestProbelaufAlleinMachtNichtActual(t *testing.T) {
 	if code := run([]string{"-bau", root, "tool", "release", "-yes", "heil"}, &out, &errw); code != 0 {
 		t.Fatalf("release nach dem Probelauf: exit %d — %s", code, errw.String())
 	}
-	for _, rel := range []string{"tools/heil.py", "tools/heil.json"} {
+	for _, rel := range []string{"tools/released/heil/heil.py", "tools/released/heil/tool.json"} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			t.Errorf("%s fehlt nach release: %v", rel, err)
 		}
@@ -213,7 +222,7 @@ func TestGeaendertesSkriptFaelltAusDerReihe(t *testing.T) {
 		t.Fatalf("Probelauf: exit %d — %s", code, errw.String())
 	}
 
-	pfad := filepath.Join(root, bau.ToolsEntwurfDir, "heil.py")
+	pfad := filepath.Join(root, bau.ToolsEntwurfDir, "heil", "heil.py")
 	roh, err := os.ReadFile(pfad)
 	if err != nil {
 		t.Fatal(err)
@@ -427,4 +436,122 @@ func TestEntwurfslisteEmpfiehltNurWasGeht(t *testing.T) {
 			t.Errorf("verschweigt --next, obwohl ein Entwurf ungelesen ist:\n%s", out.String())
 		}
 	})
+}
+
+// skriptZaehlt zaehlt die Zeilen der uebergebenen Datei — klein genug,
+// dass sich seine Ausgabe vorhersagen laesst, und genau darum geht es.
+const skriptZaehlt = "#!/usr/bin/env python3\n" +
+	"import argparse, pathlib\n" +
+	"p = argparse.ArgumentParser(); p.add_argument('--datei', required=True)\n" +
+	"a = p.parse_args()\n" +
+	"print(len(pathlib.Path(a.datei).read_text().splitlines()))\n"
+
+// bauMitBeispiel legt ein gelesenes Werkzeug samt example/-Ordner an.
+// erwartet ist die Vorhersage des Schmieds im Manifest.
+func bauMitBeispiel(t *testing.T, name, erwartet string) string {
+	t.Helper()
+	manifest := `{"description": "Zaehlt Zeilen.", "script": "` + name + `.py",
+	  "args": [{"name": "datei", "type": "string", "description": "Pfad", "required": true}],
+	  "example": {"args": {"datei": "example/probe.txt"}, "expect": "` + erwartet + `"}}`
+	root := bauMitManifest(t, name, skriptZaehlt, true, manifest)
+	dir := filepath.Join(root, bau.ToolsEntwurfDir, name, "example")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "probe.txt"), []byte("eins\nzwei\ndrei\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// TestProbelaufNimmtDasBeispiel: der Fall, der den ganzen Ordner
+// begruendet (Hasenbau-lnk). Ohne Argumente greift das Beispiel des
+// Schmieds — sonst muesste ein Mensch raten, welche Datei hier
+// hineingehoert, und das weiss nur der Hase, der das Werkzeug
+// angefordert hat.
+func TestProbelaufNimmtDasBeispiel(t *testing.T) {
+	root := bauMitBeispiel(t, "zaehlt", "3")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d — %s\n%s", code, errw.String(), out.String())
+	}
+	// Der Pfad aus dem Manifest ist werkzeug-relativ und muss auf den
+	// Bau umgerechnet worden sein — sonst faende das Skript nichts.
+	if !strings.Contains(out.String(), filepath.Join(bau.ToolsEntwurfDir, "zaehlt", "example", "probe.txt")) {
+		t.Errorf("der Beispielpfad wurde nicht auf den Bau umgerechnet:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Matches what the Schmied predicted") {
+		t.Errorf("die Uebereinstimmung wird nicht gemeldet:\n%s", out.String())
+	}
+
+	// Und trotzdem NICHT actual: Vorhersage und Skript stammen vom
+	// selben Modell, das bestaetigt nichts.
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Hypothetical {
+		t.Errorf("Zustand = %q, erwartet hypothetical — eine getroffene Vorhersage ist kein Urteil", werkzeuge[0].Zustand)
+	}
+	if werkzeuge[0].Review.VerifiedExpect != bau.ExpectMatch {
+		t.Errorf("verified-expect = %q, erwartet match", werkzeuge[0].Review.VerifiedExpect)
+	}
+}
+
+// TestFalscheVorhersageWiderlegt: Exit 0 und trotzdem invalid. Das ist
+// der Fall, den es vorher gar nicht geben konnte — ein Skript, das
+// tadellos durchlaeuft und dabei etwas anderes tut, als sein Erbauer
+// behauptet hat.
+func TestFalscheVorhersageWiderlegt(t *testing.T) {
+	root := bauMitBeispiel(t, "zaehlt", "7")
+
+	var out, errw strings.Builder
+	code := run([]string{"-bau", root, "tool", "test", "zaehlt"}, &out, &errw)
+	if code == 0 {
+		t.Errorf("exit 0 trotz widerlegter Vorhersage:\n%s", out.String())
+	}
+	for _, muss := range []string{"NOT what the Schmied predicted", "expected", "got"} {
+		if !strings.Contains(out.String(), muss) {
+			t.Errorf("die Ausgabe nennt %q nicht:\n%s", muss, out.String())
+		}
+	}
+
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Invalid {
+		t.Errorf("Zustand = %q, erwartet invalid — die Vorhersage ist widerlegt", werkzeuge[0].Zustand)
+	}
+	if werkzeuge[0].Review.VerifiedExpect != bau.ExpectMismatch {
+		t.Errorf("verified-expect = %q, erwartet mismatch", werkzeuge[0].Review.VerifiedExpect)
+	}
+	// Der Exit-Code bleibt ehrlich: es LIEF, es tat nur das Falsche.
+	if werkzeuge[0].Review.VerifiedExit == nil || *werkzeuge[0].Review.VerifiedExit != 0 {
+		t.Errorf("verified-exit = %v, erwartet 0 — der Lauf ist nicht gescheitert", werkzeuge[0].Review.VerifiedExit)
+	}
+}
+
+// TestFreigabeNimmtDenGanzenOrdner: das Beispiel wandert mit, sonst
+// waere der Probelauf nach der Freigabe wieder ein Ratespiel.
+func TestFreigabeNimmtDenGanzenOrdner(t *testing.T) {
+	root := bauMitBeispiel(t, "zaehlt", "3")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("Probelauf: %s", errw.String())
+	}
+	out.Reset()
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("release: exit %d — %s", code, errw.String())
+	}
+	for _, rel := range []string{"tool.json", "zaehlt.py", "example/probe.txt"} {
+		if _, err := os.Stat(filepath.Join(root, bau.ToolsDir, "zaehlt", rel)); err != nil {
+			t.Errorf("%s fehlt nach der Freigabe: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, bau.ToolsEntwurfDir, "zaehlt")); err == nil {
+		t.Error("der Entwurfsordner steht noch da — verschoben heisst verschoben")
+	}
 }

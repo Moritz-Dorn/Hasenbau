@@ -14,12 +14,25 @@
 // probieren. Bis das anders ist, gehört der eine Probelauf dorthin, wo
 // ohnehin ein Mensch steht: an die Freigabe.
 //
-// Bewusst KEIN Vergleich gegen eine erwartete Ausgabe. Ein Test, der
-// nur fragt „stürzt es ab?", hätte im Fall oben nach der ersten
-// Korrektur grün gemeldet — die Erwartung ist das Urteil des Lesers,
-// und das lässt sich nicht ins Manifest schreiben. Der Befehl zeigt
-// deshalb Exit-Code, stdout und stderr und überlässt den Schluss dem
-// Menschen.
+// SEIT Hasenbau-lnk gibt es doch einen Vergleich — aber gegen etwas
+// anderes, als hier einmal ausgeschlossen wurde. Der Einwand von damals
+// steht und ist nicht widerlegt: die ERWARTUNG DES LESERS lässt sich
+// nicht ins Manifest schreiben, und ein Test, der nur fragt „stürzt es
+// ab?", meldet nach der ersten Korrektur grün.
+//
+// Verglichen wird deshalb nicht mit dem Urteil des Lesers, sondern mit
+// der VORHERSAGE DES SCHMIEDS (`example.expect`). Das ist eine schwächere
+// Aussage und genau deshalb tragfähig: sie bindet niemanden außer den,
+// der sie gemacht hat. Weicht die Ausgabe ab, hat sich das Modell über
+// sein eigenes Skript geirrt — das darf eine Maschine feststellen, und
+// es macht `invalid`. Stimmt sie überein, ist damit NICHTS bewiesen:
+// Vorhersage und Skript stammen aus derselben Feder. Der Zustand bleibt
+// `hypothetical`, das Urteil fällt weiterhin ein Mensch bei `release`.
+//
+// Der praktische Anlass war eine Frage von Moritz, auf die es keine gute
+// Antwort gab: welche Datei soll ein Mensch beim Probelauf eigentlich
+// angeben? Das weiß nur der Hase, der das Werkzeug angefordert hat, und
+// der steht beim Review nicht daneben.
 //
 // WAS DIESER BEFEHL NICHT IST: eine Sicherheitsprüfung. Er FÜHRT das
 // Skript AUS. Seit Hasenbau-9w6 tut er das im Sandkasten (probelauf.go:
@@ -53,6 +66,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,7 +77,9 @@ import (
 const toolUsage = `Usage: hasenbau tool <verb> …
 
   review [<name>|--next]        read it and take responsibility
-  test <name> [--<arg> <val>]   run it once and show what came out
+  test <name> [--<arg> <val>]   run it once and show what came out;
+                                without arguments it takes the Schmied's
+                                example and compares against its prediction
         [-` + probeSandboxFlag + `]           without a sandbox, under real conditions
   release <name>                move it to ` + bau.ToolsDir + `/
   state <name>                  may it be registered? (exit 0/1; the Bau
@@ -78,9 +94,11 @@ in this sequence, and each step requires the previous one:
                         is still missing         is evidence, not       be right
                                                  a verdict
 
-A FAILED trial run refutes and makes it invalid. A passing one does NOT
-make it actual: exit 0 means "it ran", not "it is right". Whether the
-output matches reality is something only a human sees.
+A FAILED trial run refutes and makes it invalid. So does one that runs
+through but returns something other than the Schmied predicted — exit 0
+can mean "it did the wrong thing". A passing one does NOT make it
+actual: the prediction and the script come from the same model. Whether
+the output matches reality is something only a human sees.
 
 ` + "`test`" + ` requires a review because it RUNS the script. It does so in a
 sandbox — no network, the Bau read-only, no $HOME — but it finds
@@ -206,23 +224,37 @@ func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Write
 		gefiltert = append(gefiltert, r)
 	}
 
-	werte, code := parseToolArgs(gefunden, gefiltert, errw)
-	if code != 0 {
-		return code
+	// Ohne Argumente greift das Beispiel des Schmieds — und nur dann wird
+	// verglichen. Wer selbst Argumente setzt, prüft etwas anderes als das
+	// Vorhergesagte; ein Vergleich mit `expect` wäre dort sinnlos.
+	//
+	// Das Beispiel ist die Antwort auf eine Frage, die ein Mensch beim
+	// Review nicht beantworten kann: WELCHE Datei gehört hier hinein? Der
+	// Einzige, der das weiß, ist der Hase, der das Werkzeug angefordert
+	// hat, und der steht beim Review nicht daneben.
+	var argv []string
+	vergleichen := false
+	if len(gefiltert) == 0 && gefunden.Beispiel != nil {
+		argv = gefunden.BeispielArgv()
+		vergleichen = true
+	} else {
+		werte, code := parseToolArgs(gefunden, gefiltert, errw)
+		if code != 0 {
+			return code
+		}
+		for _, a := range gefunden.Args {
+			wert, da := werte[a.Name]
+			if !da {
+				continue
+			}
+			argv = append(argv, "--"+a.Name, wert)
+		}
 	}
 
 	// argv statt einer Shell-Zeile: die Werte kommen hier zwar von einem
 	// Menschen, aber im Ernstfall von einem Modell — und das Plugin ruft
 	// das Skript ebenso auf. Ein Testlauf, der anders aufruft als der
 	// Ernstfall, prüft das Falsche.
-	var argv []string
-	for _, a := range gefunden.Args {
-		wert, da := werte[a.Name]
-		if !da {
-			continue
-		}
-		argv = append(argv, "--"+a.Name, wert)
-	}
 	skript := filepath.Join(root, gefunden.Skript)
 	ctx, abbruch := probeKontext(sandkasten)
 	defer abbruch()
@@ -246,7 +278,11 @@ func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Write
 	} else {
 		fmt.Fprintf(out, "WITHOUT A SANDBOX, with your rights — %s.\n", kasten.reason)
 	}
-	fmt.Fprintf(out, "Call: %s %s\n\n", gefunden.Skript, strings.Join(argv, " "))
+	fmt.Fprintf(out, "Call: %s %s\n", gefunden.Skript, strings.Join(argv, " "))
+	if vergleichen {
+		fmt.Fprintf(out, "Example by the Schmied — it predicts: %s\n", einzeiler(gefunden.Beispiel.Erwartet))
+	}
+	fmt.Fprintln(out)
 
 	runErr := cmd.Run()
 	exitCode := 0
@@ -308,7 +344,7 @@ func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Write
 			antwort, _ := bufio.NewReader(in).ReadString('\n')
 			switch strings.ToLower(strings.TrimSpace(antwort)) {
 			case "j", "ja", "y", "yes":
-				zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode)
+				zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode, "")
 				if err != nil {
 					fmt.Fprintf(errw, "trial run not recorded: %v\n", err)
 					return 1
@@ -325,10 +361,34 @@ func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Write
 		return 1
 	}
 
+	// Der Vergleich mit der Vorhersage. Er ist die einzige Stelle, an der
+	// eine Maschine über die AUSGABE urteilen darf — und sie darf es nur
+	// in eine Richtung: eine Abweichung widerlegt, was der Schmied
+	// behauptet hat. Eine Übereinstimmung bestätigt nichts, denn
+	// Vorhersage und Skript stammen vom selben Modell.
+	expect := ""
+	if vergleichen && exitCode == 0 {
+		if strings.TrimSpace(stdout.String()) == strings.TrimSpace(gefunden.Beispiel.Erwartet) {
+			expect = bau.ExpectMatch
+		} else {
+			expect = bau.ExpectMismatch
+		}
+		fmt.Fprintln(out)
+		if expect == bau.ExpectMismatch {
+			fmt.Fprintln(out, "NOT what the Schmied predicted:")
+			fmt.Fprintf(out, "  expected: %s\n", einzeiler(gefunden.Beispiel.Erwartet))
+			fmt.Fprintf(out, "  got:      %s\n", einzeiler(stdout.String()))
+			fmt.Fprintln(out, "Exit 0 means it ran — this means it did the wrong thing.")
+		} else {
+			fmt.Fprintln(out, "Matches what the Schmied predicted.")
+			fmt.Fprintln(out, "He could not run it, so he had to know it — that is the point.")
+		}
+	}
+
 	// Der Probelauf KLASSIFIZIERT: er trägt sich in den Review-Block
 	// ein und macht daraus `actual` oder `invalid`. Genau so verlangt es
 	// die Intentionssemantik — durch Verifikation, nicht durch Setzen.
-	zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode)
+	zustand, err := vermerkeProbelauf(root, gefunden, argv, exitCode, expect)
 	if err != nil {
 		fmt.Fprintf(errw, "trial run not recorded: %v\n", err)
 		return 1
@@ -347,16 +407,34 @@ func toolTest(root, name string, rest []string, in io.Reader, out, errw io.Write
 	case bau.Invalid:
 		fmt.Fprintln(out, "No Hase gets it while that stays the case.")
 	}
-	if exitCode != 0 {
+	// Der Exit des BEFEHLS folgt dem Zustand, nicht dem des Skripts.
+	// Beides fällt sonst auseinander, sobald eine Vorhersage widerlegt
+	// wird: das Skript endet mit 0, das Werkzeug ist trotzdem `invalid`,
+	// und wer `tool test` in einem Skript aufruft, hielte das für Erfolg.
+	if exitCode != 0 || zustand == bau.Invalid {
 		return 1
 	}
 	return 0
 }
 
+// einzeiler macht eine Ausgabe in einer Zeile zitierbar. Mehrzeiliges
+// wird nach der ersten Zeile abgeschnitten — die volle Ausgabe steht
+// ohnehin darüber, hier geht es nur um den Vergleich.
+func einzeiler(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "(empty)"
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strconv.Quote(s[:i]) + " …"
+	}
+	return strconv.Quote(s)
+}
+
 // vermerkeProbelauf schreibt das Ergebnis in den Review-Block. Der Hash
 // bleibt dabei unberührt — er läuft über den Body OHNE Block, ein
 // Eintrag im Block macht das Review also nicht ungültig.
-func vermerkeProbelauf(root string, t *bau.Tool, argv []string, exitCode int) (bau.Zustand, error) {
+func vermerkeProbelauf(root string, t *bau.Tool, argv []string, exitCode int, expect string) (bau.Zustand, error) {
 	pfad := filepath.Join(root, t.Skript)
 	roh, err := os.ReadFile(pfad)
 	if err != nil {
@@ -366,6 +444,7 @@ func vermerkeProbelauf(root string, t *bau.Tool, argv []string, exitCode int) (b
 	review.VerifiedAt = bau.JetztStempel()
 	review.VerifiedWith = strings.Join(argv, " ")
 	review.VerifiedExit = &exitCode
+	review.VerifiedExpect = expect
 
 	neu := bau.SchreibeReviewBlock(review, body)
 	info, err := os.Stat(pfad)
@@ -757,18 +836,24 @@ func toolRelease(root, name string, ja bool, in io.Reader, out, errw io.Writer) 
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	for _, quelle := range []string{t.Skript, t.Manifest} {
-		ziel := filepath.Join(bau.ToolsDir, filepath.Base(quelle))
-		if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
-			fmt.Fprintf(errw, "hasenbau tool release: %s is already there — nothing moved\n", ziel)
-			return 1
-		}
-		if err := os.Rename(filepath.Join(root, quelle), filepath.Join(root, ziel)); err != nil {
-			fmt.Fprintln(errw, err)
-			return 1
-		}
-		fmt.Fprintf(out, "moved: %s → %s\n", quelle, ziel)
+	// Der ganze ORDNER wandert, nicht Datei für Datei: das Beispiel geht
+	// mit, und damit bleibt der Probelauf nach der Freigabe fahrbar —
+	// gerade dann, wenn ein Werkzeug später `outdated` wird und jemand
+	// wissen will, was es einmal getan hat.
+	ziel := filepath.Join(bau.ToolsDir, t.Name)
+	if _, err := os.Stat(filepath.Join(root, ziel)); err == nil {
+		fmt.Fprintf(errw, "hasenbau tool release: %s is already there — nothing moved\n", ziel)
+		return 1
 	}
+	if err := os.MkdirAll(filepath.Join(root, bau.ToolsDir), 0o755); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	if err := os.Rename(filepath.Join(root, t.Ordner), filepath.Join(root, ziel)); err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	fmt.Fprintf(out, "moved: %s → %s\n", t.Ordner, ziel)
 	fmt.Fprintf(out, "\n%s is %s — %s\n", name, bau.Actual, bau.Actual.Erklaerung())
 	fmt.Fprintf(out, "It gets registered at the next server start —\n")
 	fmt.Fprintln(out, "and only if the hash still matches the review then.")

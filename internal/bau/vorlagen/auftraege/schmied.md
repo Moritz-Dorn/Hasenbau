@@ -20,18 +20,19 @@ raeume:
   work: raeume/schmiede/work/
   # Das Schreibrecht des Schmieds entsteht ausschließlich hier: der
   # out-Raum wird zum einzigen erlaubten edit-Pattern des generierten
-  # Agenten (PLAN.md §6). entwurf/ und nicht tools/, damit kein Lauf ein
-  # benutztes Werkzeug überschreiben kann — und damit zwischen dem, was
-  # ein Modell geschrieben hat, und dem, was ein Hase rufen darf, ein
-  # Mensch steht.
-  out: tools/entwurf/
+  # Agenten (PLAN.md §6). drafts/ und nicht released/, damit kein Lauf
+  # ein benutztes Werkzeug überschreiben kann — und damit zwischen dem,
+  # was ein Modell geschrieben hat, und dem, was ein Hase rufen darf,
+  # ein Mensch steht.
+  out: tools/drafts/
 
 context:
   - file: $TRIGGER_FILE
 ---
 
-Im Kontext unten steht ein Werkzeug-Wunsch. Bau daraus ein Skript und
-sein Manifest, beide in deinen out-Raum, beide mit demselben Namen.
+Im Kontext unten steht ein Werkzeug-Wunsch. Bau daraus einen
+Werkzeug-Ordner in deinem out-Raum: Skript, Manifest und ein Beispiel,
+an dem sich zeigen lässt, dass es tut, was du sagst.
 
 Prüfe zuerst, ob der Wunsch überhaupt ein Werkzeug beschreibt: eine
 Aufgabe, eine Eingabe, eine Ausgabe. Verlangt er einen Interpreter oder

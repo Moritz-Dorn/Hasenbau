@@ -102,8 +102,8 @@ func TestBeispieleGenerierenGolden(t *testing.T) {
 // der später IM SERVER-PROZESS läuft — außerhalb der Sandbox, in der
 // die Hasen sitzen. Zwischen dem, was ein Modell geschrieben hat, und
 // dem, was ein Hase rufen darf, muss deshalb ein Mensch stehen. Das
-// Schreibrecht auf tools/entwurf/ und nirgends sonst ist die technische
-// Hälfte dieser Zusage; die andere ist, dass tools/entwurf/ nicht
+// Schreibrecht auf tools/drafts/ und nirgends sonst ist die technische
+// Hälfte dieser Zusage; die andere ist, dass tools/drafts/ nicht
 // registriert wird (internal/bau/tools.go).
 func TestSchmiedSchreibtNurInDenEntwurfsraum(t *testing.T) {
 	root := filepath.Join("..", "bau", "vorlagen")
@@ -136,16 +136,16 @@ func TestSchmiedSchreibtNurInDenEntwurfsraum(t *testing.T) {
 			allows = append(allows, strings.TrimSpace(zeile))
 		}
 	}
-	erwartet := []string{`"raeume/schmiede/work/**": allow`, `"tools/entwurf/**": allow`}
+	erwartet := []string{`"raeume/schmiede/work/**": allow`, `"tools/drafts/**": allow`}
 	if strings.Join(allows, "|") != strings.Join(erwartet, "|") {
 		t.Errorf("allow-Regeln = %v, erwartet %v", allows, erwartet)
 	}
-	// tools/ selbst ist die Freigabe-Stufe des Menschen. Schriebe der
+	// tools/released/ ist die Freigabe-Stufe des Menschen. Schriebe der
 	// Schmied dorthin, wäre der Lauf, der ein Werkzeug entwirft, zugleich
 	// der, der es scharf schaltet.
 	for _, a := range allows {
-		if strings.Contains(a, `"tools/**"`) || strings.Contains(a, `"tools/*.`) {
-			t.Errorf("Schreibrecht auf das freigegebene tools/: %q", a)
+		if strings.Contains(a, `"tools/**"`) || strings.Contains(a, `"tools/released`) {
+			t.Errorf("Schreibrecht auf das freigegebene tools/released/: %q", a)
 		}
 	}
 

@@ -56,6 +56,14 @@ const (
 	Outdated     Zustand = "outdated"
 )
 
+// Die beiden Werte von verified-expect. Sie beantworten eine engere
+// Frage als der Zustand: hat das Skript getan, was der Schmied
+// vorhergesagt hat? Fehlt das Feld, gab es keine Vorhersage.
+const (
+	ExpectMatch    = "match"
+	ExpectMismatch = "mismatch"
+)
+
 // Erklaerung sagt in einem Halbsatz, was der Zustand für dieses Werkzeug
 // bedeutet — die ValIntent-Namen sind präzise, aber nicht
 // selbsterklärend, und in einer Tabelle steht sonst nur ein Fremdwort.
@@ -118,6 +126,16 @@ type Review struct {
 	VerifiedAt   string
 	VerifiedWith string
 	VerifiedExit *int
+
+	// VerifiedExpect hält fest, ob die Ausgabe der Vorhersage des
+	// Schmieds entsprach (`example.expect` im Manifest): "match" oder
+	// "mismatch", leer wenn es keine Vorhersage gab.
+	//
+	// Bewusst NEBEN VerifiedExit und nicht darin: „lief durch" und „tat
+	// das Vorhergesagte" sind zwei Aussagen, und ein Skript kann
+	// tadellos mit Exit 0 das Falsche tun. Genau dieser Fall wäre sonst
+	// unsichtbar.
+	VerifiedExpect string
 
 	// ReleasedBy und ReleasedAt hält fest, wer die Ausgabe des
 	// Probelaufs für richtig befunden und das Werkzeug freigegeben hat.
@@ -282,9 +300,10 @@ func parseReviewBlock(block []string) Review {
 		Hash:         werte["body-sha256"],
 		Does:         werte["does"],
 		Safe:         werte["safe-because"],
-		VerifiedAt:   werte["verified-at"],
-		VerifiedWith: werte["verified-with"],
-		ReleasedBy:   werte["released-by"],
+		VerifiedAt:     werte["verified-at"],
+		VerifiedWith:   werte["verified-with"],
+		VerifiedExpect: werte["verified-expect"],
+		ReleasedBy:     werte["released-by"],
 		ReleasedAt:   werte["released-at"],
 		ValIntent:    werte["valintent"],
 	}
@@ -342,7 +361,14 @@ func LeiteZustandAb(r Review, body string) Zustand {
 	if r.Hash != BodyHash(body) {
 		return Outdated
 	}
+	// Zwei Wege, die widerlegen — und beide darf eine Maschine gehen. Der
+	// Probelauf ist gescheitert (Exit != 0), ODER er lief durch und tat
+	// dabei etwas anderes als der Schmied vorhergesagt hat. Der zweite
+	// Fall ist der unangenehmere: Exit 0 sieht wie Erfolg aus.
 	if r.VerifiedExit != nil && *r.VerifiedExit != 0 {
+		return Invalid
+	}
+	if r.VerifiedExpect == ExpectMismatch {
 		return Invalid
 	}
 	if r.ReleasedBy != "" {
@@ -380,6 +406,9 @@ func SchreibeReviewBlock(r Review, body string) string {
 		fmt.Fprintf(&b, "%s verified-with: %s\n", k, einzeilig(r.VerifiedWith))
 		if r.VerifiedExit != nil {
 			fmt.Fprintf(&b, "%s verified-exit: %d\n", k, *r.VerifiedExit)
+		}
+		if r.VerifiedExpect != "" {
+			fmt.Fprintf(&b, "%s verified-expect: %s\n", k, einzeilig(r.VerifiedExpect))
 		}
 	}
 	if r.ReleasedBy != "" {
