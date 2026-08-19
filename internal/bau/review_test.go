@@ -11,12 +11,17 @@ import argparse
 print("hallo")
 `
 
+// probeManifest steht fuer tool.json. Sein Inhalt ist egal — gebraucht
+// wird nur ein Hash, der zwischen Review und Ableitung derselbe ist.
+const probeManifest = `{"description": "Zaehlt Zeilen.", "script": "z.py"}`
+
 func beispielReview() Review {
 	return Review{
-		By:   "Moritz Dorn",
-		At:   "2026-08-13T08:00:00Z",
-		Does: "Zaehlt die Zeilen einer Datei und meldet die Zahl.",
-		Safe: "Liest nur die genannte Datei, kein Netz, kein subprocess, kein eval.",
+		ManifestHash: ManifestHash(probeManifest),
+		By:           "Moritz Dorn",
+		At:           "2026-08-13T08:00:00Z",
+		Does:         "Zaehlt die Zeilen einer Datei und meldet die Zahl.",
+		Safe:         "Liest nur die genannte Datei, kein Netz, kein subprocess, kein eval.",
 	}
 }
 
@@ -42,7 +47,7 @@ func TestReviewRoundtrip(t *testing.T) {
 	if !strings.Contains(r.Safe, "kein subprocess") {
 		t.Errorf("safe-because ging beim Umbruch verloren: %q", r.Safe)
 	}
-	if z := LeiteZustandAb(r, body); z != Hypothetical {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("Zustand = %q, erwartet hypothetical — gelesen, aber nicht ausgefuehrt", z)
 	}
 }
@@ -54,7 +59,7 @@ func TestZustandOhneReviewIstGenerated(t *testing.T) {
 	if body != skriptOhneReview {
 		t.Errorf("Body ohne Block veraendert")
 	}
-	if z := LeiteZustandAb(r, body); z != Generated {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Generated {
 		t.Errorf("Zustand = %q, erwartet generated", z)
 	}
 }
@@ -77,14 +82,14 @@ func TestGeaendertesSkriptWirdOutdated(t *testing.T) {
 	mitBlock := SchreibeReviewBlock(rev, skriptOhneReview)
 
 	r, body := LiesReview([]byte(mitBlock))
-	if z := LeiteZustandAb(r, body); z != Actual {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Actual {
 		t.Fatalf("Zustand nach erfolgreichem Probelauf = %q, erwartet actual", z)
 	}
 
 	// Eine einzige Zeile dazu — und zwar eine harmlos aussehende.
 	geaendert := strings.Replace(mitBlock, `print("hallo")`, "import os\nprint(\"hallo\")", 1)
 	r2, body2 := LiesReview([]byte(geaendert))
-	if z := LeiteZustandAb(r2, body2); z != Outdated {
+	if z := LeiteZustandAb(r2, body2, ManifestHash(probeManifest)); z != Outdated {
 		t.Errorf("Zustand nach Aenderung = %q, erwartet outdated — sonst haelt die Bindung nicht", z)
 	}
 }
@@ -97,7 +102,7 @@ func TestGescheiterterProbelaufIstInvalid(t *testing.T) {
 	rev.VerifiedAt = "2026-08-13T08:05:00Z"
 	rev.VerifiedExit = &eins
 	r, body := LiesReview([]byte(SchreibeReviewBlock(rev, skriptOhneReview)))
-	if z := LeiteZustandAb(r, body); z != Invalid {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Invalid {
 		t.Errorf("Zustand = %q, erwartet invalid", z)
 	}
 }
@@ -119,7 +124,7 @@ func TestKaputterBlockGiltAlsUngelesen(t *testing.T) {
 			if r.Fehler == "" {
 				t.Errorf("kaputter Block wurde als gueltig gelesen")
 			}
-			if z := LeiteZustandAb(r, body); z != Generated {
+			if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Generated {
 				t.Errorf("Zustand = %q, erwartet generated", z)
 			}
 		})
@@ -143,7 +148,19 @@ func TestGefaelschterBlockNuetztNichts(t *testing.T) {
 		"import os\nos.system('boeses')\n"
 
 	r, body := LiesReview([]byte(gefaelscht))
-	if z := LeiteZustandAb(r, body); z == Actual {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Generated {
+		t.Errorf("Zustand = %q, erwartet generated — dem Block fehlt manifest-sha256, "+
+			"er ist damit unvollstaendig", z)
+	}
+
+	// Und auch mit vollstaendigem Blockgeruest bleibt es wirkungslos,
+	// solange der Body-Hash nicht passt. Sonst schuetzte oben nur die
+	// Unkenntnis des Faelschers ueber das Feld, nicht die Bindung.
+	mitManifest := strings.Replace(gefaelscht,
+		"# does: harmlos\n",
+		"# manifest-sha256: "+ManifestHash(probeManifest)+"\n# does: harmlos\n", 1)
+	r, body = LiesReview([]byte(mitManifest))
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z == Actual {
 		t.Errorf("ein selbstgeschriebener Block macht das Werkzeug actual — die Bindung haelt nicht")
 	} else if z != Outdated {
 		t.Errorf("Zustand = %q, erwartet outdated (Hash passt nicht zum Body)", z)
@@ -166,7 +183,7 @@ func TestAbgeleiteterZustandSchlaegtEingetragenen(t *testing.T) {
 	if r.ValIntent != "actual" {
 		t.Fatalf("der eingetragene Wert wurde nicht gelesen: %q", r.ValIntent)
 	}
-	if z := LeiteZustandAb(r, body); z != Hypothetical {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("abgeleiteter Zustand = %q, erwartet hypothetical — der Eintrag darf nicht zaehlen", z)
 	}
 }
@@ -189,7 +206,7 @@ func TestReviewBlockInSlashKommentaren(t *testing.T) {
 	if body != ts {
 		t.Errorf("Body veraendert:\n%q\nerwartet\n%q", body, ts)
 	}
-	if z := LeiteZustandAb(r, body); z != Hypothetical {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("Zustand = %q", z)
 	}
 	if r.Kommentar != "//" {
@@ -207,7 +224,7 @@ func TestBestandenerProbelaufBleibtHypothetical(t *testing.T) {
 	rev.VerifiedAt = "2026-08-13T08:05:00Z"
 	rev.VerifiedExit = &null
 	r, body := LiesReview([]byte(SchreibeReviewBlock(rev, skriptOhneReview)))
-	if z := LeiteZustandAb(r, body); z != Hypothetical {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("Zustand = %q, erwartet hypothetical — ein Erfolg ist ein Beleg, kein Urteil", z)
 	}
 
@@ -215,7 +232,7 @@ func TestBestandenerProbelaufBleibtHypothetical(t *testing.T) {
 	eins := 1
 	rev.VerifiedExit = &eins
 	r2, body2 := LiesReview([]byte(SchreibeReviewBlock(rev, skriptOhneReview)))
-	if z := LeiteZustandAb(r2, body2); z != Invalid {
+	if z := LeiteZustandAb(r2, body2, ManifestHash(probeManifest)); z != Invalid {
 		t.Errorf("Zustand nach Fehlschlag = %q, erwartet invalid", z)
 	}
 }
@@ -245,7 +262,7 @@ func TestOutdatedStehtNieInDerDatei(t *testing.T) {
 
 	geaendert := strings.Replace(mitBlock, `print("hallo")`, "import os\nprint(\"hallo\")", 1)
 	r, body := LiesReview([]byte(geaendert))
-	if z := LeiteZustandAb(r, body); z != Outdated {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Outdated {
 		t.Fatalf("abgeleitet = %q, erwartet outdated", z)
 	}
 	if r.ValIntent != string(Actual) {
@@ -285,7 +302,7 @@ func TestSetzeValIntentLaesstDenHashInRuhe(t *testing.T) {
 	}
 	// Und der entscheidende Teil: es bleibt outdated. Waere der Hash neu
 	// berechnet worden, staende hier wieder actual.
-	if z := LeiteZustandAb(r, body); z != Outdated {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Outdated {
 		t.Errorf("Zustand nach dem Eintrag = %q, erwartet outdated — die Aenderung wurde gesegnet", z)
 	}
 	// Der Rest des Blocks bleibt unangetastet.
@@ -311,7 +328,7 @@ func TestBlockOhneSchlusszeileGiltAlsUngelesen(t *testing.T) {
 	if r.Fehler == "" {
 		t.Error("ein Block ohne Schlusszeile wurde als gueltig gelesen")
 	}
-	if z := LeiteZustandAb(r, body); z != Generated {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Generated {
 		t.Errorf("Zustand = %q, erwartet generated", z)
 	}
 }
@@ -330,7 +347,7 @@ func TestKommentarUnterDemBlockBleibtImBody(t *testing.T) {
 	if !strings.Contains(body, "# TODO") {
 		t.Errorf("der Nutzer-Kommentar wurde in den Block gezogen:\nbody=%q", body)
 	}
-	if z := LeiteZustandAb(r, body); z != Hypothetical {
+	if z := LeiteZustandAb(r, body, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("Zustand = %q, erwartet hypothetical — das Review darf sich nicht selbst ungueltig machen", z)
 	}
 	// Und beim naechsten Schreiben (Probelauf) bleibt er erhalten.
@@ -342,7 +359,7 @@ func TestKommentarUnterDemBlockBleibtImBody(t *testing.T) {
 		t.Errorf("der Kommentar ging beim zweiten Schreiben verloren:\n%s", nochmal)
 	}
 	r2, body2 := LiesReview([]byte(nochmal))
-	if z := LeiteZustandAb(r2, body2); z != Hypothetical {
+	if z := LeiteZustandAb(r2, body2, ManifestHash(probeManifest)); z != Hypothetical {
 		t.Errorf("Zustand nach dem zweiten Schreiben = %q", z)
 	}
 }

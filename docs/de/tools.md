@@ -101,6 +101,7 @@ ihre Zeilen nach:
 # reviewed-by: Moritz Dorn
 # reviewed-at: 2026-08-13T14:02:11+02:00
 # body-sha256: 9f2c…
+# manifest-sha256: 41ab…
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
@@ -113,6 +114,14 @@ ihre Zeilen nach:
 # hasenbau-review-end
 import argparse
 ```
+
+Zwei Hashes, nicht einer: `body-sha256` deckt das Skript ab,
+`manifest-sha256` die `tool.json`. Das Manifest gehört zum Gelesenen —
+es sagt, wofür das Werkzeug da ist, was es entgegennimmt und was der
+Schmied vorhersagt —, also macht eine Änderung daran das Review ebenso
+ungültig wie eine am Skript. Ein Block ohne `manifest-sha256` gilt als
+unvollständig, auch jeder, der vor dieser Regel geschrieben wurde;
+`get tools` sagt das, statt einen rätseln zu lassen.
 
 Damit ist das Review an genau den Inhalt gebunden, der gelesen wurde:
 eine Zeile geändert, und es gilt nicht mehr, auch dem Reviewer selbst

@@ -452,6 +452,8 @@ func getToolFreigegeben(root string, werkzeuge []bau.Tool, out io.Writer) int {
 		}
 		frei := strings.Join(nutzer[t.Name], ", ")
 		switch {
+		case t.ReviewVeraltet():
+			frei = "—  (review predates manifest-sha256 — read it again)"
 		case !t.Einsatzbereit():
 			// Ein Auftrag darf es nennen — bekommen tut es der Hase
 			// trotzdem nicht. Das gehört in dieselbe Zeile, sonst sucht
@@ -487,9 +489,14 @@ func getToolEntwuerfe(werkzeuge []bau.Tool, out io.Writer) int {
 			ungelesen++
 		}
 		von := t.Review.By
-		if von == "" {
+		switch {
+		case von == "":
 			von = "—  (" + t.Zustand.Erklaerung() + ")"
-		} else if t.Zustand != bau.Actual {
+		case t.ReviewVeraltet():
+			// Sonst stünde hier ein Name neben „unread" und niemand
+			// wüsste, warum (Hasenbau-cgx).
+			von = von + "  (review predates manifest-sha256 — read it again)"
+		case t.Zustand != bau.Actual:
 			von = von + "  (" + t.Zustand.Erklaerung() + ")"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", t.Name, t.Zustand, t.Zeilen, von)

@@ -98,6 +98,7 @@ afterwards:
 # reviewed-by: Moritz Dorn
 # reviewed-at: 2026-08-13T14:02:11+02:00
 # body-sha256: 9f2c…
+# manifest-sha256: 41ab…
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
@@ -110,6 +111,14 @@ afterwards:
 # hasenbau-review-end
 import argparse
 ```
+
+Two hashes, not one: `body-sha256` covers the script, `manifest-sha256`
+covers `tool.json`. The manifest is part of what was read — it says what
+the tool is for, what it takes, and what the Schmied predicts — so
+changing it invalidates the review just as changing the script does. A
+block without `manifest-sha256` counts as incomplete, which includes
+every block written before this rule; `get tools` says so instead of
+leaving you to wonder.
 
 This binds the review to exactly the content that was read: change one
 line and it no longer holds, not even towards the reviewer themselves.

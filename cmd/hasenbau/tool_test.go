@@ -37,6 +37,10 @@ func bauMitManifest(t *testing.T, name, skript string, gelesen bool, manifest st
 			At:   "2026-08-13T08:00:00Z",
 			Does: "Tut, was der Test braucht.",
 			Safe: "Liest nichts, schreibt nichts, kein Netz.",
+			// Gelesen heisst: Skript UND Manifest gelesen (Hasenbau-cgx).
+			// Ohne diesen Hash waere der Block unvollstaendig und das
+			// Werkzeug trotz Block `generated`.
+			ManifestHash: bau.ManifestHash(manifest),
 		}, skript)
 	}
 	if err := os.WriteFile(filepath.Join(dir, name+".py"), []byte(inhalt), 0o755); err != nil {
@@ -553,5 +557,107 @@ func TestFreigabeNimmtDenGanzenOrdner(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, bau.ToolsEntwurfDir, "zaehlt")); err == nil {
 		t.Error("der Entwurfsordner steht noch da — verschoben heisst verschoben")
+	}
+}
+
+// TestManifestAendernMachtOutdated: das Review haengt an dem, was
+// gelesen wurde — und dazu gehoert das Manifest (Hasenbau-cgx). Es sagt
+// mit `description`, wozu ein Modell das Werkzeug ruft, mit `args`, was
+// es entgegennimmt, und mit `example`, was der Schmied vorhersagt.
+// Bis heute lag es ausserhalb des Hashes: ein freigegebenes Werkzeug
+// blieb `actual`, auch wenn danach jemand seine Beschreibung austauschte.
+//
+// Aufgefallen beim Migrieren des Test-Baus, wo genau das passierte —
+// ein nachtraeglich eingefuegter example-Block, den nie jemand gelesen
+// hat, und der Zustand blieb stehen.
+func TestManifestAendernMachtOutdated(t *testing.T) {
+	root := bauMitBeispiel(t, "zaehlt", "3")
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "tool", "test", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("Probelauf: %s", errw.String())
+	}
+	if code := run([]string{"-bau", root, "tool", "release", "-yes", "zaehlt"}, &out, &errw); code != 0 {
+		t.Fatalf("release: %s", errw.String())
+	}
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Actual {
+		t.Fatalf("Vorbedingung: Zustand = %q, erwartet actual", werkzeuge[0].Zustand)
+	}
+
+	// Jetzt die Beschreibung austauschen — das Skript bleibt unberuehrt.
+	pfad := filepath.Join(root, bau.ToolsDir, "zaehlt", bau.ToolManifest)
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	geaendert := strings.Replace(string(roh), "Zaehlt Zeilen.", "Loescht das Lager.", 1)
+	if geaendert == string(roh) {
+		t.Fatal("die Beschreibung wurde nicht ersetzt — Fixture geaendert?")
+	}
+	if err := os.WriteFile(pfad, []byte(geaendert), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	werkzeuge, err = bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Outdated {
+		t.Errorf("Zustand nach der Manifest-Aenderung = %q, erwartet outdated — "+
+			"gelesen wurde eine andere Beschreibung", werkzeuge[0].Zustand)
+	}
+	if werkzeuge[0].Einsatzbereit() {
+		t.Error("das Werkzeug ist weiter einsatzbereit — ein Hase bekaeme es mit der neuen Beschreibung")
+	}
+}
+
+// TestAltesReviewNenntSeinenGrund: ein Block aus der Zeit vor
+// manifest-sha256 macht das Werkzeug `generated`. In der Tabelle stuende
+// dann ein Name neben "unread" — ein Widerspruch, bei dem der
+// Betroffene den Fehler bei sich sucht. Er ist keiner (Hasenbau-cgx).
+func TestAltesReviewNenntSeinenGrund(t *testing.T) {
+	root := bauMitWerkzeug(t, "alt", skriptHeil, true)
+
+	// Den Manifest-Hash aus dem Block entfernen — so sah jeder Block vor
+	// dieser Aenderung aus.
+	pfad := filepath.Join(root, bau.ToolsEntwurfDir, "alt", "alt.py")
+	roh, err := os.ReadFile(pfad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var behalten []string
+	for _, zeile := range strings.Split(string(roh), "\n") {
+		if !strings.Contains(zeile, "manifest-sha256") {
+			behalten = append(behalten, zeile)
+		}
+	}
+	if len(behalten) == len(strings.Split(string(roh), "\n")) {
+		t.Fatal("der Block trug gar kein manifest-sha256 — Fixture geaendert?")
+	}
+	if err := os.WriteFile(pfad, []byte(strings.Join(behalten, "\n")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	werkzeuge, err := bau.LadeTools(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if werkzeuge[0].Zustand != bau.Generated {
+		t.Errorf("Zustand = %q, erwartet generated — der Block ist unvollstaendig", werkzeuge[0].Zustand)
+	}
+	if !werkzeuge[0].ReviewVeraltet() {
+		t.Error("der Fall wird nicht als veraltetes Review erkannt")
+	}
+
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", root, "get", "tools", "-drafts"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d — %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "manifest-sha256") {
+		t.Errorf("die Tabelle nennt den Grund nicht:\n%s", out.String())
 	}
 }

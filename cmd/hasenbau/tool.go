@@ -454,7 +454,14 @@ func vermerkeProbelauf(root string, t *bau.Tool, argv []string, exitCode int, ex
 	if err := os.WriteFile(pfad, []byte(neu), info.Mode().Perm()); err != nil {
 		return "", err
 	}
-	return bau.LeiteZustandAb(review, body), nil
+	// Den Manifest-Hash frisch rechnen statt den aus dem Block zu
+	// nehmen: sonst verglichen wir ihn mit sich selbst und bekämen nie
+	// `outdated` zu sehen.
+	manifestRoh, err := os.ReadFile(filepath.Join(root, t.Manifest))
+	if err != nil {
+		return "", err
+	}
+	return bau.LeiteZustandAb(review, body, bau.ManifestHash(string(manifestRoh))), nil
 }
 
 // parseToolArgs liest `--name wert` gegen das Manifest. Ein unbekannter
@@ -625,7 +632,19 @@ func toolReview(root string, args []string, in io.Reader, out, errw io.Writer) i
 		return 1
 	}
 
-	review := bau.Review{By: name, At: bau.JetztStempel(), Does: does, Safe: safe}
+	// Das Manifest gehört zum Gelesenen: `description` sagt einem Modell,
+	// wofür es das Werkzeug ruft, `example` trägt die Vorhersage des
+	// Schmieds. Ohne diesen Hash wäre der Block unvollständig, und das
+	// Werkzeug bliebe nach seinem eigenen Review `generated`.
+	manifestRoh, err := os.ReadFile(filepath.Join(root, t.Manifest))
+	if err != nil {
+		fmt.Fprintln(errw, err)
+		return 1
+	}
+	review := bau.Review{
+		By: name, At: bau.JetztStempel(), Does: does, Safe: safe,
+		ManifestHash: bau.ManifestHash(string(manifestRoh)),
+	}
 	info, err := os.Stat(pfad)
 	if err != nil {
 		fmt.Fprintln(errw, err)

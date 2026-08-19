@@ -113,9 +113,20 @@ const ReviewVersion = "1"
 // Review ist der geparste Block. Die Feldnamen im Block sind englisch
 // wie alle Formatschlüssel (PLAN §1); der Freitext darin ist deutsch.
 type Review struct {
-	By     string // reviewed-by
-	At     string // reviewed-at
-	Hash   string // body-sha256, über das Skript OHNE den Block
+	By   string // reviewed-by
+	At   string // reviewed-at
+	Hash string // body-sha256, über das Skript OHNE den Block
+
+	// ManifestHash ist `manifest-sha256` über tool.json, roh.
+	//
+	// Er steht NEBEN dem Skript-Hash, weil beide verschiedene Fragen
+	// beantworten und man im Zweifel wissen will, welche der beiden
+	// nicht mehr stimmt. Ohne ihn hing das Review nur am Code — dabei
+	// entscheidet das Manifest mit `description`, wofür ein Modell das
+	// Werkzeug überhaupt ruft, und mit `example`, was der Schmied
+	// vorhersagt (Hasenbau-cgx).
+	ManifestHash string
+
 	Does   string // does — was der Reviewer glaubt, dass es tut
 	Safe   string // safe-because — warum er es für unbedenklich hält
 	Rest   string // was sonst noch im Block stand
@@ -298,6 +309,7 @@ func parseReviewBlock(block []string) Review {
 		By:           werte["reviewed-by"],
 		At:           werte["reviewed-at"],
 		Hash:         werte["body-sha256"],
+		ManifestHash: werte["manifest-sha256"],
 		Does:         werte["does"],
 		Safe:         werte["safe-because"],
 		VerifiedAt:     werte["verified-at"],
@@ -338,6 +350,14 @@ func BodyHash(body string) string {
 	return hex.EncodeToString(summe[:])
 }
 
+// ManifestHash ist derselbe Hash über den ROHEN Inhalt von tool.json —
+// nicht über normalisiertes JSON. Wer die Datei umformatiert, macht das
+// Werkzeug damit `outdated`, und das ist die richtige Richtung: gelesen
+// wurde die Datei, nicht ihre Bedeutung.
+func ManifestHash(roh string) string {
+	return BodyHash(roh)
+}
+
 // LeiteZustandAb rechnet den ValIntent-Wert aus Block und Body aus.
 //
 // Die Reihenfolge trägt die Bedeutung, und die Asymmetrie in der Mitte
@@ -354,11 +374,17 @@ func BodyHash(body string) string {
 // Differenz-Test dagegen sind weg. Wer die Regel hier ändert, ändert
 // sie überall — und wer sie im Plugin nachbauen will, liest erst
 // PLAN §3.
-func LeiteZustandAb(r Review, body string) Zustand {
-	if r.Hash == "" || r.Fehler != "" {
+func LeiteZustandAb(r Review, body, manifestHash string) Zustand {
+	// Ein Block ohne einen der beiden Hashes ist unvollständig, und ein
+	// unvollständiger Block ist kein Review. Das trifft auch Werkzeuge
+	// aus der Zeit vor `manifest-sha256` — absichtlich: niemand hat ihr
+	// Manifest je unter dieser Zusage gelesen, und eine stille Ausnahme
+	// hieße zwei Klassen von Reviews, denen man die schwächere nicht
+	// ansieht (Hasenbau-cgx).
+	if r.Hash == "" || r.ManifestHash == "" || r.Fehler != "" {
 		return Generated
 	}
-	if r.Hash != BodyHash(body) {
+	if r.Hash != BodyHash(body) || r.ManifestHash != manifestHash {
 		return Outdated
 	}
 	// Zwei Wege, die widerlegen — und beide darf eine Maschine gehen. Der
@@ -399,6 +425,14 @@ func SchreibeReviewBlock(r Review, body string) string {
 	fmt.Fprintf(&b, "%s reviewed-by: %s\n", k, einzeilig(r.By))
 	fmt.Fprintf(&b, "%s reviewed-at: %s\n", k, einzeilig(r.At))
 	fmt.Fprintf(&b, "%s body-sha256: %s\n", k, BodyHash(body))
+	// Anders als body-sha256 kommt dieser Hash aus dem Feld: das Manifest
+	// liegt in einer anderen Datei, und diese Funktion sieht nur das
+	// Skript. Wer ihn nicht setzt, erzeugt einen unvollständigen Block —
+	// das Werkzeug gilt dann als ungelesen, und das ist die sichere
+	// Richtung.
+	if r.ManifestHash != "" {
+		fmt.Fprintf(&b, "%s manifest-sha256: %s\n", k, einzeilig(r.ManifestHash))
+	}
 	schreibeFeld(&b, k, "does", r.Does)
 	schreibeFeld(&b, k, "safe-because", r.Safe)
 	if r.VerifiedAt != "" {
@@ -424,7 +458,7 @@ func SchreibeReviewBlock(r Review, body string) string {
 	geschrieben := r
 	geschrieben.Hash = BodyHash(body)
 	geschrieben.Fehler = ""
-	fmt.Fprintf(&b, "%s valintent: %s\n", k, LeiteZustandAb(geschrieben, body))
+	fmt.Fprintf(&b, "%s valintent: %s\n", k, LeiteZustandAb(geschrieben, body, geschrieben.ManifestHash))
 	fmt.Fprintf(&b, "%s %s\n", k, ReviewEnde)
 	b.WriteString(rest)
 	return b.String()

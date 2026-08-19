@@ -62,6 +62,18 @@ type Tool struct {
 	Zeilen  int // des Skripts, damit man weiß, wie viel zu lesen ist
 }
 
+// ReviewVeraltet erkennt den einen Fall, der sonst widersprüchlich
+// aussieht: ein Block ist da und trägt einen Namen, aber er stammt aus
+// der Zeit vor `manifest-sha256` (Hasenbau-cgx). Der Zustand ist dann
+// `generated` — „ungelesen" —, während daneben steht, wer gelesen hat.
+//
+// Ohne diesen Hinweis sucht der Betroffene den Fehler bei sich. Er ist
+// keiner: das Manifest hat unter der alten Zusage niemand geprüft, und
+// deshalb zählt das Review nicht mehr.
+func (t Tool) ReviewVeraltet() bool {
+	return t.Review.By != "" && t.Review.Fehler == "" && t.Review.ManifestHash == ""
+}
+
 // Einsatzbereit heißt: dieses Werkzeug darf einem Hasen gegeben werden.
 // Beides muss stimmen — verschoben UND im Probelauf gezeigt. Ein
 // `hypothetical` ist gelesen, aber niemand hat es je laufen sehen; ein
@@ -180,12 +192,12 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		return Tool{}, fmt.Errorf("werkzeug %s (%s): %s", name, rel, fmt.Sprintf(format, args...))
 	}
 
-	roh, err := os.ReadFile(manifestPfad)
+	manifestRoh, err := os.ReadFile(manifestPfad)
 	if err != nil {
 		return fehler("%v", err)
 	}
 	var m manifest
-	dec := json.NewDecoder(strings.NewReader(string(roh)))
+	dec := json.NewDecoder(strings.NewReader(string(manifestRoh)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&m); err != nil {
 		return fehler("manifest: %v (erlaubt: description, script, args, example)", err)
@@ -263,7 +275,7 @@ func ladeTool(root, dir, manifestPfad string) (Tool, error) {
 		Beispiel:     m.Beispiel,
 		Entwurf:      dir == ToolsEntwurfDir,
 		Review:       review,
-		Zustand:      LeiteZustandAb(review, body),
+		Zustand:      LeiteZustandAb(review, body, ManifestHash(string(manifestRoh))),
 		Zeilen:       strings.Count(string(roh), "\n"),
 	}, nil
 }

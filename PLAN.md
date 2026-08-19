@@ -517,6 +517,7 @@ Ergebnis eindeutig:
 # reviewed-by: Moritz Dorn
 # reviewed-at: 2026-08-13T14:02:11+02:00
 # body-sha256: 9f2c…
+# manifest-sha256: 41ab…
 # does: zählt die Zeilen einer Datei und gibt die Zahl auf stdout aus
 # safe-because: liest nur den übergebenen Pfad, schreibt nichts, kein Netz
 # verified-at: 2026-08-13T14:05:30+02:00
@@ -530,8 +531,20 @@ Ergebnis eindeutig:
 import argparse
 ```
 
-Pflicht sind die fünf Felder bis `safe-because`; fehlt eines, ist der
-Block unbrauchbar. `verified-*` trägt der Probelauf ein, `released-*`
+Pflicht sind die sechs Felder bis `safe-because`; fehlt eines, ist der
+Block unbrauchbar. **Zwei Hashes, nicht einer** (Hasenbau-cgx):
+`body-sha256` über das Skript, `manifest-sha256` über `tool.json`, roh.
+Das Manifest gehört zum Gelesenen — es sagt mit `description`, wofür ein
+Modell das Werkzeug ruft, mit `args`, was es entgegennimmt, und mit
+`example`, was der Schmied vorhersagt. Lag es außerhalb des Hashes,
+blieb ein freigegebenes Werkzeug `actual`, während jemand seine
+Beschreibung austauschte. Getrennt bleiben die beiden, damit man sieht,
+WELCHE der zwei Aussagen nicht mehr stimmt.
+
+Ein Block ohne `manifest-sha256` gilt als unvollständig und damit als
+kein Review — auch der aus der Zeit davor. Eine Ausnahme für Altbestand
+hieße zwei Klassen von Reviews, denen man die schwächere nicht ansieht;
+`get tools` nennt den Fall stattdessen beim Namen. `verified-*` trägt der Probelauf ein, `released-*`
 die Freigabe. `verified-expect` steht bewusst NEBEN `verified-exit` und
 nicht darin: „lief durch" und „tat das Vorhergesagte" sind zwei
 Aussagen, und ein Skript kann tadellos mit Exit 0 das Falsche tun. Ohne
