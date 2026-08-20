@@ -18,7 +18,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -31,6 +33,16 @@ import (
 // Docker sucht ihn so, und zwei Dockerfiles in einem Bau wären eine
 // Frage, die niemand stellen wollte.
 const DockerfileName = "Dockerfile"
+
+// ComposeName ist die zweite Datei. Sie erklärt keine neue Sache,
+// sondern macht die drei Flags aus dem Kopf des Dockerfiles zu
+// Konfiguration — was man einmal aufschreibt, tippt man nicht jedesmal
+// falsch.
+const ComposeName = "docker-compose.yml"
+
+// dienst ist der Name des Compose-Dienstes und damit das, was hinter
+// `docker compose run --rm …` steht.
+const dienst = "hasenbau"
 
 // goFallback greift, wenn runtime.Version() nicht wie `go1.25.5`
 // aussieht (Tip-Builds melden Commit-Hashes).
@@ -83,11 +95,34 @@ func newDockerfile(root string, args []string, out, errw io.Writer) int {
 
 	fassung := opencodeFassung()
 	befund := providerBefund(root)
-	if code := writeNew(root, DockerfileName, dockerfileGeruest(fassung, befund), errw); code != 0 {
-		return code
+
+	// Zwei Dateien, eine Sache: das Dockerfile sagt, was drin ist, die
+	// Compose-Datei, wie es läuft. Jede wird für sich geschrieben —
+	// wer die eine von Hand angefasst hat, soll die andere trotzdem
+	// bekommen.
+	dateien := []struct{ rel, inhalt string }{
+		{DockerfileName, dockerfileGeruest(fassung, befund)},
+		{ComposeName, composeGeruest(befund)},
+	}
+	var geschrieben int
+	for _, d := range dateien {
+		if _, err := os.Stat(filepath.Join(root, d.rel)); err == nil {
+			fmt.Fprintf(errw, "hasenbau new dockerfile: %s already exists — left untouched.\n", d.rel)
+			continue
+		}
+		if code := writeNew(root, d.rel, d.inhalt, errw); code != 0 {
+			return code
+		}
+		fmt.Fprintf(out, "created: %s\n", d.rel)
+		geschrieben++
+	}
+	if geschrieben == 0 {
+		// Nichts getan ist hier kein Erfolg: derselbe Exit wie bei den
+		// anderen `new`-Ressourcen, wenn die Datei schon dasteht.
+		return 1
 	}
 
-	fmt.Fprintf(out, "created: %s\n\n", DockerfileName)
+	fmt.Fprintln(out)
 	if fassung != "" {
 		fmt.Fprintf(out, "opencode pinned to %s — the version in your PATH.\n", fassung)
 	} else {
@@ -95,11 +130,13 @@ func newDockerfile(root string, args []string, out, errw io.Writer) int {
 			"Set OPENCODE_VERSION yourself if you want a reproducible image.\n")
 	}
 	fmt.Fprint(out, "\nNext:\n"+
-		"  1. Read it. Three `docker run` flags in the header are not optional,\n"+
-		"     and each of them fails quietly when it is missing.\n"+
-		"  2. Add what YOUR Gänge call — the marked block at the end.\n"+
-		"  3. docker build -t meinbau - < "+DockerfileName+"\n"+
-		"  4. docker run --rm -v \"$PWD\":"+containerBau+" meinbau describe bau\n")
+		"  1. Read them. What the Dockerfile header calls not optional, the\n"+
+		"     compose file declares — so read the comments once, then use compose.\n"+
+		"  2. Add what YOUR Gänge call — the marked block at the end of the Dockerfile.\n"+
+		"  3. Put your provider key where "+ComposeName+" expects it, and\n"+
+		"     point apiKey at /run/secrets/… — the file says which path.\n"+
+		"  4. docker compose run --rm "+dienst+" describe bau\n"+
+		"  5. docker compose up -d\n")
 	return 0
 }
 
@@ -192,6 +229,10 @@ func dockerfileGeruest(opencodeVersion string, p providerbefund) string {
 		"# Nothing is copied from the build context, so do not send one:\n" +
 		"# `- < Dockerfile` keeps your Bau out of the daemon.\n" +
 		"#\n" +
+		"# Everything below is also declared in " + ComposeName + ", which was\n" +
+		"# written next to this file. `docker compose up -d` and you are done —\n" +
+		"# read this once, then use that.\n" +
+		"#\n" +
 		"#   docker run --rm -it \\\n" +
 		"#     --security-opt seccomp=unconfined \\\n" +
 		"#     -v \"$PWD\":" + containerBau + " \\\n" +
@@ -263,6 +304,102 @@ func dockerfileGeruest(opencodeVersion string, p providerbefund) string {
 
 	b.WriteString(eigenerBlock())
 	return b.String()
+}
+
+// composeGeruest schreibt die zweite Datei. Sie erfindet nichts: was
+// im Kopf des Dockerfiles als „nicht optional" steht, steht hier als
+// Konfiguration — ein Flag, das man aufschreibt, vergisst man nicht.
+//
+// Alle vier Eigenheiten darin sind am 2026-08-20 an Compose 2.36.0
+// gemessen: das Secret landet auf /run/secrets/<name> und ERBT die
+// Rechte der Host-Datei; ein `secrets:`-Eintrag auf eine fehlende
+// Datei bricht `up` ab; `${TZ:-…}` greift; und `$VAR` in einem
+// Compose-String ersetzt Compose, nicht die Shell.
+func composeGeruest(p providerbefund) string {
+	key := p.Beispiel + "-key"
+	return `# ` + ComposeName + ` — written by ` + "`hasenbau new dockerfile`" + `.
+#
+# The Dockerfile says what is in the image. This says how it runs: the
+# three flags its header calls not optional are declared here, so you
+# only have to read them once.
+#
+#   docker compose up -d                             # the daemon, in the background
+#   docker compose logs -f                           # what it is doing
+#   docker compose down                              # stop it
+#   docker compose run --rm ` + dienst + ` describe bau     # check the Bau
+#   docker compose run --rm ` + dienst + ` lauf <auftrag>   # one Auftrag by hand
+#
+# One thing worth doing once: ` + "`build`" + ` sends this whole directory to
+# the Docker daemon as context, your archiv/ included — even though the
+# Dockerfile copies nothing from it. A .dockerignore containing a single
+# ` + "`*`" + ` cuts that to nothing and the build still works. Measured: 200 MB
+# of context became 42 bytes.
+
+services:
+  ` + dienst + `:
+    build: .
+
+    # The daemon is meant to stay up. This is what Restart=always is in
+    # the systemd unit (PLAN.md §2).
+    restart: unless-stopped
+
+    # hasenbau is PID 1 in here, and it spawns opencode plus every Gang.
+    # PID 1 has to reap orphans; init: true puts a reaper in front of it
+    # so a Gang whose grandchild outlives it leaves no zombie behind.
+    init: true
+
+    # bwrap needs unprivileged user namespaces. Without this it answers
+    # "No permissions to create new namespace" — and then the plugin
+    # registers NO tool at all, which only the daemon log mentions.
+    security_opt:
+      - seccomp:unconfined
+
+    volumes:
+      # The Bau, read-write: state/hasenbau.db, the Räume and the
+      # generated agents all live in it.
+      - .:` + containerBau + `
+
+    environment:
+      # cron triggers run in this timezone. Unset means UTC, so a
+      # ` + "`0 10 * * *`" + ` would fire at 12. Set TZ in your shell or here.
+      TZ: ${TZ:-Europe/Berlin}
+
+    secrets:
+      - ` + key + `
+
+secrets:
+  # Create this file BEFORE the first ` + "`up`" + `, or compose stops with
+  #   secret file ... does not exist
+  # That is on purpose: a Bau without a key cannot make a Lauf anyway,
+  # and a container that starts and then fails every Lauf is worse.
+  #
+  #   mkdir -p ~/.secrets
+  #   printf %s 'your-api-key' > ~/.secrets/` + key + `
+  #   chmod 600 ~/.secrets/` + key + `
+  #
+  # ` + "`printf %s`" + `, not ` + "`echo`" + `: a trailing newline would travel into the
+  # Authorization header, and a key that is wrong by one invisible byte
+  # is the worst kind of wrong.
+  #
+  # The permissions of the host file are carried over unchanged, so the
+  # chmod above sticks. Inside, the file appears as
+  # /run/secrets/` + key + `, which is the path your Bau config
+  # points at:
+  #
+  #   "provider": {"` + p.Beispiel + `": {"options": {
+  #      "apiKey": "{file:/run/secrets/` + key + `}"}}}
+  ` + key + `:
+    file: ${HOME}/.secrets/` + key + `
+
+# Instead of the secret you can share your whole opencode data directory,
+# auth.json as usual. It is the only way that keeps an OAuth login
+# refreshable in here, and it also shares opencode.db, storage/ and log/
+# with your everyday opencode:
+#
+#     volumes:
+#       - .:` + containerBau + `
+#       - ${HOME}/.local/share/opencode:/root/.local/share/opencode
+`
 }
 
 // paketBlock schreibt die apt-Zeile und über jedem Paket den Grund.

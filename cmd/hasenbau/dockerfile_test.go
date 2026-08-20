@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // aufruf findet `exec.LookPath("x")`, `exec.Command("x", …)` und
@@ -195,6 +197,124 @@ func TestDockerfileHatDieBeidenGemessenenZeilen(t *testing.T) {
 	}
 }
 
+// Die Compose-Datei muss YAML SEIN, nicht nur so aussehen. Der
+// Platzhalter-Fall ist der interessante: `<provider-id>-key` als
+// Schlüssel steht in einer Sprache, in der spitze Klammern sonst etwas
+// bedeuten könnten.
+func TestComposeIstGueltigesYAML(t *testing.T) {
+	for _, p := range []providerbefund{
+		{Beispiel: "<provider-id>"},
+		{Zeile: "scc (custom)", Beispiel: "scc"},
+	} {
+		var doc struct {
+			Services map[string]struct {
+				Build       string            `yaml:"build"`
+				Restart     string            `yaml:"restart"`
+				Init        bool              `yaml:"init"`
+				SecurityOpt []string          `yaml:"security_opt"`
+				Volumes     []string          `yaml:"volumes"`
+				Environment map[string]string `yaml:"environment"`
+				Secrets     []string          `yaml:"secrets"`
+			} `yaml:"services"`
+			Secrets map[string]struct {
+				File string `yaml:"file"`
+			} `yaml:"secrets"`
+		}
+		text := composeGeruest(p)
+		if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+			t.Fatalf("Beispiel %q: kein gültiges YAML: %v\n%s", p.Beispiel, err, text)
+		}
+
+		s, da := doc.Services[dienst]
+		if !da {
+			t.Fatalf("Beispiel %q: kein Dienst %q", p.Beispiel, dienst)
+		}
+		// Die drei Zusagen, die im Kopf des Dockerfiles als "nicht
+		// optional" stehen — hier als Konfiguration.
+		if len(s.SecurityOpt) != 1 || s.SecurityOpt[0] != "seccomp:unconfined" {
+			t.Errorf("security_opt: %v — ohne das registriert das Plugin kein Werkzeug", s.SecurityOpt)
+		}
+		if s.Environment["TZ"] == "" {
+			t.Error("kein TZ — die cron-Trigger liefen in UTC")
+		}
+		if len(s.Volumes) != 1 || !strings.HasSuffix(s.Volumes[0], ":"+containerBau) {
+			t.Errorf("volumes: %v — der Bau muss auf %s liegen", s.Volumes, containerBau)
+		}
+
+		// Das Secret muss an beiden Enden denselben Namen tragen, sonst
+		// meldet compose einen undefinierten Verweis.
+		key := p.Beispiel + "-key"
+		if len(s.Secrets) != 1 || s.Secrets[0] != key {
+			t.Errorf("Dienst verlangt %v, erwartet [%s]", s.Secrets, key)
+		}
+		if _, da := doc.Secrets[key]; !da {
+			t.Errorf("Secret %q ist nicht deklariert (deklariert: %v)", key, doc.Secrets)
+		}
+		// Der Pfad, auf den das Werkzeug im Bau zeigt, muss im Text
+		// stehen — sonst rät der Nutzer, wohin apiKey zeigen soll.
+		if !strings.Contains(text, "{file:/run/secrets/"+key+"}") {
+			t.Error("der apiKey-Pfad fehlt")
+		}
+	}
+}
+
+// Ein Aufruf, zwei Dateien — und dieselbe Zusage wie bei den anderen
+// `new`-Ressourcen: eine handgeschriebene Datei zu ersetzen bleibt eine
+// bewusste Handlung. Die zweite wird trotzdem nachgelegt, denn wer das
+// Dockerfile angefasst hat, will deshalb nicht auf die Compose-Datei
+// verzichten.
+func TestNewDockerfileUeberschreibtNieUndLegtFehlendesNach(t *testing.T) {
+	bau := t.TempDir()
+	var out, errw strings.Builder
+	if code := run([]string{"-bau", bau, "new", "dockerfile"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	}
+	for _, name := range []string{DockerfileName, ComposeName} {
+		if _, err := os.Stat(filepath.Join(bau, name)); err != nil {
+			t.Errorf("%s fehlt: %v", name, err)
+		}
+		if !strings.Contains(out.String(), "created: "+name) {
+			t.Errorf("Ausgabe nennt %s nicht", name)
+		}
+	}
+
+	// Nur die Compose-Datei löschen: der zweite Aufruf muss sie neu
+	// anlegen und das Dockerfile in Ruhe lassen.
+	vorher, err := os.ReadFile(filepath.Join(bau, DockerfileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(bau, ComposeName)); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "new", "dockerfile"}, &out, &errw); code != 0 {
+		t.Fatalf("zweiter Aufruf: exit %d, stderr %q", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "created: "+ComposeName) {
+		t.Errorf("die fehlende Datei wurde nicht nachgelegt:\n%s", out.String())
+	}
+	if !strings.Contains(errw.String(), DockerfileName+" already exists") {
+		t.Errorf("die vorhandene Datei wurde nicht gemeldet: %q", errw.String())
+	}
+	nachher, err := os.ReadFile(filepath.Join(bau, DockerfileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(vorher) != string(nachher) {
+		t.Error("das vorhandene Dockerfile wurde verändert")
+	}
+
+	// Und wenn beide dastehen, ist nichts zu tun — derselbe Exit wie
+	// bei den anderen `new`-Ressourcen.
+	out.Reset()
+	errw.Reset()
+	if code := run([]string{"-bau", bau, "new", "dockerfile"}, &out, &errw); code == 0 {
+		t.Error("exit 0, obwohl beide Dateien schon dastanden")
+	}
+}
+
 // `new dockerfile` nimmt keinen Namen — die Datei heißt immer so.
 func TestNewDockerfileNimmtKeinenNamen(t *testing.T) {
 	var out, errw strings.Builder
@@ -203,28 +323,6 @@ func TestNewDockerfileNimmtKeinenNamen(t *testing.T) {
 	}
 	if !strings.Contains(errw.String(), "takes no name") {
 		t.Errorf("Meldung erklärt es nicht: %q", errw.String())
-	}
-}
-
-// Dieselbe Zusage wie bei den anderen `new`-Ressourcen: eine
-// handgeschriebene Datei zu ersetzen bleibt eine bewusste Handlung.
-func TestNewDockerfileUeberschreibtNie(t *testing.T) {
-	bau := t.TempDir()
-	pfad := filepath.Join(bau, DockerfileName)
-	if err := os.WriteFile(pfad, []byte("FROM meins\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	var out, errw strings.Builder
-	if code := run([]string{"-bau", bau, "new", "dockerfile"}, &out, &errw); code == 0 {
-		t.Fatal("exit 0 — die vorhandene Datei wurde angefasst")
-	}
-	roh, err := os.ReadFile(pfad)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(roh) != "FROM meins\n" {
-		t.Errorf("Datei verändert: %q", roh)
 	}
 }
 
@@ -254,7 +352,7 @@ func TestNewDockerfileSchreibtUndErklaert(t *testing.T) {
 		}
 	}
 	if !strings.Contains(out.String(), "created: "+DockerfileName) ||
-		!strings.Contains(out.String(), "docker build") {
+		!strings.Contains(out.String(), "docker compose up -d") {
 		t.Errorf("Ausgabe hilft nicht weiter:\n%s", out.String())
 	}
 }

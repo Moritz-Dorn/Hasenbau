@@ -29,8 +29,8 @@ const newUsage = `Usage: hasenbau new <resource> <name>
 Resources:
   auftrag <name> -hase <hase>   scaffold for auftraege/<name>.md
   hase <name>                   scaffold for hasen/<name>.md
-  dockerfile                    Dockerfile with everything Hasenbau needs
-                                (takes no name)
+  dockerfile                    Dockerfile and docker-compose.yml with
+                                everything Hasenbau needs (takes no name)
 
 Existing files are left untouched.
 `
