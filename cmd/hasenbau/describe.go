@@ -203,7 +203,21 @@ func describeProvider(root string, args []string, out, errw io.Writer) int {
 	} else {
 		a.field("Endpoint", "—  (built in, or the scaffold is incomplete)")
 	}
-	a.field("Key", "%s", jaNein(schluessel[d.ID], "in auth.json", "missing — `opencode auth login`"))
+	// Der Weg zum Schlüssel ist die Auskunft, nicht das Ja/Nein
+	// (Hasenbau-a88): ein Bau kann ihn aus auth.json oder über
+	// options.apiKey bekommen, und der zweite Weg kann konfiguriert
+	// sein und trotzdem nichts liefern — von außen sieht das aus wie
+	// ein Bau, dem nichts fehlt.
+	switch quelle := conf.KeySource(d.ID, schluessel[d.ID]); {
+	case quelle.Err != nil:
+		a.field("Key", "%s %s — BROKEN: %v", quelle.Via, quelle.Ref, quelle.Err)
+	case quelle.Via == "options.apiKey":
+		a.field("Key", "%s %s (opencode prefers this over auth.json)", quelle.Via, quelle.Ref)
+	case quelle.Via != "":
+		a.field("Key", "in %s", quelle.Via)
+	default:
+		a.field("Key", "missing — `opencode auth login`, or point options.apiKey at one")
+	}
 	a.field("File", "%s", conf.Pfad)
 	a.done()
 

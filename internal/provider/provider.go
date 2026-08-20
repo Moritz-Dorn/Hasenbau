@@ -125,9 +125,10 @@ func short(s string) string {
 	return s
 }
 
-// Key liest den API-Key eines Providers aus der auth.json, die
-// sich Bau und Alltags-opencode über XDG_DATA_HOME teilen (§3).
-func Key(id string) (string, error) {
+// keyFromAuth liest den API-Key eines Providers aus der auth.json, die
+// sich Bau und Alltags-opencode über XDG_DATA_HOME teilen (§3). Er ist
+// der RÜCKFALL — options.apiKey der Bau-Config gewinnt, siehe key.go.
+func keyFromAuth(id string) (string, error) {
 	pfad := AuthPath()
 	b, err := os.ReadFile(pfad)
 	if errors.Is(err, fs.ErrNotExist) {

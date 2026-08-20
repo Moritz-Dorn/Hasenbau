@@ -293,7 +293,7 @@ func TestSchluesselAusGeteilterAuthJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key, err := Key("scc")
+	key, err := keyFromAuth("scc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,16 +301,16 @@ func TestSchluesselAusGeteilterAuthJSON(t *testing.T) {
 		t.Errorf("Key %q", key)
 	}
 	// oauth ohne key: klare Meldung statt leerem Bearer.
-	if _, err := Key("github-copilot"); err == nil || !strings.Contains(err.Error(), "oauth") {
+	if _, err := keyFromAuth("github-copilot"); err == nil || !strings.Contains(err.Error(), "oauth") {
 		t.Errorf("unbrauchbarer Error: %v", err)
 	}
-	if _, err := Key("gibtsnicht"); err == nil || !strings.Contains(err.Error(), "auth login") {
+	if _, err := keyFromAuth("gibtsnicht"); err == nil || !strings.Contains(err.Error(), "auth login") {
 		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 
 	// Ohne auth.json überhaupt.
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	if _, err := Key("scc"); err == nil || !strings.Contains(err.Error(), "auth login") {
+	if _, err := keyFromAuth("scc"); err == nil || !strings.Contains(err.Error(), "auth login") {
 		t.Errorf("unbrauchbarer Error: %v", err)
 	}
 }

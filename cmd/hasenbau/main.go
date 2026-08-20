@@ -774,7 +774,10 @@ func cmdProvider(root string, args []string, in io.Reader, out, errw io.Writer) 
 		fmt.Fprintln(errw, err)
 		return 1
 	}
-	key, err := provider.Key(id)
+	// conf.Key statt auth.json direkt: der Schlüssel darf auch über
+	// options.apiKey kommen ({env:}/{file:}), so wie opencode selbst
+	// ihn nimmt (Hasenbau-a88).
+	key, err := conf.Key(id)
 	if err != nil {
 		fmt.Fprintln(errw, err)
 		return 1

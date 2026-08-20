@@ -217,11 +217,14 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 			endpoint = "—"
 			ohneEndpoint = true
 		}
-		if !schluessel[e.ID] {
+		// Woher, nicht ob: seit Hasenbau-a88 gibt es zwei Wege, und
+		// welcher gilt, ist die Auskunft, die hier weiterhilft.
+		quelle := conf.KeySource(e.ID, schluessel[e.ID])
+		if !quelle.OK() {
 			ohneSchluessel = true
 		}
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
-			e.ID, endpoint, e.Modelle, yesNo(e.Aktiv), yesNo(schluessel[e.ID]))
+			e.ID, endpoint, e.Modelle, yesNo(e.Aktiv), quelle.Label())
 	}
 	w.Flush()
 
@@ -233,7 +236,11 @@ func getProvider(root string, args []string, out, errw io.Writer) int {
 	}
 	if ohneSchluessel {
 		fmt.Fprintf(out, "Without a key: log in via %s (`opencode auth login`) — the file is shared\n", provider.AuthPath())
-		fmt.Fprintln(out, "between the Bau and your everyday opencode (PLAN.md §3).")
+		fmt.Fprintln(out, "between the Bau and your everyday opencode (PLAN.md §3). Or point options.apiKey at")
+		fmt.Fprintln(out, "one: {file:/run/secrets/…} or {env:…}, which is the way that keeps a container")
+		fmt.Fprintln(out, "free of your auth.json.")
+		fmt.Fprintln(out, "`broken` means the way is configured but delivers nothing —")
+		fmt.Fprintln(out, "`hasenbau describe provider <id>` says what is wrong.")
 	}
 	return 0
 }
