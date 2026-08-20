@@ -105,6 +105,30 @@ interaktiven opencode des Nutzers auszuschließen).
 - `github.com/fsnotify/fsnotify` — Datei-Trigger
 - `gopkg.in/yaml.v3` — Frontmatter
 
+### Fremdprogramme
+
+Die Go-Abhängigkeiten oben zieht der Compiler; diese hier muss jemand
+installiert haben. Sie sind der interessantere Teil, **weil ihr Fehlen
+still ist**:
+
+| Programm | Wo | Was passiert, wenn es fehlt |
+|---|---|---|
+| `opencode` | `internal/supervisor` | Der Daemon startet nicht — der einzige laute Fall |
+| `git` | `internal/bau`, `cmd/hasenbau/tool.go` | Kein Root-Commit ⇒ keine Projekt-ID ⇒ die Raum-Permissions greifen nicht (§11.5) |
+| `bwrap` | `cmd/hasenbau/probelauf.go`, Bau-Plugin | Das Plugin registriert **kein einziges Werkzeug** (fail-closed), sichtbar nur im Daemon-Log |
+| `sh` | `internal/runner/gang.go` | Kein Gang läuft |
+| `python3` | `cmd/hasenbau/baumeister.go` | Der Syntaxcheck der erzeugten Gänge fällt aus |
+
+Dazu, ohne `exec`-Aufruf und deshalb leicht zu übersehen:
+`ca-certificates` (HTTPS zum Provider) und `tzdata` — `cron.New()` nimmt
+`time.Local`, und ohne Zeitzonendaten ist das UTC. Ein `0 10 * * *`
+feuert dann um zwölf, ohne dass irgendwo etwas schiefgeht.
+
+Die Liste steht als Tabelle im Code (`cmd/hasenbau/dockerfile.go`), und
+ein Test nagelt sie an die `exec`-Aufrufe des Quellbaums: Wer ein neues
+Fremdprogramm einbaut, ohne es einzutragen, bekommt einen roten Test.
+`hasenbau new dockerfile` schreibt daraus ein Container-Rezept (§12).
+
 ---
 
 ## 3. Isolation gegen die Alltags-Config
@@ -130,6 +154,23 @@ XDG_DATA_HOME   = geerbt vom Nutzer        # → auth.json wird geteilt
 
 Damit teilt der Bau die Provider-Credentials mit dem täglichen opencode,
 aber sonst nichts. Die Automation-Config ist explizit und versioniert.
+
+**„Sonst nichts" stimmt für die Config, nicht für das Datenverzeichnis**
+(Befund 2026-08-20, Hasenbau-sss). Unter `XDG_DATA_HOME/opencode/` liegt
+neben `auth.json` auch `opencode.db`, `storage/`, `project/`,
+`snapshot/`, `log/` und `tool-output/` — geteilt wird also die
+Sitzungs-Historie mit. Auf einer Maschine ist das der Preis dafür, dass
+man sich nicht zweimal anmelden muss. Wer den Bau anderswohin trägt (ein
+Container, §12), sollte das Verzeichnis deshalb **nicht** pauschal
+mitnehmen.
+
+Es geht auch ohne: `options.apiKey` in der Bau-Config versteht
+`{file:PFAD}` und `{env:VAR}`. Der Schlüssel kommt dann als eingehängte
+Datei, und die Bau-Config bleibt schlüssellos — was sie ohnehin
+verspricht. Eine Grenze dabei: `hasenbau provider fetch` und
+`get provider` lesen `auth.json` direkt
+(`internal/provider/provider.go`) und melden auf diesem Weg Fehlanzeige,
+während die Läufe einwandfrei funktionieren.
 
 `plugin: []` richtet sich dabei gegen die **geerbten** Plugins der
 Alltags-Instanz, nicht gegen Plugins an sich: Eigene, im Bau
@@ -2034,3 +2075,40 @@ andere nicht — `graben` wurde zu `dig`, und die Befund-Analyse heißt
 löst aus, `hasenbau get lauf <id>` zeigt an. Das ist bewusst in Kauf
 genommen: der `get`-Präfix macht den Unterschied deutlich genug, und
 `lauf` als Auslöse-Befehl war zuerst da.
+
+**`new dockerfile` ist die eine Ressource ohne Namen** (Hasenbau-sss).
+Sie fügt sich sonst ins Schema: ein kommentiertes Gerüst, nie
+überschreibend. Nur heißt die Datei immer `Dockerfile`, weil Docker sie
+so sucht — ein zweites in demselben Bau wäre eine Frage, die niemand
+stellen wollte.
+
+Inhaltlich gilt dabei eine Grenze, und sie ist die eigentliche
+Entscheidung: **hinein kommt nur, was der Hasenbau selbst ruft**
+(§2, Fremdprogramme). Was ein *Bau* ruft — `pdftotext` für einen Gang,
+ein MCP-Server, eine Modell-CLI — kennt der Hasenbau nicht, und eine
+Heuristik über fremde Skripte würde raten. Die erzeugte Datei trägt
+dafür einen markierten Block am Ende. Zwei Dinge liest sie stattdessen
+aus dem Bau, weil sie dort belegt stehen: die Provider-IDs für die
+Credential-Kommentare (kein verdrahteter Provider-Name) und die
+opencode-Fassung im PATH, auf die der Installer gepinnt wird.
+
+Was die Datei ausdrücklich *nicht* enthält, ist ein Schlüssel: `COPY`
+und `ENV` landen in den Image-Layern und bleiben über `docker history`
+lesbar. Der empfohlene Weg ist `{file:…}` (§3), die Alternativen stehen
+mit ihrem jeweiligen Preis daneben.
+
+**Zwei Zeilen darin sind gemessen, nicht angenommen** (2026-08-20, Image
+aus dem erzeugten Dockerfile, Test-Bau als Mount):
+
+- Ohne `--security-opt seccomp=unconfined` antwortet `bwrap` mit „No
+  permissions to create new namespace" — und damit registriert das
+  Plugin kein Werkzeug. **`describe bau` meldet dabei `ok Tools`**, denn
+  `checkWerkzeuge` fragt nur `LookPath`. Vorhandensein ist ein Beleg,
+  kein Urteil; derselbe Fehler wie beim Rückkanal vor Hasenbau-08u.
+  Gefiled als Hasenbau-nbk.
+- Ohne `git config --global --add safe.directory /bau` verweigert Git
+  den gemounteten Bau („dubious ownership"), weil er dem Host-Nutzer
+  gehört und der Container als root läuft. `describe bau` meldet
+  daraufhin „repo without a commit" für ein Repo mit Commits — und kein
+  sichtbarer Commit heißt keine Projekt-ID (§11.5). Die Zeile steht
+  deshalb im erzeugten Dockerfile.

@@ -49,6 +49,14 @@ go install github.com/Moritz-Dorn/Hasenbau/cmd/hasenbau@latest
 Die Binärdatei landet in `$(go env GOPATH)/bin`, meist `~/go/bin` —
 dieses Verzeichnis muss im PATH liegen.
 
+Steht der Bau, schreibt `hasenbau new dockerfile` ein `Dockerfile`
+hinein, das all das mitbringt: die Programme oben, dazu die, deren
+Fehlen leise ist statt laut — ohne `bwrap` wird kein einziges
+Schmied-Werkzeug registriert, ohne `tzdata` laufen die cron-Trigger in
+UTC. Installiert wird, was **Hasenbau** braucht; was die eigenen Gänge
+rufen, ist ein markierter Block am Ende zum Selbstausfüllen. Näheres in
+[Befehle](docs/de/commands.md#im-container).
+
 ## Der erste Bau
 
 Der Bau liegt außerhalb dieses Repos: ein Hase liest die `AGENTS.md` in

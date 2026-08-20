@@ -17,10 +17,109 @@ hasenbau init <bau>        # Bau anlegen (Git-Repo, isolierte Config, Rückkanal
 hasenbau fix               # ergänzen, was einem bestehenden Bau fehlt
 hasenbau new hase <name>   # Template-Gerüst anlegen, kommentiert
 hasenbau new auftrag <name> -hase <hase>   # Auftrags-Gerüst anlegen
+hasenbau new dockerfile    # Dockerfile mit allem, was Hasenbau braucht
 ```
 
 `init` und `fix` sind nicht-destruktiv und idempotent: vorhandene
-Dateien bleiben unangetastet.
+Dateien bleiben unangetastet. `new` ebenso, für alle drei Ressourcen.
+
+`new dockerfile` ist die eine Ressource ohne Namen: die Datei heißt
+immer `Dockerfile`.
+
+## Im Container
+
+`hasenbau new dockerfile` schreibt das Rezept, das der Install-Abschnitt
+des README als Prosa beschreibt. Hinein kommt, was **Hasenbau** ruft —
+`opencode`, `git`, `bwrap`, `sh`, `python3` — dazu `ca-certificates` und
+`tzdata`. Was die eigenen Gänge rufen, steht nicht drin: das kennt der
+Hasenbau nicht und rät es auch nicht, dafür endet die Datei mit einem
+markierten Block.
+
+Zwei Dinge liest sie aus dem Bau, statt sie anzunehmen: die Provider-IDs
+aus `.opencode-home/opencode/opencode.json`, damit die
+Credential-Kommentare die eigenen Provider nennen, und die Fassung des
+`opencode` im PATH, auf die die Installer-Zeile gepinnt wird.
+
+Drei der `docker run`-Flags im erzeugten Kopf sind nicht optional, und
+jedes scheitert, ohne es zu sagen:
+
+| Flag | Ohne es |
+|---|---|
+| `--security-opt seccomp=unconfined` | `bwrap` bekommt keinen User-Namespace, das Plugin registriert **kein** Werkzeug — nur der Daemon-Log erwähnt es |
+| der Schlüssel (unten) | der Provider weist ab, der Lauf endet als `failed` |
+| `-e TZ=…` | cron-Trigger laufen in UTC, ein `0 10 * * *` feuert um zwölf |
+
+Für das erste ist `describe bau` kein Beleg. Es prüft, ob `bwrap`
+*installiert* ist, nicht ob es seine Aufgabe erfüllen kann — im
+Container gemessen meldete es `ok  Tools`, während `bwrap` selbst mit
+`No permissions to create new namespace` antwortete. Solange dieser
+Check nicht schärfer ist, fragt man `bwrap` direkt:
+
+```bash
+docker run --rm --security-opt seccomp=unconfined --entrypoint bwrap meinbau \
+  --ro-bind / / --unshare-all --die-with-parent -- /bin/true
+```
+
+Eines nimmt das Image bereits ab: der Bau kommt als Mount und gehört
+dem Nutzer auf dem Host, nicht root im Container. Git würde ihn deshalb
+nicht ansehen (`dubious ownership`), und `describe bau` meldete dann
+einen Bau `without a commit`, der in Wahrheit welche hat — kein
+sichtbarer Commit heißt keine Projekt-ID und keine Raum-Permissions
+(PLAN.md §11.5). Das erzeugte Dockerfile trägt den passenden
+`safe.directory`-Eintrag ein.
+
+### Credentials im Container
+
+Nie einen Schlüssel ins Dockerfile. `COPY` und `ENV` landen in den
+Image-Layern und bleiben über `docker history` lesbar; sie in einem
+späteren Layer zu entfernen, entfernt sie nicht.
+
+`auth.json` braucht der Container gar nicht. `options.apiKey` versteht
+`{file:PFAD}` und `{env:VAR}`, der Schlüssel kann also als eingehängte
+Datei kommen, während die Bau-Config schlüssellos bleibt:
+
+```json
+"provider": {"<id>": {"options": {"apiKey": "{file:/run/secrets/<id>-key}"}}}
+```
+
+```bash
+docker run --rm -v "$PWD":/bau \
+  --mount type=bind,src="$HOME/.secrets/<id>-key",dst=/run/secrets/<id>-key,ro \
+  meinbau daemon
+```
+
+**Verschlüsselung hilft *im* Container nicht** — der Prozess braucht den
+Klartext in dem Moment, in dem er den HTTPS-Call macht. Überall sonst
+hilft sie, und das Muster ist werkzeugunabhängig: verschlüsselt auf dem
+Host liegen lassen, für den Lauf in den Speicher (ein tmpfs)
+entschlüsseln, das einhängen und danach schreddern. Mit
+[age](https://age-encryption.org) als austauschbarem Beispiel:
+
+```bash
+age -d -i ~/.age/key ~/.secrets/scc-key.age > /run/user/$UID/scc-key
+docker run --rm -v "$PWD":/bau \
+  --mount type=bind,src=/run/user/$UID/scc-key,dst=/run/secrets/scc-key,ro \
+  meinbau daemon
+shred -u /run/user/$UID/scc-key
+```
+
+`pass`, `sops`, `gpg` oder ein systemd-Credential passen in dieselbe
+Form.
+
+Zwei Alternativen, jede mit ihrem Preis. Das ganze Datenverzeichnis zu
+teilen (`-v "$HOME/.local/share/opencode":/root/.local/share/opencode`)
+teilt auch `opencode.db`, `storage/` und `log/` mit dem
+Alltags-opencode — es ist aber der einzige Weg, auf dem ein
+**OAuth**-Login im Container erneuerbar bleibt, denn solche Einträge
+werden neu geschrieben. Eine Umgebungsvariable (`{env:…}` plus
+`--env-file`) ist am schnellsten getippt und am weitesten offen: der
+Schlüssel steht in `docker inspect` und in der Umgebung jedes Prozesses
+im Container, auch der eines Schmied-Werkzeugs.
+
+Eine Asymmetrie ist zu erwarten: `hasenbau provider fetch` und
+`get provider` lesen `auth.json` direkt. Auf dem Datei-Weg melden sie
+`no auth.json`, während die Läufe einwandfrei laufen. Die Modell-Liste
+also auf dem Host holen — sie ist ohnehin versionierter Bau-Inhalt.
 
 ## Auslösen
 
