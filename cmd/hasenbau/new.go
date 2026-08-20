@@ -29,6 +29,8 @@ const newUsage = `Usage: hasenbau new <resource> <name>
 Resources:
   auftrag <name> -hase <hase>   scaffold for auftraege/<name>.md
   hase <name>                   scaffold for hasen/<name>.md
+  dockerfile                    Dockerfile with everything Hasenbau needs
+                                (takes no name)
 
 Existing files are left untouched.
 `
@@ -43,6 +45,8 @@ func cmdNew(root string, args []string, out, errw io.Writer) int {
 		return newAuftrag(root, args[1:], out, errw)
 	case "hase":
 		return newHase(root, args[1:], out, errw)
+	case "dockerfile":
+		return newDockerfile(root, args[1:], out, errw)
 	default:
 		fmt.Fprintf(errw, "hasenbau new: unknown resource %q\n\n%s", args[0], newUsage)
 		return 2

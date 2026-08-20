@@ -44,7 +44,7 @@ Commands:
   get <resource>        show what the Bau knows (auftraege, hasen,
                         gaenge, laeufe, lauf, provider)
   describe <res> <name> one object in detail (auftrag, gang, hase, lauf)
-  new <res> <name>      create a scaffold (auftrag, hase)
+  new <res> <name>      create a scaffold (auftrag, hase, dockerfile)
   dig [-json] <target>  material for the Baumeister: the trace of a
                         Lauf, or <auftrag>#<n> for a finding
   findings <auftrag>    what can be computed over the Läufe: Gang
