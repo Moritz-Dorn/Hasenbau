@@ -133,6 +133,15 @@ Die Modell-Liste holt danach `hasenbau provider fetch scc` am Endpoint.
 Geschrieben wird sie nie automatisch; erst zeigt der Befehl den Diff.
 `hasenbau get provider` sagt, was der Bau kennt und was holbar ist.
 
+`auth.json` ist nicht der einzige Weg hinein. `options.apiKey` versteht
+auch `{file:PFAD}` und `{env:VAR}`, der Schlüssel kann also als
+eingehängte Datei kommen, während die Bau-Config schlüssellos bleibt —
+so, wie ein Container es braucht (siehe
+[Befehle](commands.md#credentials-im-container)). Der Hasenbau löst das
+in derselben Reihenfolge auf wie opencode: `options.apiKey` gewinnt,
+`auth.json` ist der Rückfall. `get provider` und `describe provider`
+nennen den Weg, der gilt — und nie den Schlüssel.
+
 ## Als systemd-Unit
 
 `opencode` muss im PATH der Unit stehen, der Daemon startet es als

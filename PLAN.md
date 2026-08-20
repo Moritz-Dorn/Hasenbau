@@ -124,10 +124,24 @@ Dazu, ohne `exec`-Aufruf und deshalb leicht zu übersehen:
 `time.Local`, und ohne Zeitzonendaten ist das UTC. Ein `0 10 * * *`
 feuert dann um zwölf, ohne dass irgendwo etwas schiefgeht.
 
-Die Liste steht als Tabelle im Code (`cmd/hasenbau/dockerfile.go`), und
-ein Test nagelt sie an die `exec`-Aufrufe des Quellbaums: Wer ein neues
+Die Liste steht als Tabelle im Code (`internal/bau/programs.go`), und ein
+Test nagelt sie an die `exec`-Aufrufe des Quellbaums: Wer ein neues
 Fremdprogramm einbaut, ohne es einzutragen, bekommt einen roten Test.
-`hasenbau new dockerfile` schreibt daraus ein Container-Rezept (§12).
+Zwei sehr verschiedene Dinge lesen sie — `hasenbau new dockerfile`
+schreibt daraus ein Container-Rezept (§12), `describe bau` prüft daraus,
+ob die Programme da sind.
+
+**Und bei `bwrap` reicht „da sein" nicht** (Hasenbau-nbk). Der Check
+fragt es, statt es zu zählen: ein Probelauf
+(`bwrap --ro-bind / / --unshare-all -- /bin/sh -c 'exit 0'`) statt eines
+`LookPath`. Der Unterschied ist gemessen und nicht theoretisch — in
+einem Container ohne `--security-opt seccomp=unconfined` liegt das
+Binary da und scheitert an jedem Aufruf, und `describe bau` meldete
+dafür vorher `ok Tools`. Dieselbe Lehre wie beim Rückkanal
+(Hasenbau-2nq/08u) und bei ValIntent: **Vorhandensein ist ein Beleg,
+kein Urteil.** Der Probelauf nimmt `/bin/sh` und nicht `/bin/true` —
+letzteres gibt es nicht überall (NixOS), `sh` steht ohnehin auf der
+Liste.
 
 ---
 
@@ -167,10 +181,31 @@ mitnehmen.
 Es geht auch ohne: `options.apiKey` in der Bau-Config versteht
 `{file:PFAD}` und `{env:VAR}`. Der Schlüssel kommt dann als eingehängte
 Datei, und die Bau-Config bleibt schlüssellos — was sie ohnehin
-verspricht. Eine Grenze dabei: `hasenbau provider fetch` und
-`get provider` lesen `auth.json` direkt
-(`internal/provider/provider.go`) und melden auf diesem Weg Fehlanzeige,
-während die Läufe einwandfrei funktionieren.
+verspricht.
+
+**Der Hasenbau geht seit Hasenbau-a88 denselben Weg** (`internal/provider/key.go`).
+Die Reihenfolge ist nachgelesen, nicht geraten — in opencodes
+`provider/provider.ts` steht
+
+```js
+if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+```
+
+also gewinnt `options.apiKey`, und `auth.json` ist der Rückfall.
+Ebenfalls abgelesen (`config/variable.ts`): nur `env` und `file` sind
+gültige Präfixe, `~/` wird expandiert, der Dateiinhalt wird **getrimmt**,
+und eine nicht gesetzte Umgebungsvariable wird zum leeren String statt
+zum Fehler. Der Hasenbau ahmt das nach und fängt nur das Ergebnis ab:
+ein leerer Schlüssel ginge sonst als Bearer hinaus.
+
+Zwei bewusste Abweichungen. Ein Präfix, das opencode nicht kennt
+(`{vault:…}`), bliebe dort als Literal stehen und wanderte als Schlüssel
+über die Leitung — hier ist es ein Fehler, denn etwas, das wie ein
+Platzhalter aussieht, ist keiner. Und `get`/`describe provider` nennen
+jetzt den **Weg** statt eines Ja/Nein, weil es zwei gibt und weil der
+dritte Zustand der interessanteste ist: konfiguriert, aber liefert
+nichts (`options.apiKey (broken)`). Von außen sah so ein Bau vorher aus
+wie einer, dem nichts fehlt.
 
 `plugin: []` richtet sich dabei gegen die **geerbten** Plugins der
 Alltags-Instanz, nicht gegen Plugins an sich: Eigene, im Bau

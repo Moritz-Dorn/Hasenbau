@@ -130,6 +130,14 @@ fetch scc`. It is never written automatically; the command shows the diff
 first. `hasenbau get provider` says what the Bau knows and what can be
 fetched.
 
+`auth.json` is not the only way in. `options.apiKey` also understands
+`{file:PATH}` and `{env:VAR}`, so the key can arrive as a mounted file
+while the Bau config stays free of secrets — the way a container wants it
+(see [Commands](commands.md#credentials-in-a-container)). Hasenbau
+resolves it in the same order opencode does: `options.apiKey` wins,
+`auth.json` is the fallback. `get provider` and `describe provider` name
+the route that is in effect, and never the key.
+
 ## As a systemd unit
 
 `opencode` has to be in the PATH of the unit, since the daemon starts it

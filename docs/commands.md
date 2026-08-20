@@ -73,14 +73,15 @@ and each one fails without saying so:
 | the key (below) | the model provider refuses, and the Lauf ends as `failed` |
 | `-e TZ=…` | cron triggers run in UTC, so `0 10 * * *` fires at 12 |
 
-Do not take `describe bau` as proof for the first one. It checks whether
-`bwrap` is *installed*, not whether it can do its job — measured in a
-container, it reported `ok  Tools` while `bwrap` answered `No permissions
-to create new namespace`. Until that check is sharper, ask `bwrap` itself:
+`describe bau` is proof for the first one: its `Programs` check does not
+ask whether `bwrap` is installed but whether it can open a namespace, by
+running it. In a container without the flag it says so, and passes on
+what `bwrap` answered:
 
-```bash
-docker run --rm --security-opt seccomp=unconfined --entrypoint bwrap meinbau \
-  --ro-bind / / --unshare-all --die-with-parent -- /bin/true
+```
+CHECK  Programs       all there, but bwrap cannot open a namespace
+                      → bwrap says: No permissions to create new namespace, …
+                        Until that is fixed the plugin registers NO tool
 ```
 
 One thing the image already handles: the Bau arrives as a mount and
@@ -146,10 +147,21 @@ the container, since those entries get rewritten. An environment variable
 the key is in `docker inspect` and in the environment of every process in
 the container, a Schmied tool included.
 
-One asymmetry to expect: `hasenbau provider fetch` and `get provider`
-read `auth.json` directly. On the mounted-file route they report
-`no auth.json` while your Läufe run fine. Fetch the model list on the
-host — it is versioned Bau content anyway.
+`hasenbau provider fetch` and `get provider` follow the same route, in
+the same order opencode does: `options.apiKey` wins, `auth.json` is the
+fallback. So `get provider` names the route instead of answering
+yes-or-no:
+
+```
+ID   ENDPOINT                     MODELS  ACTIVE  KEY
+scc  https://…/api/v1             35      yes     options.apiKey
+```
+
+A third value is the one worth knowing about: `options.apiKey (broken)`
+means the route is configured but delivers nothing — the secret is not
+mounted, the variable is empty. Without that, such a Bau looks from the
+outside exactly like one that is fine. `hasenbau describe provider <id>`
+says what is wrong, and it never prints the key itself.
 
 ## Triggering
 

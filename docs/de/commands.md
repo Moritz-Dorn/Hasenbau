@@ -75,15 +75,15 @@ jedes scheitert, ohne es zu sagen:
 | der Schlüssel (unten) | der Provider weist ab, der Lauf endet als `failed` |
 | `-e TZ=…` | cron-Trigger laufen in UTC, ein `0 10 * * *` feuert um zwölf |
 
-Für das erste ist `describe bau` kein Beleg. Es prüft, ob `bwrap`
-*installiert* ist, nicht ob es seine Aufgabe erfüllen kann — im
-Container gemessen meldete es `ok  Tools`, während `bwrap` selbst mit
-`No permissions to create new namespace` antwortete. Solange dieser
-Check nicht schärfer ist, fragt man `bwrap` direkt:
+Für das erste ist `describe bau` der Beleg: sein `Programs`-Check fragt
+nicht, ob `bwrap` installiert ist, sondern ob es einen Namespace
+aufmachen kann — indem er es laufen lässt. Im Container ohne das Flag
+sagt er das und gibt weiter, was `bwrap` geantwortet hat:
 
-```bash
-docker run --rm --security-opt seccomp=unconfined --entrypoint bwrap meinbau \
-  --ro-bind / / --unshare-all --die-with-parent -- /bin/true
+```
+CHECK  Programs       all there, but bwrap cannot open a namespace
+                      → bwrap says: No permissions to create new namespace, …
+                        Until that is fixed the plugin registers NO tool
 ```
 
 Eines nimmt das Image bereits ab: der Bau kommt als Mount und gehört
@@ -152,10 +152,22 @@ werden neu geschrieben. Eine Umgebungsvariable (`{env:…}` plus
 Schlüssel steht in `docker inspect` und in der Umgebung jedes Prozesses
 im Container, auch der eines Schmied-Werkzeugs.
 
-Eine Asymmetrie ist zu erwarten: `hasenbau provider fetch` und
-`get provider` lesen `auth.json` direkt. Auf dem Datei-Weg melden sie
-`no auth.json`, während die Läufe einwandfrei laufen. Die Modell-Liste
-also auf dem Host holen — sie ist ohnehin versionierter Bau-Inhalt.
+`hasenbau provider fetch` und `get provider` gehen denselben Weg, und
+zwar in derselben Reihenfolge wie opencode: `options.apiKey` gewinnt,
+`auth.json` ist der Rückfall. `get provider` nennt deshalb den Weg,
+statt mit Ja oder Nein zu antworten:
+
+```
+ID   ENDPOINT                     MODELS  ACTIVE  KEY
+scc  https://…/api/v1             35      yes     options.apiKey
+```
+
+Der dritte Wert ist der, den man kennen sollte: `options.apiKey (broken)`
+heißt, der Weg ist konfiguriert und liefert trotzdem nichts — das Secret
+ist nicht gemountet, die Variable ist leer. Ohne diese Auskunft sieht so
+ein Bau von außen genau aus wie einer, dem nichts fehlt.
+`hasenbau describe provider <id>` sagt, was fehlt, und gibt den Schlüssel
+selbst nie aus.
 
 ## Auslösen
 
