@@ -39,6 +39,7 @@ type Check struct {
 // innen: Layout, Git, Config, Rückkanal.
 func Diagnose(root string) []Check {
 	return []Check{
+		checkPrograms(),
 		checkLayout(root),
 		checkGit(root),
 		checkOpencodeConfig(root),
@@ -47,6 +48,57 @@ func Diagnose(root string) []Check {
 		checkHasenbauYAML(root),
 		checkWerkzeuge(root),
 	}
+}
+
+// checkPrograms prüft die Programme, die der Hasenbau ruft, ohne sie
+// mitzubringen (Hasenbau-nbk). Er steht als erster, weil er unter allen
+// Prüfungen die wenigsten Voraussetzungen hat: er braucht nicht einmal
+// einen Bau.
+//
+// Zwei verschiedene Fragen stecken darin, und genau ihre Verwechslung
+// war der Bead: `LookPath` sagt, ob die Datei da ist. Ob bwrap seine
+// Aufgabe erfüllen kann, sagt nur ein Probelauf — im Container ohne
+// Namespace-Erlaubnis liegt das Binary da und scheitert an jedem
+// Aufruf.
+func checkPrograms() Check {
+	const name = "Programs"
+
+	var fehlen []ExternalProgram
+	var da []string
+	for _, p := range ExternalPrograms {
+		if p.Command == "" {
+			continue // ein Paket ohne Aufruf — nur fürs Dockerfile
+		}
+		if _, err := exec.LookPath(p.Command); err != nil {
+			fehlen = append(fehlen, p)
+			continue
+		}
+		da = append(da, p.Command)
+	}
+
+	if len(fehlen) > 0 {
+		var namen []string
+		var gruende []string
+		for _, p := range fehlen {
+			namen = append(namen, p.Command)
+			gruende = append(gruende, "                       "+p.Command+": "+p.Why)
+		}
+		return Check{Name: name,
+			Detail: "missing: " + strings.Join(namen, ", "),
+			Hint:   "what each of them is for:\n" + strings.Join(gruende, "\n")}
+	}
+
+	// Vorhandensein ist ein Beleg, kein Urteil: bwrap wird gefragt,
+	// nicht gezählt.
+	if ok, grund := BwrapWorks(); !ok {
+		return Check{Name: name,
+			Detail: "all there, but bwrap cannot open a namespace",
+			Hint: "bwrap says: " + grund + "\n" +
+				"                       Until that is fixed the plugin registers NO tool — the Hasen\n" +
+				"                       simply do not get them, and only the daemon log says so.\n" +
+				"                       In a container this is `--security-opt seccomp=unconfined`."}
+	}
+	return Check{Name: name, OK: true, Detail: strings.Join(da, ", ") + " (bwrap probed)"}
 }
 
 // checkWerkzeuge prüft die zwei Stellen, an denen die Werkzeug-Kette
@@ -103,17 +155,20 @@ func checkWerkzeuge(root string) Check {
 				"                       The plugin does not register them. `hasenbau tool review <name>`, then test again"}
 	}
 
-	// Ohne bwrap registriert das Plugin gar kein Werkzeug (Hasenbau-9w6):
-	// im Betrieb läuft ein Werkzeug im Server-Prozess, und ohne
-	// Sandkasten hätte es mehr Rechte als der Hase, der es ruft. Das ist
-	// fail-closed und deshalb richtig — aber es steht nur im Server-Log,
-	// und dort sucht niemand, der sich wundert, wo sein Werkzeug ist.
+	// Ohne funktionierendes bwrap registriert das Plugin gar kein
+	// Werkzeug (Hasenbau-9w6): im Betrieb läuft ein Werkzeug im
+	// Server-Prozess, und ohne Sandkasten hätte es mehr Rechte als der
+	// Hase, der es ruft. Fail-closed und deshalb richtig — aber es steht
+	// nur im Server-Log, und dort sucht niemand.
+	//
+	// Geprüft wird das in checkPrograms, mit einem Probelauf statt eines
+	// LookPath (Hasenbau-nbk). Hier bleibt nur der Bezug: wer Werkzeuge
+	// hat, für den ist jener Befund kein Randthema.
 	if frei > 0 {
-		if _, err := exec.LookPath("bwrap"); err != nil {
+		if ok, _ := BwrapWorks(); !ok {
 			return Check{Name: name, Detail: detail,
-				Hint: "bwrap is missing — the plugin therefore registers NO tool.\n" +
-					"                       A tool runs in the server process; without a sandbox it could do more\n" +
-					"                       than the Hase calling it. Install it (bubblewrap) or run without tools"}
+				Hint: "bwrap does not work here — the plugin therefore registers NONE of these tools.\n" +
+					"                       The Programs check above says what bwrap answered"}
 		}
 	}
 

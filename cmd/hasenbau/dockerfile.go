@@ -26,6 +26,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 	"github.com/Moritz-Dorn/Hasenbau/internal/provider"
 )
 
@@ -54,37 +55,6 @@ const goFallback = "1.25"
 // anderen Pfad als safe.directory ist wieder der Fall, den der
 // Eintrag gerade verhindern soll.
 const containerBau = "/bau"
-
-// fremdprogramm ist ein Programm, das der Hasenbau ruft, samt dem
-// Debian-Paket, das es mitbringt, und dem Grund.
-//
-// Diese Liste ist die einzige Fassung — dockerfile_test.go liest die
-// `exec`-Aufrufe des Quellbaums und verlangt, dass jeder gefundene
-// Befehl hier steht. Wer später ein `jq` einbaut, bekommt einen roten
-// Test statt eines Images, in dem es fehlt.
-type fremdprogramm struct {
-	// Befehl ist der Name im PATH, so wie der Code ihn ruft. Leer:
-	// kein direkter Aufruf, das Paket wird trotzdem gebraucht.
-	Befehl string
-	// Paket ist das Debian-Paket. Leer: in der Basis enthalten oder
-	// mit eigenem Installer (opencode).
-	Paket string
-	// Grund steht als Kommentar in der erzeugten Datei. Englisch —
-	// die Datei geht in einen Bau (AGENTS.md, Hasenbau-tzl).
-	Grund string
-}
-
-var fremdprogramme = []fremdprogramm{
-	{Befehl: "opencode", Grund: "the server the daemon starts; installed below, it brings its own installer"},
-	{Befehl: "git", Paket: "git", Grund: "a Bau is a Git repo — without a root commit opencode gives it no project ID and the Raum permissions do not bite"},
-	{Befehl: "bwrap", Paket: "bubblewrap", Grund: "the sandbox around every Schmied tool. Missing it, the plugin registers NO tool at all"},
-	{Befehl: "sh", Grund: "every Gang runs as `sh -c`, and dash is already in the base image"},
-	{Befehl: "python3", Paket: "python3", Grund: "the Baumeister checks the syntax of the Gänge it writes"},
-	{Paket: "ca-certificates", Grund: "HTTPS to your model provider"},
-	{Paket: "tzdata", Grund: "without it cron triggers run in UTC, so `0 10 * * *` fires at 12"},
-	{Paket: "curl", Grund: "only for the opencode installer below"},
-	{Paket: "tar", Grund: "the opencode installer unpacks a .tar.gz on Linux"},
-}
 
 func newDockerfile(root string, args []string, out, errw io.Writer) int {
 	if len(args) != 0 {
@@ -377,9 +347,9 @@ secrets:
   #   printf %s 'your-api-key' > ~/.secrets/` + key + `
   #   chmod 600 ~/.secrets/` + key + `
   #
-  # ` + "`printf %s`" + `, not ` + "`echo`" + `: a trailing newline would travel into the
-  # Authorization header, and a key that is wrong by one invisible byte
-  # is the worst kind of wrong.
+  # A trailing newline does no harm — opencode trims the file, and so
+  # does ` + "`hasenbau provider fetch`" + `. ` + "`printf %s`" + ` just keeps the file
+  # honest about what is in it.
   #
   # The permissions of the host file are carried over unchanged, so the
   # chmod above sticks. Inside, the file appears as
@@ -410,21 +380,21 @@ func paketBlock() string {
 	b.WriteString("# Every line below is something Hasenbau itself calls or needs.\n")
 
 	breite := 0
-	for _, f := range fremdprogramme {
-		if n := len(f.Paket); n > breite {
+	for _, f := range bau.ExternalPrograms {
+		if n := len(f.Package); n > breite {
 			breite = n
 		}
 	}
 	var pakete []string
-	for _, f := range fremdprogramme {
-		name, grund := f.Paket, f.Grund
+	for _, f := range bau.ExternalPrograms {
+		name, grund := f.Package, f.Why
 		if name == "" {
 			// Ohne Paket bleibt der Grund trotzdem stehen: dass `sh`
 			// schon da ist und opencode seinen eigenen Weg geht, ist
 			// eine Antwort auf eine Frage, die sonst jemand stellt.
 			// Dass es NICHT in der apt-Zeile steht, muss dabei
 			// dranstehen — sonst liest es sich wie ein Vergessen.
-			name, grund = f.Befehl, "not from apt — "+grund
+			name, grund = f.Command, "not from apt — "+grund
 		} else {
 			pakete = append(pakete, name)
 		}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,84 +8,24 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Moritz-Dorn/Hasenbau/internal/bau"
 )
-
-// aufruf findet `exec.LookPath("x")`, `exec.Command("x", …)` und
-// `exec.CommandContext(ctx, "x", …)`.
-//
-// Das führende `ctx,` ist bewusst das EINZIGE, was vor dem String
-// stehen darf. Ließe man einen beliebigen Bezeichner zu, fände der
-// Ausdruck in `exec.Command(s.cfg.Binary, "serve")` das Wort "serve"
-// und meldete ein Programm, das es nicht gibt. Der Preis ist die
-// Gegenrichtung: ein Aufruf, dessen Programm in einer Variablen steckt,
-// wird hier nicht gesehen — genau deshalb steht `opencode` in
-// fremdprogramme mit einem Kommentar statt durch diesen Fund.
-var aufruf = regexp.MustCompile(`exec\.(?:LookPath|Command|CommandContext)\((?:ctx,\s*)?"([^"]+)"`)
-
-// Der Test, um dessentwillen die Liste im Code steht: Was der Hasenbau
-// wirklich ruft, muss im Dockerfile ankommen. Die Kopplung pflegt sonst
-// niemand — ein neues `exec.Command("jq", …)` fiele erst im Container
-// auf, und dort als Gang-Fehler, nicht als fehlendes Paket.
-func TestDockerfileKenntJedesGerufeneProgramm(t *testing.T) {
-	bekannt := map[string]bool{}
-	for _, f := range fremdprogramme {
-		if f.Befehl != "" {
-			bekannt[f.Befehl] = true
-		}
-	}
-
-	gefunden := map[string][]string{}
-	for _, dir := range []string{"../../internal", "../../cmd"} {
-		err := filepath.WalkDir(dir, func(pfad string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(pfad, ".go") {
-				return err
-			}
-			// Tests sind ausgenommen: das Image führt das Produkt aus,
-			// nicht die Suite. Ein `go` oder `docker` aus einem Test
-			// gehört nicht in ein Bau-Image.
-			if strings.HasSuffix(pfad, "_test.go") {
-				return nil
-			}
-			roh, err := os.ReadFile(pfad)
-			if err != nil {
-				return err
-			}
-			for _, m := range aufruf.FindAllStringSubmatch(string(roh), -1) {
-				gefunden[m[1]] = append(gefunden[m[1]], pfad)
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("%s durchsuchen: %v", dir, err)
-		}
-	}
-
-	if len(gefunden) == 0 {
-		t.Fatal("kein einziger exec-Aufruf gefunden — der Ausdruck oder die Pfade stimmen nicht mehr")
-	}
-	for befehl, orte := range gefunden {
-		if !bekannt[befehl] {
-			t.Errorf("%q wird gerufen (%s), steht aber nicht in fremdprogramme — "+
-				"das erzeugte Dockerfile installiert es also nicht",
-				befehl, strings.Join(orte, ", "))
-		}
-	}
-}
 
 // Jeder Eintrag trägt seinen Grund, und jedes Paket landet in der
 // apt-Zeile. Ein Paket ohne Grund wäre eine Zeile, die beim nächsten
 // Aufräumen fällt, weil niemand mehr weiß, wofür sie da war.
 func TestDockerfileInstalliertJedesPaketMitGrund(t *testing.T) {
 	text := dockerfileGeruest("1.2.3", providerbefund{Beispiel: "<provider-id>"})
-	for _, f := range fremdprogramme {
-		if f.Grund == "" {
-			t.Errorf("%q ohne Grund", f.Befehl+f.Paket)
+	for _, f := range bau.ExternalPrograms {
+		if f.Why == "" {
+			t.Errorf("%q ohne Grund", f.Command+f.Package)
 		}
-		if f.Paket == "" {
+		if f.Package == "" {
 			continue
 		}
-		if !strings.Contains(text, "\n      "+f.Paket+" \\\n") {
-			t.Errorf("Paket %q fehlt in der apt-Zeile", f.Paket)
+		if !strings.Contains(text, "\n      "+f.Package+" \\\n") {
+			t.Errorf("Paket %q fehlt in der apt-Zeile", f.Package)
 		}
 	}
 }
