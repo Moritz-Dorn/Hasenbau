@@ -48,13 +48,19 @@ go install github.com/Moritz-Dorn/Hasenbau/cmd/hasenbau@latest
 That puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin` —
 that directory has to be in the PATH.
 
-Once you have a Bau, `hasenbau new dockerfile` writes a `Dockerfile`
-into it that carries all of this: the programs above, plus the ones
-whose absence is silent rather than loud — without `bwrap` no Schmied
-tool is registered at all, without `tzdata` your cron triggers run in
-UTC. It installs what **Hasenbau** needs; what your Gänge call is a
-marked block at the end, for you to fill in. Details in
-[Commands](docs/commands.md#in-a-container).
+Once you have a Bau, `hasenbau new dockerfile` writes a `Dockerfile` and
+a `docker-compose.yml` into it that carry all of this: the programs
+above, plus the ones whose absence is silent rather than loud — without
+`bwrap` no Schmied tool is registered at all, without `tzdata` your cron
+triggers run in UTC. They install what **Hasenbau** needs; what your
+Gänge call is a marked block at the end, for you to fill in.
+
+```bash
+docker compose run --rm hasenbau describe bau
+docker compose up -d
+```
+
+Details in [Commands](docs/commands.md#in-a-container).
 
 ## Your first Bau
 

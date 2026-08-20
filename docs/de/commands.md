@@ -17,23 +17,49 @@ hasenbau init <bau>        # Bau anlegen (Git-Repo, isolierte Config, Rückkanal
 hasenbau fix               # ergänzen, was einem bestehenden Bau fehlt
 hasenbau new hase <name>   # Template-Gerüst anlegen, kommentiert
 hasenbau new auftrag <name> -hase <hase>   # Auftrags-Gerüst anlegen
-hasenbau new dockerfile    # Dockerfile mit allem, was Hasenbau braucht
+hasenbau new dockerfile    # Dockerfile und docker-compose.yml, lauffähig
 ```
 
 `init` und `fix` sind nicht-destruktiv und idempotent: vorhandene
 Dateien bleiben unangetastet. `new` ebenso, für alle drei Ressourcen.
 
-`new dockerfile` ist die eine Ressource ohne Namen: die Datei heißt
-immer `Dockerfile`.
+`new dockerfile` ist die eine Ressource ohne Namen — und die eine, die
+zwei Dateien schreibt: `Dockerfile` und `docker-compose.yml`. Was schon
+dasteht, bleibt liegen, während die andere trotzdem entsteht; wer das
+Dockerfile von Hand angefasst hat, bekommt die Compose-Datei also
+weiterhin.
 
 ## Im Container
 
 `hasenbau new dockerfile` schreibt das Rezept, das der Install-Abschnitt
-des README als Prosa beschreibt. Hinein kommt, was **Hasenbau** ruft —
-`opencode`, `git`, `bwrap`, `sh`, `python3` — dazu `ca-certificates` und
-`tzdata`. Was die eigenen Gänge rufen, steht nicht drin: das kennt der
-Hasenbau nicht und rät es auch nicht, dafür endet die Datei mit einem
-markierten Block.
+des README als Prosa beschreibt — dazu ein `docker-compose.yml`, das es
+laufen lässt:
+
+```bash
+hasenbau new dockerfile
+docker compose run --rm hasenbau describe bau   # prüfen, bevor scharf geschaltet wird
+docker compose up -d                            # der Daemon
+docker compose logs -f
+docker compose run --rm hasenbau lauf <auftrag> # ein Auftrag von Hand
+```
+
+Ins Image kommt, was **Hasenbau** ruft — `opencode`, `git`, `bwrap`,
+`sh`, `python3` — dazu `ca-certificates` und `tzdata`. Was die eigenen
+Gänge rufen, steht nicht drin: das kennt der Hasenbau nicht und rät es
+auch nicht, dafür endet die Datei mit einem markierten Block.
+
+In der Compose-Datei hören die Flags auf, Fußnoten zu sein: sie
+deklariert `security_opt: [seccomp:unconfined]`, den Bau als
+Bind-Mount, `TZ: ${TZ:-Europe/Berlin}`, `restart: unless-stopped` (was
+`Restart=always` für die systemd-Unit ist) und `init: true` — hasenbau
+ist dort PID 1 und startet opencode sowie jeden Gang, also muss jemand
+verwaiste Kinder einsammeln.
+
+Eines lohnt sich einmalig: `build: .` schickt dieses ganze Verzeichnis
+als Kontext an den Docker-Daemon, `archiv/` eingeschlossen, obwohl das
+Dockerfile nichts daraus kopiert. Ein `.dockerignore` mit einem
+einzelnen `*` reduziert das auf nichts, und der Build läuft trotzdem —
+gemessen wurden aus 200 MB Kontext 42 Byte.
 
 Zwei Dinge liest sie aus dem Bau, statt sie anzunehmen: die Provider-IDs
 aus `.opencode-home/opencode/opencode.json`, damit die
@@ -82,11 +108,21 @@ Datei kommen, während die Bau-Config schlüssellos bleibt:
 "provider": {"<id>": {"options": {"apiKey": "{file:/run/secrets/<id>-key}"}}}
 ```
 
-```bash
-docker run --rm -v "$PWD":/bau \
-  --mount type=bind,src="$HOME/.secrets/<id>-key",dst=/run/secrets/<id>-key,ro \
-  meinbau daemon
+Die Compose-Datei deklariert das als Secret, zu tippen ist also nichts:
+
+```yaml
+secrets:
+  <id>-key:
+    file: ${HOME}/.secrets/<id>-key
 ```
+
+Zwei Eigenschaften davon, beide gemessen: die Datei erscheint drinnen
+als `/run/secrets/<id>-key` und **übernimmt die Rechte der Host-Datei
+unverändert** — ein `chmod 600` bleibt also erhalten. Und fehlt die
+Datei, hält `docker compose up` mit `secret file … does not exist` an,
+statt zu starten. Das ist Absicht: ein Bau ohne Schlüssel bringt keinen
+Lauf zustande, und ein Container, der startet und dann jeden Lauf
+scheitern lässt, ist schlimmer als einer, der sich weigert.
 
 **Verschlüsselung hilft *im* Container nicht** — der Prozess braucht den
 Klartext in dem Moment, in dem er den HTTPS-Call macht. Überall sonst

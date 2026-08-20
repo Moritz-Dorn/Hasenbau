@@ -17,22 +17,47 @@ hasenbau init <bau>        # create a Bau (Git repo, isolated config, back chann
 hasenbau fix               # add what an existing Bau is missing
 hasenbau new hase <name>   # write a template scaffold, commented
 hasenbau new auftrag <name> -hase <hase>   # write an Auftrag scaffold
-hasenbau new dockerfile    # a Dockerfile with everything Hasenbau needs
+hasenbau new dockerfile    # Dockerfile and docker-compose.yml, ready to run
 ```
 
 `init` and `fix` are non-destructive and idempotent: existing files are
 left untouched. So is `new`, for all three resources.
 
-`new dockerfile` is the one resource without a name: the file is always
-called `Dockerfile`.
+`new dockerfile` is the one resource without a name, and the one that
+writes two files: `Dockerfile` and `docker-compose.yml`. Either one that
+already exists is left alone while the other is still written — so after
+editing the Dockerfile by hand you can still get the compose file.
 
 ## In a container
 
 `hasenbau new dockerfile` writes the recipe that the Install section of
-the README describes in prose. What goes in is what **Hasenbau** calls —
-`opencode`, `git`, `bwrap`, `sh`, `python3` — plus `ca-certificates` and
-`tzdata`. What your Gänge call is not in there: Hasenbau does not know
-those and will not guess, so the file ends with a marked block for you.
+the README describes in prose, plus a `docker-compose.yml` that runs it:
+
+```bash
+hasenbau new dockerfile
+docker compose run --rm hasenbau describe bau   # check before arming
+docker compose up -d                            # the daemon
+docker compose logs -f
+docker compose run --rm hasenbau lauf <auftrag> # one Auftrag by hand
+```
+
+What goes into the image is what **Hasenbau** calls — `opencode`, `git`,
+`bwrap`, `sh`, `python3` — plus `ca-certificates` and `tzdata`. What your
+Gänge call is not in there: Hasenbau does not know those and will not
+guess, so the file ends with a marked block for you.
+
+The compose file is where the flags stop being footnotes: it declares
+`security_opt: [seccomp:unconfined]`, the Bau as a bind mount,
+`TZ: ${TZ:-Europe/Berlin}`, `restart: unless-stopped` (what
+`Restart=always` is for the systemd unit) and `init: true` — hasenbau is
+PID 1 in there and spawns opencode plus every Gang, so something has to
+reap orphans.
+
+One thing worth doing once: `build: .` sends this whole directory to the
+Docker daemon as context, `archiv/` included, although the Dockerfile
+copies nothing from it. A `.dockerignore` holding a single `*` cuts that
+to nothing and the build still works — measured, 200 MB of context became
+42 bytes.
 
 Two things it reads off your Bau rather than assuming: the provider IDs
 from `.opencode-home/opencode/opencode.json`, so the credential comments
@@ -79,11 +104,21 @@ mounted file while your Bau config stays free of secrets:
 "provider": {"<id>": {"options": {"apiKey": "{file:/run/secrets/<id>-key}"}}}
 ```
 
-```bash
-docker run --rm -v "$PWD":/bau \
-  --mount type=bind,src="$HOME/.secrets/<id>-key",dst=/run/secrets/<id>-key,ro \
-  meinbau daemon
+The compose file declares that as a secret, so there is nothing to type:
+
+```yaml
+secrets:
+  <id>-key:
+    file: ${HOME}/.secrets/<id>-key
 ```
+
+Two properties of that, both measured: the file appears inside as
+`/run/secrets/<id>-key` **with the permissions of the host file carried
+over unchanged** — so `chmod 600` it and it stays that way. And if the
+file does not exist, `docker compose up` stops with `secret file … does
+not exist` instead of starting. That is on purpose: a Bau without a key
+cannot make a Lauf, and a container that starts and then fails every Lauf
+is worse than one that refuses.
 
 **Encrypting the key does not help *inside* the container** — the
 process needs the plaintext at the moment it makes the HTTPS call. What

@@ -2082,6 +2082,24 @@ Sie fügt sich sonst ins Schema: ein kommentiertes Gerüst, nie
 so sucht — ein zweites in demselben Bau wäre eine Frage, die niemand
 stellen wollte.
 
+Sie ist außerdem die eine, die **zwei** Dateien schreibt: daneben
+entsteht `docker-compose.yml`. Das ist keine zweite Sache, sondern
+dieselbe zu Ende gebracht — die drei Flags, die im Kopf des Dockerfiles
+als „nicht optional" stehen, sind dort Konfiguration
+(`security_opt`, der Bind-Mount, `TZ`), dazu `restart: unless-stopped`
+als Entsprechung zu `Restart=always` (§2) und `init: true`, weil
+hasenbau im Container PID 1 ist und opencode wie jeden Gang startet.
+Ein Flag, das man einmal aufschreibt, tippt man nicht jedesmal falsch.
+Jede der beiden Dateien wird für sich geschrieben: wer die eine von
+Hand angefasst hat, soll die andere trotzdem bekommen.
+
+Der Schlüssel steht darin als Compose-Secret, und zwar **scharf**, nicht
+auskommentiert. Fehlt die Datei, hält `docker compose up` an
+(`secret file … does not exist`) statt zu starten — dieselbe Logik wie
+beim Werkzeug-Sandkasten: ein Bau ohne Schlüssel bringt keinen Lauf
+zustande, und ein Container, der startet und dann jeden Lauf scheitern
+lässt, ist schlimmer als einer, der sich weigert.
+
 Inhaltlich gilt dabei eine Grenze, und sie ist die eigentliche
 Entscheidung: **hinein kommt nur, was der Hasenbau selbst ruft**
 (§2, Fremdprogramme). Was ein *Bau* ruft — `pdftotext` für einen Gang,
@@ -2112,3 +2130,16 @@ aus dem erzeugten Dockerfile, Test-Bau als Mount):
   daraufhin „repo without a commit" für ein Repo mit Commits — und kein
   sichtbarer Commit heißt keine Projekt-ID (§11.5). Die Zeile steht
   deshalb im erzeugten Dockerfile.
+
+Drei Eigenheiten von Compose, ebenso gemessen (2.36.0): ein Secret
+landet auf `/run/secrets/<name>` und **erbt die Rechte der Host-Datei**
+(ein `chmod 600` bleibt also erhalten); `${VAR:-vorgabe}` greift; und
+`$VAR` in einem Compose-String ersetzt *Compose*, nicht die Shell —
+Durchreichen braucht `$$VAR`. Dazu eine Kleinigkeit mit großer Wirkung:
+`build: .` schickt den ganzen Bau als Kontext, obwohl das Dockerfile
+nichts daraus kopiert. Ein `.dockerignore` mit einem einzelnen `*`
+macht aus 200 MB 42 Byte, und der Build läuft weiter. Das steht als
+Hinweis in der Datei und wird nicht selbst geschrieben: ein `*` im
+`.dockerignore` würde jedes spätere `COPY` still ins Leere laufen
+lassen, und das wäre wieder ein Fehler, den man sich nicht erklären
+kann.
